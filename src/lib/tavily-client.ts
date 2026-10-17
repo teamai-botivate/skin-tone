@@ -73,12 +73,12 @@ export async function tavilySearch(
     body: JSON.stringify({
       api_key: apiKey,
       query,
-      search_depth: "advanced",
+      search_depth: "basic",
       include_images: true,
-      include_image_descriptions: true,
       max_results: maxResults,
       ...(includeDomains?.length ? { include_domains: includeDomains } : {}),
     }),
+    signal: AbortSignal.timeout(4000),
   });
 
   if (!res.ok) {

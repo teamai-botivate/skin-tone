@@ -6,7 +6,6 @@ import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
   NameStep,
-  HeightStep,
   SingleChoiceStep,
   MultiChoiceStep,
   SectionStep,
@@ -15,12 +14,9 @@ import {
   Review,
   pronounOptions,
   ageGroupOptions,
-  bodyBuildOptions,
-  fitOptions,
   styleOptions,
   colorLoveOptions,
   colorAvoidOptions,
-  restrictionOptions,
   occasionOptions,
   impressionOptions,
   budgetOptions,
@@ -41,7 +37,6 @@ type Screen =
   | 'name'
   | 'profile'
   | 'age'
-  | 'height'
   | 'consent'
   | 'photo'
   | 'appearance'
@@ -61,6 +56,7 @@ const initialProfile: SkinTuneProfile = {
   ageGroup: '',
   height: '',
   photoUrl: '',
+  bodyPhotoUrl: '',
   bodyBuild: '',
   appearance: { skinTone: '', undertone: '', confidence: 0, contrast: 'Medium' },
   fit: '',
@@ -77,7 +73,6 @@ const wizardScreens: Screen[] = [
   'name',
   'profile',
   'age',
-  'height',
   'consent',
   'photo',
   'appearance',
@@ -307,6 +302,8 @@ export function SkinTuneApp() {
         title="How should we write your styling advice?"
         body="Choose the language and point of view that feels most like you."
         options={pronounOptions}
+        allowOther={true}
+        otherPlaceholder="Type your preferred styling perspective..."
         onNext={() => go('age')}
         onBack={back}
       />
@@ -321,43 +318,47 @@ export function SkinTuneApp() {
         title="Which age range feels right?"
         body="This helps us tune proportions and references. There's no wrong answer."
         options={ageGroupOptions}
-        onNext={() => go('height')}
-        onBack={back}
-      />
-    ),
-    height: (
-      <HeightStep
-        profile={profile}
-        update={update}
-        step={4}
-        eyebrow="04 / a little context"
-        title="What's your height?"
-        body="Optional — helps us tune proportion suggestions."
+        allowOther={true}
+        otherPlaceholder="Type your age preference..."
         onNext={() => go('consent')}
         onBack={back}
       />
     ),
-    consent: <ConsentStep profile={profile} onNext={() => go('photo')} onBack={back} />,
+    consent: (
+      <ConsentStep
+        profile={profile}
+        onNext={() => go('photo')}
+        onBack={back}
+        step={4}
+      />
+    ),
     appearance: (
       <AppearanceStep
         profile={profile}
         onNext={() => go('body-style')}
         onPhoto={() => go('photo')}
-        onBack={back}
+        onBack={() => go('photo')}
+        step={6}
       />
     ),
     'body-style': (
       <SectionStep
         profile={profile}
         update={update}
-        step={8}
-        eyebrow="08 / your canvas"
-        title="Your build, fit, and style."
-        body="A few quick checkboxes — pick what fits, and we'll get moving."
+        step={7}
+        eyebrow="07 / your canvas"
+        title="Which style worlds pull you in?"
+        body="Choose the aesthetics, cuts, and vibes that inspire you — pick as many as you like, or type your own."
         fields={[
-          { kind: 'single', field: 'bodyBuild', label: 'How would you describe your build?', options: bodyBuildOptions },
-          { kind: 'single', field: 'fit', label: 'What fit feels like you?', options: fitOptions },
-          { kind: 'multi', field: 'style', label: 'Which style worlds pull you in?', hint: 'Choose as many as you like.', options: styleOptions },
+          {
+            kind: 'multi',
+            field: 'style',
+            label: 'Which style worlds pull you in?',
+            hint: 'Choose as many as you like.',
+            options: styleOptions,
+            allowOther: true,
+            otherPlaceholder: 'Type your custom style (e.g. Cottagecore, Dark Academia, Cyberpunk)...',
+          },
         ]}
         onNext={() => go('colors-occasion')}
         onBack={back}
@@ -367,15 +368,14 @@ export function SkinTuneApp() {
       <SectionStep
         profile={profile}
         update={update}
-        step={9}
-        eyebrow="09 / colours & the moment"
+        step={8}
+        eyebrow="08 / colours & the moment"
         title="Colour, comfort, and where you're headed."
         body="Everything you need for this look, in one go."
         fields={[
-          { kind: 'multi', field: 'colorsLove', label: 'Which colors do you reach for?', options: colorLoveOptions, max: 5 },
-          { kind: 'multi', field: 'colorsAvoid', label: 'Anything you tend to avoid?', options: colorAvoidOptions, required: false },
-          { kind: 'multi', field: 'restrictions', label: 'Anything we should work around?', options: restrictionOptions, required: false },
-          { kind: 'single', field: 'occasion', label: 'Where are you getting dressed for?', options: occasionOptions },
+          { kind: 'multi', field: 'colorsLove', label: 'Which colors do you reach for?', options: colorLoveOptions, max: 5, allowOther: true, otherPlaceholder: 'Type custom color (e.g. Emerald teal, powder blue)...' },
+          { kind: 'multi', field: 'colorsAvoid', label: 'Anything you tend to avoid?', options: colorAvoidOptions, required: false, allowOther: true, otherPlaceholder: 'Type custom color to avoid (e.g. Mustard, neon yellow)...' },
+          { kind: 'single', field: 'occasion', label: 'Where are you getting dressed for?', options: occasionOptions, allowOther: true, otherPlaceholder: 'Type custom occasion (e.g. Concert, art opening, graduation)...' },
         ]}
         onNext={() => go('final-prefs')}
         onBack={back}
@@ -385,13 +385,13 @@ export function SkinTuneApp() {
       <SectionStep
         profile={profile}
         update={update}
-        step={10}
-        eyebrow="10 / the finishing touch"
+        step={9}
+        eyebrow="09 / the finishing touch"
         title="How you want to come across, and your budget."
         body="Last section — then we'll make your five looks."
         fields={[
-          { kind: 'multi', field: 'impression', label: 'How do you want to come across?', options: impressionOptions, max: 2 },
-          { kind: 'single', field: 'budget', label: 'What feels comfortable for this edit?', options: budgetOptions },
+          { kind: 'multi', field: 'impression', label: 'How do you want to come across?', options: impressionOptions, max: 2, allowOther: true, otherPlaceholder: 'Type custom impression (e.g. Mysterious, effortless)...' },
+          { kind: 'single', field: 'budget', label: 'What feels comfortable for this edit?', options: budgetOptions, allowOther: true, otherPlaceholder: 'Type custom budget or range...' },
         ]}
         continueLabel="Review my edit"
         onNext={() => go('review')}

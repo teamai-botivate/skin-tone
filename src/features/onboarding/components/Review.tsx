@@ -23,10 +23,15 @@ export function Review({
       value: `${profile.appearance.skinTone} · ${profile.appearance.undertone} undertone · ${profile.appearance.confidence}% confidence`,
       target: 'appearance',
     },
+    {
+      label: 'Selfies',
+      value: `${profile.photoUrl ? 'Face selfie' : ''}${profile.photoUrl && profile.bodyPhotoUrl ? ' · ' : ''}${profile.bodyPhotoUrl ? 'Full body selfie' : ''}` || 'Selfies on device',
+      target: 'photo',
+    },
     { label: 'Profile', value: `${profile.pronouns} · ${profile.ageGroup}`, target: 'profile' },
     {
-      label: 'Build, fit & style',
-      value: `${profile.bodyBuild} · ${profile.fit}${profile.style.length ? ` · ${profile.style.join(', ')}` : ''}`,
+      label: 'Style direction',
+      value: profile.style.length ? profile.style.join(', ') : 'Versatile styling',
       target: 'body-style',
     },
     {
@@ -42,9 +47,9 @@ export function Review({
   ];
 
   return (
-    <StepShell profile={profile} onBack={onBack} step={11}>
+    <StepShell profile={profile} onBack={onBack} step={10} total={10}>
       <Intro
-        eyebrow="11 / your edit, at a glance"
+        eyebrow="10 / your edit, at a glance"
         title={`This sounds like ${profile.name}.`}
         body="Look it over, make any changes, then we'll make five complete looks around it."
       >

@@ -86,12 +86,83 @@ export function ChoiceGrid({
   value,
   toggle,
   multi = false,
+  allowOther = true,
+  otherPlaceholder,
+  max,
+  onMultiChange,
 }: {
   options: SelectOption[];
   value: string | string[];
   toggle: (label: string) => void;
+  onMultiChange?: (values: string[]) => void;
   multi?: boolean;
+  allowOther?: boolean;
+  otherPlaceholder?: string;
+  max?: number;
 }) {
+  // Check if "Other" is currently selected
+  const otherItem = multi
+    ? (value as string[]).find(
+        (v) => !options.some((o) => o.label === v) || v === 'Other' || v.startsWith('Other: '),
+      )
+    : !options.some((o) => o.label === value) && Boolean(value)
+    ? (value as string)
+    : undefined;
+
+  const isOtherSelected = Boolean(otherItem);
+  const otherText = otherItem
+    ? otherItem.startsWith('Other: ')
+      ? otherItem.slice(7)
+      : otherItem === 'Other'
+      ? ''
+      : otherItem
+    : '';
+
+  const handleToggleOther = () => {
+    if (multi) {
+      const values = (value as string[]) || [];
+      if (isOtherSelected) {
+        // Deselect Other
+        if (onMultiChange) {
+          onMultiChange(values.filter((v) => v !== otherItem));
+        } else {
+          toggle(otherItem!);
+        }
+      } else {
+        // Select Other
+        if (max !== undefined && values.length >= max) return;
+        if (onMultiChange) {
+          onMultiChange([...values, 'Other']);
+        } else {
+          toggle('Other');
+        }
+      }
+    } else {
+      if (isOtherSelected) {
+        // Already selected
+      } else {
+        toggle('Other');
+      }
+    }
+  };
+
+  const handleOtherTextChange = (newText: string) => {
+    const formatted = newText.trim() ? `Other: ${newText}` : 'Other';
+    if (multi) {
+      const values = (value as string[]) || [];
+      const nextValues = isOtherSelected
+        ? values.map((v) => (v === otherItem ? formatted : v))
+        : [...values, formatted];
+      if (onMultiChange) {
+        onMultiChange(nextValues);
+      } else {
+        toggle(formatted);
+      }
+    } else {
+      toggle(formatted);
+    }
+  };
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {options.map((item) => {
@@ -108,6 +179,40 @@ export function ChoiceGrid({
           />
         );
       })}
+
+      {allowOther && (
+        <OptionCard
+          key="__other__"
+          label="Other"
+          description={
+            isOtherSelected && otherText
+              ? `Custom: ${otherText}`
+              : 'Type your own preference'
+          }
+          icon="✏️"
+          selected={isOtherSelected}
+          onClick={handleToggleOther}
+        />
+      )}
+
+      {allowOther && isOtherSelected && (
+        <div className="sm:col-span-2 mt-1 animate-rise">
+          <div className="rounded-2xl border border-primary/40 bg-[#FAF5EE] p-4 shadow-sm">
+            <div className="flex items-center gap-2 mb-2 text-xs font-bold uppercase tracking-wider text-[#795548]">
+              <span>✏️ Specify your preference:</span>
+            </div>
+            <input
+              type="text"
+              autoFocus
+              value={otherText}
+              onChange={(e) => handleOtherTextChange(e.target.value)}
+              data-testid="input-other-custom"
+              placeholder={otherPlaceholder || 'Type your custom preference here...'}
+              className="focus-ring w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 shadow-inner"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

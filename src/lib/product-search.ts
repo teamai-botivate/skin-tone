@@ -390,7 +390,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(1200),
     });
 
     if (!res.ok) {
@@ -837,188 +837,15 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     url: string;
     shade?: string;
     material?: string;
+    imageUrl?: string;
   }> = [];
 
   let openAiSucceeded = false;
+  let tavilySucceeded = false;
 
-  // 1. Primary: OpenAI Web Search Preview
-  try {
-    const openai = getOpenAIClient();
-    const response = await openai.responses.create({
-      model: RECOMMENDATION_MODEL,
-      tools: [{ type: "web_search_preview" }],
-      input: prompt,
-    });
-
-    const outputText = response.output_text || "";
-
-    // Extract search citations from tool annotations
-    const citations: Array<{ title: string; url: string }> = [];
-    for (const item of response.output || []) {
-      if (item.type === "message" && item.content) {
-        for (const c of item.content) {
-          if (c.type === "output_text") {
-            const withAnnotations = c as unknown as {
-              annotations?: Array<{ type: string; url: string; title?: string }>;
-            };
-            if (Array.isArray(withAnnotations.annotations)) {
-              for (const a of withAnnotations.annotations) {
-                if (a.type === "url_citation") {
-                  citations.push({
-                    title: a.title || "",
-                    url: cleanUrl(a.url),
-                  });
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Parse product blocks separated by '---'
-    const blocks = outputText.split(/---|\bPRODUCT_START\b/i);
-
-    for (const block of blocks) {
-      const trimmed = block.trim();
-      if (!trimmed || trimmed.length < 20) continue;
-
-      let tier: PriceTier = "mid";
-      let productTitle = "";
-      let brand = "";
-      let retailer = spec.preferredRetailers[0] || "Online Store";
-      let rawPrice = "";
-      let rawOriginalPrice = "";
-      let rawUrl = "";
-      let shade = "";
-      let material = "";
-
-      for (const line of trimmed.split("\n")) {
-        const l = line.trim();
-        const tierM = l.match(/^\*{0,2}TIER:\*{0,2}\s*(.*)/i);
-        if (tierM) {
-          const t = tierM[1].toLowerCase();
-          if (t.includes("budget")) tier = "budget";
-          else if (t.includes("premium")) tier = "premium";
-          else tier = "mid";
-        }
-
-        const titleM = l.match(/^\*{0,2}PRODUCT_TITLE:\*{0,2}\s*(.*)/i);
-        if (titleM) productTitle = titleM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const brandM = l.match(/^\*{0,2}BRAND:\*{0,2}\s*(.*)/i);
-        if (brandM) brand = brandM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const retM = l.match(/^\*{0,2}RETAILER:\*{0,2}\s*(.*)/i);
-        if (retM) retailer = retM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const priceM = l.match(/^\*{0,2}PRICE:\*{0,2}\s*(.*)/i);
-        if (priceM) rawPrice = priceM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const origM = l.match(/^\*{0,2}ORIGINAL_PRICE:\*{0,2}\s*(.*)/i);
-        if (origM) rawOriginalPrice = origM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const urlM = l.match(/^\*{0,2}URL:\*{0,2}\s*(.*)/i);
-        if (urlM) rawUrl = urlM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const shadeM = l.match(/^\*{0,2}SHADE:\*{0,2}\s*(.*)/i);
-        if (shadeM) shade = shadeM[1].replace(/^\*+|\*+$/g, "").trim();
-
-        const matM = l.match(/^\*{0,2}MATERIAL:\*{0,2}\s*(.*)/i);
-        if (matM) material = matM[1].replace(/^\*+|\*+$/g, "").trim();
-      }
-
-      if (!rawUrl) {
-        const blockUrlMatch = trimmed.match(
-          /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|hm\.com|zara\.com)[^\s)"'<>\[\]]+/i,
-        );
-        if (blockUrlMatch) rawUrl = blockUrlMatch[0];
-      }
-
-      const cleanCandidateUrl = cleanUrl(rawUrl);
-      if (cleanCandidateUrl && isValidProductUrl(cleanCandidateUrl)) {
-        const { price } = normalizePrice(rawPrice, "INR");
-        const { price: originalPrice } = normalizePrice(rawOriginalPrice, "INR");
-        candidateList.push({
-          tier,
-          productTitle: productTitle || spec.itemTitle,
-          brand: brand || productTitle.split(" ")[0] || "Curated",
-          retailer,
-          price,
-          originalPrice,
-          url: cleanCandidateUrl,
-          shade: shade || undefined,
-          material: material || undefined,
-        });
-      }
-    }
-
-    // Fallback to citations if fewer than 2 candidates were parsed
-    if (candidateList.length < 2 && citations.length > 0) {
-      for (const cit of citations) {
-        if (!candidateList.some((c) => c.url === cit.url) && isValidProductUrl(cit.url)) {
-          const parsedHost = new URL(cit.url).hostname.replace(/^www\./, "").split(".")[0];
-          const guessedRetailer =
-            parsedHost === "myntra"
-              ? "Myntra"
-              : parsedHost === "nykaa"
-              ? "Nykaa"
-              : parsedHost === "ajio"
-              ? "AJIO"
-              : parsedHost === "amazon"
-              ? "Amazon India"
-              : "Online Store";
-
-          candidateList.push({
-            tier: "mid",
-            productTitle: cit.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle,
-            brand: cit.title.split(" ")[0] || "Curated",
-            retailer: guessedRetailer,
-            url: cit.url,
-          });
-        }
-      }
-    }
-
-    if (candidateList.length > 0) {
-      openAiSucceeded = true;
-    }
-  } catch (err: unknown) {
-    const errObj = err as { status?: number; code?: string; message?: string };
-    const errMsg = errObj.message || String(err);
-    logger.warn({ err, spec: spec.itemTitle }, "OpenAI web search failed for styling requirement");
-
-    let statusType: "missing_key" | "invalid_key" | "rate_limited" | "timeout" | "error" = "error";
-    let fixHint = "Check OPENAI_API_KEY configuration in .env.local.";
-
-    if (errMsg.includes("OPENAI_API_KEY is not set")) {
-      statusType = "missing_key";
-      fixHint = "Add OPENAI_API_KEY to artifacts/skintune-next/.env.local and restart the dev server.";
-    } else if (errObj.status === 401 || errMsg.includes("Incorrect API key") || errMsg.includes("invalid_api_key")) {
-      statusType = "invalid_key";
-      fixHint = "Your OPENAI_API_KEY is invalid or expired. Generate a new key at platform.openai.com/api-keys and update .env.local.";
-    } else if (errObj.status === 429 || errMsg.includes("quota") || errMsg.includes("rate limit")) {
-      statusType = "rate_limited";
-      fixHint = "OpenAI quota exceeded or rate limit reached. Check billing and usage at platform.openai.com.";
-    } else if (errMsg.includes("timeout") || errMsg.includes("ECONNRESET") || errMsg.includes("ETIMEDOUT")) {
-      statusType = "timeout";
-      fixHint = "OpenAI connection timed out. Please retry in a few moments.";
-    }
-
-    if (!diagnosticsTracker.some((d) => d.keyName === "OPENAI_API_KEY")) {
-      diagnosticsTracker.push({
-        provider: "openai",
-        status: statusType,
-        keyName: "OPENAI_API_KEY",
-        message: errMsg,
-        suggestedFix: fixHint,
-      });
-    }
-  }
-
-  // 2. Secondary Fallback: Tavily Live Web Search
-  if (candidateList.length === 0) {
-    logger.info({ spec: spec.itemTitle }, "Attempting Tavily search fallback for product links");
+  // 1. Primary fast live web search: Tavily (direct <1.5s live search)
+  const tavilyHealth = getTavilyKeyDiagnostics();
+  if (tavilyHealth.isConfigured) {
     try {
       const tavilyQuery = `${spec.searchQuery} buy online india`;
       const tavilyResp = await tavilySearch(tavilyQuery, 6, [
@@ -1034,13 +861,37 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       for (const res of tavilyResp.results || []) {
         if (res.url && isValidProductUrl(res.url)) {
           const parsedHost = new URL(res.url).hostname.replace(/^www\./, "").split(".")[0];
-          const retailer = parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1);
-          // Try to extract price from snippet/title e.g. Rs. 1,499 or ₹1,499
+          const retailer =
+            parsedHost === "myntra"
+              ? "Myntra"
+              : parsedHost === "ajio"
+              ? "AJIO"
+              : parsedHost === "nykaa"
+              ? "Nykaa"
+              : parsedHost === "amazon"
+              ? "Amazon India"
+              : parsedHost === "tatacliq"
+              ? "Tata CLiQ"
+              : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1);
+
+          // Extract price from snippet/title e.g. Rs. 1,499 or ₹1,499
           const priceMatch = (res.title + " " + res.content).match(/(?:₹|Rs\.?|INR)\s*([\d,]+)/i);
           let extractedPrice: number | undefined;
           if (priceMatch) {
             const p = parseFloat(priceMatch[1].replace(/,/g, ""));
             if (!isNaN(p) && p > 0) extractedPrice = Math.round(p);
+          }
+
+          // Match image from Tavily images if available
+          let candidateImage: string | undefined;
+          if (tavilyResp.images && tavilyResp.images.length > 0) {
+            const matchedImg = tavilyResp.images.find(
+              (img) =>
+                img.url &&
+                (img.url.includes(parsedHost) ||
+                  (img.title && img.title.toLowerCase().includes(spec.itemTitle.toLowerCase()))),
+            );
+            if (matchedImg) candidateImage = matchedImg.url;
           }
 
           candidateList.push({
@@ -1050,43 +901,198 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             retailer: retailer || "Online Store",
             url: cleanUrl(res.url),
             price: extractedPrice,
+            imageUrl: candidateImage,
           });
         }
       }
 
-      if (candidateList.length > 0 && !openAiSucceeded) {
-        if (!diagnosticsTracker.some((d) => d.provider === "tavily" && d.status === "degraded")) {
-          diagnosticsTracker.push({
-            provider: "tavily",
-            status: "degraded",
-            keyName: "TAVILY_API_KEY",
-            message: "Products retrieved via Tavily live web search fallback.",
-            suggestedFix: "Tavily search is active. To enable OpenAI direct web search, verify OPENAI_API_KEY in .env.local.",
+      if (candidateList.length >= 2) {
+        tavilySucceeded = true;
+      }
+    } catch (tavilyErr: unknown) {
+      logger.warn({ tavilyErr, spec: spec.itemTitle }, "Tavily fast search failed, falling back to OpenAI");
+    }
+  }
+
+  // 2. Fallback: OpenAI Web Search Preview (if Tavily was unavailable or returned insufficient results)
+  if (candidateList.length < 2) {
+    try {
+      const openai = getOpenAIClient();
+      const response = await openai.responses.create({
+        model: RECOMMENDATION_MODEL,
+        tools: [{ type: "web_search_preview" }],
+        input: prompt,
+      });
+
+      const outputText = response.output_text || "";
+
+      // Extract search citations from tool annotations
+      const citations: Array<{ title: string; url: string }> = [];
+      for (const item of response.output || []) {
+        if (item.type === "message" && item.content) {
+          for (const c of item.content) {
+            if (c.type === "output_text") {
+              const withAnnotations = c as unknown as {
+                annotations?: Array<{ type: string; url: string; title?: string }>;
+              };
+              if (Array.isArray(withAnnotations.annotations)) {
+                for (const a of withAnnotations.annotations) {
+                  if (a.type === "url_citation") {
+                    citations.push({
+                      title: a.title || "",
+                      url: cleanUrl(a.url),
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Parse product blocks separated by '---'
+      const blocks = outputText.split(/---|\bPRODUCT_START\b/i);
+
+      for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed || trimmed.length < 20) continue;
+
+        let tier: PriceTier = "mid";
+        let productTitle = "";
+        let brand = "";
+        let retailer = spec.preferredRetailers[0] || "Online Store";
+        let rawPrice = "";
+        let rawOriginalPrice = "";
+        let rawUrl = "";
+        let shade = "";
+        let material = "";
+
+        for (const line of trimmed.split("\n")) {
+          const l = line.trim();
+          const tierM = l.match(/^\*{0,2}TIER:\*{0,2}\s*(.*)/i);
+          if (tierM) {
+            const t = tierM[1].toLowerCase();
+            if (t.includes("budget")) tier = "budget";
+            else if (t.includes("premium")) tier = "premium";
+            else tier = "mid";
+          }
+
+          const titleM = l.match(/^\*{0,2}PRODUCT_TITLE:\*{0,2}\s*(.*)/i);
+          if (titleM) productTitle = titleM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const brandM = l.match(/^\*{0,2}BRAND:\*{0,2}\s*(.*)/i);
+          if (brandM) brand = brandM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const retM = l.match(/^\*{0,2}RETAILER:\*{0,2}\s*(.*)/i);
+          if (retM) retailer = retM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const priceM = l.match(/^\*{0,2}PRICE:\*{0,2}\s*(.*)/i);
+          if (priceM) rawPrice = priceM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const origM = l.match(/^\*{0,2}ORIGINAL_PRICE:\*{0,2}\s*(.*)/i);
+          if (origM) rawOriginalPrice = origM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const urlM = l.match(/^\*{0,2}URL:\*{0,2}\s*(.*)/i);
+          if (urlM) rawUrl = urlM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const shadeM = l.match(/^\*{0,2}SHADE:\*{0,2}\s*(.*)/i);
+          if (shadeM) shade = shadeM[1].replace(/^\*+|\*+$/g, "").trim();
+
+          const matM = l.match(/^\*{0,2}MATERIAL:\*{0,2}\s*(.*)/i);
+          if (matM) material = matM[1].replace(/^\*+|\*+$/g, "").trim();
+        }
+
+        if (!rawUrl) {
+          const blockUrlMatch = trimmed.match(
+            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|hm\.com|zara\.com)[^\s)"'<>\[\]]+/i,
+          );
+          if (blockUrlMatch) rawUrl = blockUrlMatch[0];
+        }
+
+        const cleanCandidateUrl = cleanUrl(rawUrl);
+        if (cleanCandidateUrl && isValidProductUrl(cleanCandidateUrl)) {
+          const { price } = normalizePrice(rawPrice, "INR");
+          const { price: originalPrice } = normalizePrice(rawOriginalPrice, "INR");
+          candidateList.push({
+            tier,
+            productTitle: productTitle || spec.itemTitle,
+            brand: brand || productTitle.split(" ")[0] || "Curated",
+            retailer,
+            price,
+            originalPrice,
+            url: cleanCandidateUrl,
+            shade: shade || undefined,
+            material: material || undefined,
           });
         }
       }
-    } catch (tavilyErr: unknown) {
-      const tMsg = (tavilyErr as Error).message || String(tavilyErr);
-      logger.warn({ tavilyErr, spec: spec.itemTitle }, "Tavily fallback search also failed");
-      const isMissing = tMsg.includes("TAVILY_API_KEY is not set");
-      if (!diagnosticsTracker.some((d) => d.keyName === "TAVILY_API_KEY")) {
+
+      // Fallback to citations if fewer than 2 candidates were parsed
+      if (candidateList.length < 2 && citations.length > 0) {
+        for (const cit of citations) {
+          if (!candidateList.some((c) => c.url === cit.url) && isValidProductUrl(cit.url)) {
+            const parsedHost = new URL(cit.url).hostname.replace(/^www\./, "").split(".")[0];
+            const guessedRetailer =
+              parsedHost === "myntra"
+                ? "Myntra"
+                : parsedHost === "nykaa"
+                ? "Nykaa"
+                : parsedHost === "ajio"
+                ? "AJIO"
+                : parsedHost === "amazon"
+                ? "Amazon India"
+                : "Online Store";
+
+            candidateList.push({
+              tier: "mid",
+              productTitle: cit.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle,
+              brand: cit.title.split(" ")[0] || "Curated",
+              retailer: guessedRetailer,
+              url: cit.url,
+            });
+          }
+        }
+      }
+
+      if (candidateList.length > 0) {
+        openAiSucceeded = true;
+      }
+    } catch (err: unknown) {
+      const errObj = err as { status?: number; code?: string; message?: string };
+      const errMsg = errObj.message || String(err);
+      logger.warn({ err, spec: spec.itemTitle }, "OpenAI web search failed for styling requirement");
+
+      let statusType: "missing_key" | "invalid_key" | "rate_limited" | "timeout" | "error" = "error";
+      let fixHint = "Check OPENAI_API_KEY configuration in .env.local.";
+
+      if (errMsg.includes("OPENAI_API_KEY is not set")) {
+        statusType = "missing_key";
+        fixHint = "Add OPENAI_API_KEY to artifacts/skintune-next/.env.local and restart the dev server.";
+      } else if (errObj.status === 401 || errMsg.includes("Incorrect API key") || errMsg.includes("invalid_api_key")) {
+        statusType = "invalid_key";
+        fixHint = "Your OPENAI_API_KEY is invalid or expired. Generate a new key at platform.openai.com/api-keys and update .env.local.";
+      } else if (errObj.status === 429 || errMsg.includes("quota") || errMsg.includes("rate limit")) {
+        statusType = "rate_limited";
+        fixHint = "OpenAI quota exceeded or rate limit reached. Check billing and usage at platform.openai.com.";
+      } else if (errMsg.includes("timeout") || errMsg.includes("ECONNRESET") || errMsg.includes("ETIMEDOUT")) {
+        statusType = "timeout";
+        fixHint = "OpenAI connection timed out. Please retry in a few moments.";
+      }
+
+      if (!diagnosticsTracker.some((d) => d.keyName === "OPENAI_API_KEY")) {
         diagnosticsTracker.push({
-          provider: "tavily",
-          status: isMissing ? "missing_key" : "invalid_key",
-          keyName: "TAVILY_API_KEY",
-          message: `Tavily search error: ${tMsg}`,
-          suggestedFix: isMissing
-            ? "Add TAVILY_API_KEY to artifacts/skintune-next/.env.local and restart the server."
-            : "Check your Tavily API key status at tavily.com.",
+          provider: "openai",
+          status: statusType,
+          keyName: "OPENAI_API_KEY",
+          message: errMsg,
+          suggestedFix: fixHint,
         });
       }
     }
   }
 
-  // 3. Verify candidates and build products list
-  const verifiedProducts: ProductResult[] = [];
-
-  for (const cand of candidateList) {
+  // 3. Fast Parallel Verification of candidates and build products list
+  const verifiedPromises = candidateList.map(async (cand): Promise<ProductResult | null> => {
     // Consistency check
     const consistency = checkProductConsistency(
       cand.productTitle,
@@ -1099,46 +1105,39 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         { productTitle: cand.productTitle, url: cand.url, reason: consistency.reason },
         "Candidate product failed consistency check between displayed title and URL",
       );
-      continue;
+      return null;
     }
 
     // Avoided colors check
     if (violatesAvoidedColors(cand.productTitle, cand.shade, colorsAvoidList)) {
       logger.info({ productTitle: cand.productTitle }, "Dropping product clashing with user's avoided colors");
-      continue;
+      return null;
     }
 
-    // Live verification of product page (fetches current real price, availability, image)
-    const pageData = await verifyProductPage(cand.url);
-
-    let finalPrice: number | undefined;
-    let finalOriginalPrice: number | undefined;
-    let priceVerified = false;
-    let productVerified = false;
+    let finalPrice = cand.price;
+    let finalOriginalPrice = cand.originalPrice;
+    let priceVerified = Boolean(cand.price);
+    let productVerified = determineUrlType(cand.url) === "exact_product";
     let availability = "In Stock";
-    let imageUrl: string | undefined;
+    let imageUrl = cand.imageUrl;
     let finalTitle = cand.productTitle;
     let finalBrand = cand.brand;
 
-    if (pageData.success && pageData.price) {
-      // Use destination product page price as authoritative source
-      finalPrice = pageData.price;
-      if (pageData.originalPrice) finalOriginalPrice = pageData.originalPrice;
-      priceVerified = true;
-      productVerified = true;
-      if (pageData.availability) availability = pageData.availability;
-      if (pageData.imageUrl) imageUrl = pageData.imageUrl;
-      if (pageData.productName && pageData.productName.length > 5) {
-        finalTitle = pageData.productName;
+    // If price wasn't extracted from snippet, do a fast page verification
+    if (!finalPrice) {
+      const pageData = await verifyProductPage(cand.url);
+      if (pageData.success && pageData.price) {
+        finalPrice = pageData.price;
+        if (pageData.originalPrice) finalOriginalPrice = pageData.originalPrice;
+        priceVerified = true;
+        productVerified = true;
+        if (pageData.availability) availability = pageData.availability;
+        if (pageData.imageUrl) imageUrl = pageData.imageUrl;
+        if (pageData.productName && pageData.productName.length > 5) {
+          finalTitle = pageData.productName;
+        }
+        if (pageData.brand) finalBrand = pageData.brand;
       }
-      if (pageData.brand) finalBrand = pageData.brand;
-    } else {
-      // Destination page price could not be fetched directly (e.g. anti-bot/403 or timeout)
-      // Keep candidate price from live search snippet so the link remains shoppable
-      finalPrice = cand.price;
-      finalOriginalPrice = cand.originalPrice;
-      priceVerified = false;
-      productVerified = determineUrlType(cand.url) === "exact_product";
     }
 
     const urlType = determineUrlType(cand.url);
@@ -1159,7 +1158,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       ? `${symbol}${finalOriginalPrice.toLocaleString("en-IN")}`
       : undefined;
 
-    verifiedProducts.push({
+    return {
       id: `prod-${spec.category}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       category: spec.category,
       subcategory: spec.itemTitle,
@@ -1186,8 +1185,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       availability,
       source: "live_search",
       lastChecked: new Date().toISOString(),
-    });
-  }
+    };
+  });
+
+  const verifiedRaw = await Promise.all(verifiedPromises);
+  const verifiedProducts = verifiedRaw.filter((p): p is ProductResult => p !== null);
 
   // Sort in-stock products first, out-of-stock products last
   verifiedProducts.sort((a, b) => {
@@ -1202,6 +1204,16 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
 }
 
 /**
+ * Server-side cache for product recommendations to prevent repeated web queries.
+ */
+interface CachedProductResponse {
+  data: ProductRecommendationsResponse;
+  expiresAt: number;
+}
+const serverProductCache = new Map<string, CachedProductResponse>();
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
  * Searches and returns MULTIPLE verified shoppable products across retailers and price points
  * for a LookRecommendation and SkinTuneProfile.
  */
@@ -1210,6 +1222,13 @@ export async function searchProductsForLook(
   profile: SkinTuneProfile,
   requestedCategory?: string,
 ): Promise<ProductRecommendationsResponse> {
+  const cacheKey = `${look.id}:${requestedCategory || "all"}:${profile.occasion || ""}`;
+  const cached = serverProductCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    logger.info({ lookId: look.id, cacheKey }, "Returning cached product recommendations");
+    return cached.data;
+  }
+
   const persona = detectPersona(profile);
   const applicableCategories = getApplicableCategories(persona, requestedCategory);
   const budgetLimit = parseBudgetLimit(profile.budget);
@@ -1261,7 +1280,7 @@ export async function searchProductsForLook(
       }
     }
 
-    return {
+    const responseData: ProductRecommendationsResponse = {
       lookId: look.id,
       persona,
       applicableCategories,
@@ -1273,6 +1292,15 @@ export async function searchProductsForLook(
       totalFound: allProducts.length,
       diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
     };
+
+    if (allProducts.length > 0) {
+      serverProductCache.set(cacheKey, {
+        data: responseData,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+    }
+
+    return responseData;
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     logger.error({ err, lookId: look.id }, "Product discovery search failed");

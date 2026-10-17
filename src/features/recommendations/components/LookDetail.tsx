@@ -71,7 +71,8 @@ export function LookDetail({
     age.includes('child') ||
     pronouns.includes('kids') ||
     pronouns.includes('children');
-  const isMan = !isChild && pronouns.includes('men');
+  const isWoman = !isChild && (pronouns.includes('women') || pronouns.includes('female') || pronouns.includes('she/her'));
+  const isMan = !isChild && !isWoman && (pronouns.includes('men') || pronouns.includes('male') || pronouns.includes('he/him'));
 
   return (
     <div className="noise min-h-[100dvh]">

@@ -81,17 +81,17 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
   const occasionList = ['Everyday', 'Work', 'Date Night', 'Wedding', 'Festive', 'Party'];
 
   return (
-    <section className="bg-[#EFE4D6] text-[#194343] py-20 lg:py-28 border-b border-[#663B1B]/20">
+    <section className="bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 border-b border-[#B08A70]/30">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#663B1B]">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#795548]">
             Jewellery & Occasion Intelligence
           </p>
-          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194343]">
+          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194A49]">
             Complete the look.
           </h2>
-          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194343]/75">
+          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
             True styling doesn’t end with clothes. SkinTune considers how your jewellery metals, scale, and neckline geometries orchestrate for every specific occasion.
           </p>
         </div>
@@ -107,8 +107,8 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
                 onClick={() => setSelectedOccasion(occ)}
                 className={`focus-ring rounded-full px-6 py-2.5 text-sm font-bold transition-all duration-200 ${
                   active
-                    ? 'bg-[#194343] text-[#D7BD9B] shadow-md scale-105'
-                    : 'bg-white/80 text-[#194343]/75 hover:bg-white hover:text-[#194343]'
+                    ? 'bg-[#194A49] text-[#F0E5D5] shadow-md scale-105'
+                    : 'bg-white/80 text-[#194A49]/75 hover:bg-white hover:text-[#194A49] border border-[#B08A70]/30'
                 }`}
               >
                 {occ}
@@ -120,64 +120,64 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
         {/* Feature Showcase Grid */}
         <div className="mt-12 grid gap-10 lg:grid-cols-2 items-center">
           {/* Left: Detail Information Card */}
-          <div className="rounded-3xl border border-[#663B1B]/20 bg-white/75 p-8 sm:p-10 shadow-lg">
-            <div className="flex items-center justify-between border-b border-[#663B1B]/15 pb-4">
+          <div className="rounded-3xl border border-[#B08A70]/30 bg-white/80 p-8 sm:p-10 shadow-lg">
+            <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-4">
               <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-xl bg-[#194343] text-[#D7BD9B]">
+                <span className="grid size-8 place-items-center rounded-xl bg-[#194A49] text-[#D9BC96]">
                   <Gem size={16} />
                 </span>
-                <span className="font-serif text-xl font-bold text-[#194343]">
+                <span className="font-serif text-xl font-bold text-[#194A49]">
                   {current.name} Styling Protocol
                 </span>
               </div>
-              <span className="rounded-full bg-[#663B1B]/15 px-3 py-1 text-xs font-bold text-[#663B1B]">
+              <span className="rounded-full bg-[#B08A70]/15 px-3 py-1 text-xs font-bold text-[#795548]">
                 Curated Harmony
               </span>
             </div>
 
             <div className="mt-6 space-y-6">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#663B1B]">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                   Recommended Metal
                 </p>
-                <p className="mt-1 text-lg font-serif font-semibold text-[#194343]">
+                <p className="mt-1 text-lg font-serif font-semibold text-[#194A49]">
                   {current.metal}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#663B1B]">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                   Jewellery Strategy
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#194343]/85 leading-relaxed">
+                <p className="mt-1 text-sm font-medium text-[#194A49]/85 leading-relaxed">
                   {current.jewelleryFocus}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#663B1B]">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                   Neckline Compatibility
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#194343]/85 leading-relaxed">
+                <p className="mt-1 text-sm font-medium text-[#194A49]/85 leading-relaxed">
                   {current.necklineMatch}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#663B1B]">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                   Occasion Atmosphere
                 </p>
-                <p className="mt-1 text-sm text-[#194343]/75 leading-relaxed">
+                <p className="mt-1 text-sm text-[#194A49]/75 leading-relaxed">
                   {current.vibe}
                 </p>
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-[#663B1B]/15 flex flex-wrap gap-2">
+            <div className="mt-8 pt-6 border-t border-[#B08A70]/20 flex flex-wrap gap-2">
               {current.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-[#663B1B]/20 bg-[#663B1B]/10 px-3 py-1 text-xs font-semibold text-[#663B1B]"
+                  className="rounded-full border border-[#B08A70]/30 bg-[#B08A70]/10 px-3 py-1 text-xs font-semibold text-[#795548]"
                 >
                   ✓ {tag}
                 </span>
@@ -193,7 +193,7 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
                   onStart();
                 }
               }}
-              className="mt-8 w-full flex items-center justify-center gap-2 rounded-full bg-[#194343] py-3.5 text-sm font-bold text-[#D7BD9B] transition hover:bg-[#143838]"
+              className="mt-8 w-full flex items-center justify-center gap-2 rounded-full bg-[#D9BC96] py-3.5 text-sm font-bold text-[#194A49] transition hover:bg-[#cfaf86] shadow-sm"
             >
               <span>Get Recommendations for {current.name}</span>
               <ArrowRight size={15} />
@@ -201,23 +201,23 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
           </div>
 
           {/* Right: Editorial Flatlay / Product Visual */}
-          <div className="relative overflow-hidden rounded-3xl border border-[#663B1B]/30 bg-[#194343] p-2 shadow-2xl">
-            <div className="relative aspect-[4/3] sm:aspect-square w-full overflow-hidden rounded-[1.6rem] bg-[#194343]">
+          <div className="relative overflow-hidden rounded-3xl border border-[#B08A70]/30 bg-white/80 p-2 shadow-xl">
+            <div className="relative aspect-[4/3] sm:aspect-square w-full overflow-hidden rounded-[1.6rem] bg-[#F0E5D5]">
               <img
                 src={current.image}
                 alt={`${current.name} jewellery and accessories inspiration`}
                 className="size-full object-cover transition duration-700 hover:scale-105"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#194343]/80 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/70 via-transparent to-transparent" />
 
-              <div className="absolute bottom-5 inset-x-5 rounded-2xl border border-[#663B1B]/60 bg-[#194343]/95 p-4 text-[#D7BD9B] backdrop-blur-md">
-                <p className="text-[10px] uppercase font-bold tracking-widest text-[#D7BD9B]">
+              <div className="absolute bottom-5 inset-x-5 rounded-2xl border border-[#B08A70]/40 bg-white/95 p-4 text-[#194A49] backdrop-blur-md shadow-lg">
+                <p className="text-[10px] uppercase font-bold tracking-widest text-[#795548]">
                   Occasion-Synchronized
                 </p>
-                <p className="font-serif text-lg font-semibold mt-0.5 text-[#D7BD9B]">
+                <p className="font-serif text-lg font-semibold mt-0.5 text-[#194A49]">
                   Complete {current.name} Ensemble
                 </p>
-                <p className="text-xs text-[#D7BD9B]/75 mt-1">
+                <p className="text-xs text-[#194A49]/75 mt-1">
                   Coordinated metals, bag proportions, and footwear heights.
                 </p>
               </div>

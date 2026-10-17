@@ -29,21 +29,34 @@ export function SingleChoiceStep({
   options,
   onNext,
   onBack,
+  allowOther = true,
+  otherPlaceholder,
 }: StepBaseProps & {
   field: keyof SkinTuneProfile;
   options: SelectOption[];
+  allowOther?: boolean;
+  otherPlaceholder?: string;
 }) {
   const value = profile[field] as string;
 
   const choose = (v: string) => {
     update({ [field]: v } as Partial<SkinTuneProfile>);
-    window.setTimeout(onNext, 320);
+    const isStandard = options.some((o) => o.label === v);
+    if (isStandard) {
+      window.setTimeout(onNext, 320);
+    }
   };
 
   return (
     <StepShell profile={profile} onBack={onBack} step={step}>
       <Intro eyebrow={eyebrow} title={title} body={body}>
-        <ChoiceGrid options={options} value={value} toggle={choose} />
+        <ChoiceGrid
+          options={options}
+          value={value}
+          toggle={choose}
+          allowOther={allowOther}
+          otherPlaceholder={otherPlaceholder}
+        />
         <FooterActions onBack={onBack} onContinue={onNext} disabled={!value} />
       </Intro>
     </StepShell>
@@ -63,11 +76,15 @@ export function MultiChoiceStep({
   onBack,
   max,
   optional = false,
+  allowOther = true,
+  otherPlaceholder,
 }: StepBaseProps & {
   field: keyof SkinTuneProfile;
   options: SelectOption[];
   max?: number;
   optional?: boolean;
+  allowOther?: boolean;
+  otherPlaceholder?: string;
 }) {
   const values = (profile[field] as string[]) || [];
   const toggle = (v: string) => {
@@ -75,11 +92,23 @@ export function MultiChoiceStep({
     if (atMax) return;
     update({ [field]: values.includes(v) ? values.filter((item) => item !== v) : [...values, v] } as Partial<SkinTuneProfile>);
   };
+  const setValues = (newVals: string[]) => {
+    update({ [field]: newVals } as Partial<SkinTuneProfile>);
+  };
 
   return (
     <StepShell profile={profile} onBack={onBack} step={step}>
       <Intro eyebrow={eyebrow} title={title} body={max ? `${body ?? ''} Choose up to ${max}.`.trim() : body}>
-        <ChoiceGrid multi options={options} value={values} toggle={toggle} />
+        <ChoiceGrid
+          multi
+          options={options}
+          value={values}
+          toggle={toggle}
+          onMultiChange={setValues}
+          allowOther={allowOther}
+          otherPlaceholder={otherPlaceholder}
+          max={max}
+        />
         <FooterActions onBack={onBack} onContinue={onNext} disabled={!optional && values.length === 0} />
       </Intro>
     </StepShell>

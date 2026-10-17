@@ -34,7 +34,7 @@ export function LandingPage({
   };
 
   return (
-    <div className="min-h-screen bg-[#194343] text-[#D7BD9B] selection:bg-[#663B1B] selection:text-[#D7BD9B]">
+    <div className="min-h-screen bg-[#F0E5D5] text-[#194A49] selection:bg-[#D9BC96] selection:text-[#194A49]">
       {/* 1. Navbar */}
       <Navbar
         onStart={onStart}

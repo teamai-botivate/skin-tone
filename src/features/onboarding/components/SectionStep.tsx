@@ -8,8 +8,8 @@ import { FooterActions } from '@/components/common/FooterActions';
 import { ChoiceGrid } from './OptionCard';
 
 export type SectionField =
-  | { kind: 'single'; field: keyof SkinTuneProfile; label: string; hint?: string; options: SelectOption[]; required?: boolean }
-  | { kind: 'multi'; field: keyof SkinTuneProfile; label: string; hint?: string; options: SelectOption[]; max?: number; required?: boolean }
+  | { kind: 'single'; field: keyof SkinTuneProfile; label: string; hint?: string; options: SelectOption[]; required?: boolean; allowOther?: boolean; otherPlaceholder?: string }
+  | { kind: 'multi'; field: keyof SkinTuneProfile; label: string; hint?: string; options: SelectOption[]; max?: number; required?: boolean; allowOther?: boolean; otherPlaceholder?: string }
   | { kind: 'text'; field: keyof SkinTuneProfile; label: string; hint?: string; placeholder: string; required?: boolean };
 
 function isSectionFieldFilled(profile: SkinTuneProfile, def: SectionField): boolean {
@@ -73,7 +73,13 @@ export function SectionStep({
                 <div key={def.field}>
                   <p className="mb-3 text-sm font-bold">{def.label}{optionalTag}</p>
                   {def.hint && <p className="mb-3 -mt-2 text-sm text-muted-foreground">{def.hint}</p>}
-                  <ChoiceGrid options={def.options} value={value} toggle={(v) => update({ [def.field]: v } as Partial<SkinTuneProfile>)} />
+                  <ChoiceGrid
+                    options={def.options}
+                    value={value}
+                    toggle={(v) => update({ [def.field]: v } as Partial<SkinTuneProfile>)}
+                    allowOther={def.allowOther ?? true}
+                    otherPlaceholder={def.otherPlaceholder}
+                  />
                 </div>
               );
             }
@@ -83,6 +89,9 @@ export function SectionStep({
               if (atMax) return;
               update({ [def.field]: values.includes(v) ? values.filter((item) => item !== v) : [...values, v] } as Partial<SkinTuneProfile>);
             };
+            const setValues = (newVals: string[]) => {
+              update({ [def.field]: newVals } as Partial<SkinTuneProfile>);
+            };
             return (
               <div key={def.field}>
                 <p className="mb-3 text-sm font-bold">
@@ -90,7 +99,16 @@ export function SectionStep({
                   {def.max ? <span className="ml-1.5 font-normal normal-case text-muted-foreground">choose up to {def.max}</span> : null}
                 </p>
                 {def.hint && <p className="mb-3 -mt-2 text-sm text-muted-foreground">{def.hint}</p>}
-                <ChoiceGrid multi options={def.options} value={values} toggle={toggle} />
+                <ChoiceGrid
+                  multi
+                  options={def.options}
+                  value={values}
+                  toggle={toggle}
+                  onMultiChange={setValues}
+                  allowOther={def.allowOther ?? true}
+                  otherPlaceholder={def.otherPlaceholder}
+                  max={def.max}
+                />
               </div>
             );
           })}

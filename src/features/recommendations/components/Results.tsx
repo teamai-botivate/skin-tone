@@ -1,9 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
 import { Shell } from '@/components/common/Shell';
 import { LookVisual } from './LookVisual';
 import { lookCategoryBadges } from '@/features/onboarding/data/options';
+import { getProductRecommendations } from '@/features/shopping/services/product-recommendations';
 import { SlidersHorizontal, ChevronRight, ShoppingBag, Check, Heart, Info } from 'lucide-react';
 
 export function Results({
@@ -23,6 +25,19 @@ export function Results({
   onFeedback: () => void;
   onBack: () => void;
 }) {
+  useEffect(() => {
+    // Prefetch products in background for instant "Recreate this look" display
+    if (resultLooks && resultLooks.length > 0) {
+      getProductRecommendations(resultLooks[0], profile).catch(() => {});
+      if (resultLooks[1]) {
+        const timer = setTimeout(() => {
+          getProductRecommendations(resultLooks[1], profile).catch(() => {});
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [resultLooks, profile]);
+
   return (
     <Shell profile={profile} onBack={onBack} onSettings={onBack}>
       <div className="animate-rise">

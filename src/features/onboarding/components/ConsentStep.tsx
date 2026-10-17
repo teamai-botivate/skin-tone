@@ -10,15 +10,17 @@ export function ConsentStep({
   profile,
   onNext,
   onBack,
+  step = 4,
 }: {
   profile: SkinTuneProfile;
   onNext: () => void;
   onBack: () => void;
+  step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={5}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
       <Intro
-        eyebrow="05 / your choice"
+        eyebrow="04 / your choice"
         title="A portrait can make color guidance more precise."
         body="If you choose to share one, we’ll look at visible styling cues like light, contrast, and framing. SkinTune does not identify you, diagnose anything, or judge attractiveness."
       >
@@ -53,16 +55,18 @@ export function AppearanceStep({
   onNext,
   onPhoto,
   onBack,
+  step = 6,
 }: {
   profile: SkinTuneProfile;
   onNext: () => void;
   onPhoto: () => void;
   onBack: () => void;
+  step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={7}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
       <Intro
-        eyebrow="07 / what we noticed"
+        eyebrow="06 / what we noticed"
         title="Your appearance profile is ready."
         body="Think of this as a creative starting point, not a label. We’ll use it to build harmony, then let your preferences lead."
       >

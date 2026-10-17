@@ -40,33 +40,33 @@ export function BeautySection({ onStart }: BeautySectionProps) {
       title: 'Occasion & Wardrobe Synchronization',
       description: 'Your makeup is never designed in a vacuum. SkinTune balances makeup intensity with your clothing neckline, fabric weight, and jewellery reflectivity.',
       shadeExample: 'Quiet Luxury Day-to-Evening Transition',
-      swatch: '#194343',
+      swatch: '#194A49',
     },
   ];
 
   return (
-    <section id="beauty-section" className="relative bg-[#194343] text-[#D7BD9B] py-20 lg:py-28 overflow-hidden">
+    <section id="beauty-section" className="relative bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 overflow-hidden border-b border-[#B08A70]/30">
       {/* Background ambient lighting */}
-      <div className="pointer-events-none absolute left-0 top-1/3 size-96 rounded-full bg-[#194343]/40 blur-[130px]" />
-      <div className="pointer-events-none absolute right-0 bottom-10 size-80 rounded-full bg-[#663B1B]/25 blur-[120px]" />
+      <div className="pointer-events-none absolute left-0 top-1/3 size-96 rounded-full bg-[#D9BC96]/25 blur-[140px]" />
+      <div className="pointer-events-none absolute right-0 bottom-10 size-80 rounded-full bg-[#B08A70]/20 blur-[120px]" />
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
           {/* Left Column: Copy & Breakdown Cards */}
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#663B1B]/60 bg-[#663B1B]/30 px-3.5 py-1.5">
-              <Sparkles size={14} className="text-[#D7BD9B]" />
-              <span className="text-xs font-bold uppercase tracking-[0.22em] text-[#D7BD9B]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-[#B08A70]/15 px-3.5 py-1.5">
+              <Sparkles size={14} className="text-[#795548]" />
+              <span className="text-xs font-bold uppercase tracking-[0.22em] text-[#795548]">
                 Dedicated Beauty Intelligence
               </span>
             </div>
 
-            <h2 className="mt-4 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#D7BD9B]">
+            <h2 className="mt-4 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194A49]">
               Makeup that works <br />
-              with <span className="italic text-[#D7BD9B]">YOU.</span>
+              with <span className="italic text-[#194A49]">YOU.</span>
             </h2>
 
-            <p className="mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-[#D7BD9B]/75">
+            <p className="mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-[#194A49]/75">
               SkinTune is far more than an outfit picker. We calculate the exact makeup shades, finishes, and techniques that harmonize with your natural complexion.
             </p>
 
@@ -75,26 +75,26 @@ export function BeautySection({ onStart }: BeautySectionProps) {
               {makeupPillars.map((item) => (
                 <div
                   key={item.category}
-                  className="group rounded-2xl border border-[#663B1B]/50 bg-[#194343] p-4.5 transition-all duration-200 hover:border-[#D7BD9B]/60 hover:bg-[#143838]"
+                  className="group rounded-2xl border border-[#B08A70]/30 bg-white/80 p-4.5 transition-all duration-200 hover:border-[#B08A70]/60 hover:bg-white hover:shadow-md"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <span
-                        className="size-3.5 rounded-full border border-white/20 shadow-sm"
+                        className="size-3.5 rounded-full border border-black/15 shadow-sm"
                         style={{ backgroundColor: item.swatch }}
                       />
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#D7BD9B]">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                         {item.category}
                       </span>
                     </div>
-                    <span className="text-[11px] font-medium text-[#D7BD9B]/75">
+                    <span className="text-[11px] font-medium text-[#194A49]/70">
                       {item.shadeExample}
                     </span>
                   </div>
-                  <h3 className="mt-2 text-base font-semibold text-[#D7BD9B]">
+                  <h3 className="mt-2 text-base font-semibold text-[#194A49]">
                     {item.title}
                   </h3>
-                  <p className="mt-1.5 text-xs sm:text-sm text-[#D7BD9B]/70 leading-relaxed">
+                  <p className="mt-1.5 text-xs sm:text-sm text-[#194A49]/70 leading-relaxed">
                     {item.description}
                   </p>
                 </div>
@@ -105,7 +105,7 @@ export function BeautySection({ onStart }: BeautySectionProps) {
               <button
                 type="button"
                 onClick={onStart}
-                className="flex items-center gap-2 rounded-full bg-[#D7BD9B] px-7 py-3.5 text-sm font-bold text-[#194343] shadow-lg transition hover:bg-[#e4cdb0]"
+                className="flex items-center gap-2 rounded-full bg-[#D9BC96] px-7 py-3.5 text-sm font-bold text-[#194A49] shadow-md transition hover:bg-[#cfaf86]"
               >
                 <span>Get My Personalized Beauty Edit</span>
                 <ArrowRight size={16} />
@@ -116,44 +116,44 @@ export function BeautySection({ onStart }: BeautySectionProps) {
           {/* Right Column: Editorial Visual & Swatch Showcase */}
           <div className="relative mx-auto w-full max-w-md lg:max-w-none">
             {/* Visual Frame */}
-            <div className="relative overflow-hidden rounded-[2.2rem] border border-[#663B1B]/50 bg-[#194343] p-2.5 shadow-2xl">
-              <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[1.8rem] bg-[#194343]/30">
+            <div className="relative overflow-hidden rounded-[2.2rem] border border-[#B08A70]/30 bg-white/80 p-2.5 shadow-xl">
+              <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[1.8rem] bg-[#F0E5D5]">
                 <img
                   src="/images/cat-women.jpg"
                   alt="Editorial beauty portrait showcasing glowing complexion and harmonious makeup"
                   className="size-full object-cover transition duration-700 hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#194343]/90 via-transparent to-black/20" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/70 via-transparent to-black/10" />
 
                 {/* Overlaid Badge */}
-                <div className="absolute top-4 left-4 rounded-full bg-[#194343]/85 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#D7BD9B] backdrop-blur-md border border-[#663B1B]">
+                <div className="absolute top-4 left-4 rounded-full bg-white/90 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/50">
                   Personalized Shade Harmony
                 </div>
 
                 {/* Overlaid Palette Swatches */}
-                <div className="absolute bottom-4 inset-x-4 rounded-2xl border border-[#663B1B]/60 bg-[#194343]/90 p-4 backdrop-blur-md">
-                  <p className="text-xs font-bold uppercase tracking-wider text-[#D7BD9B]/75">
+                <div className="absolute bottom-4 inset-x-4 rounded-2xl border border-[#B08A70]/40 bg-white/95 p-4 backdrop-blur-md shadow-lg text-[#194A49]">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                     Detected Undertone Compatibility
                   </p>
-                  <p className="font-serif text-lg font-semibold text-[#D7BD9B] mt-1">
+                  <p className="font-serif text-lg font-semibold text-[#194A49] mt-1">
                     Warm Olive & Golden Balance
                   </p>
-                  <div className="mt-3 grid grid-cols-4 gap-2 pt-2 border-t border-[#663B1B]/50">
+                  <div className="mt-3 grid grid-cols-4 gap-2 pt-2 border-t border-[#B08A70]/30">
                     <div className="text-center">
-                      <span className="mx-auto block size-6 rounded-full bg-[#D5A478] border border-white/20 shadow-sm" />
-                      <span className="text-[10px] text-[#D7BD9B]/70 mt-1 block">Base Tint</span>
+                      <span className="mx-auto block size-6 rounded-full bg-[#D5A478] border border-black/10 shadow-sm" />
+                      <span className="text-[10px] text-[#795548] mt-1 block">Base Tint</span>
                     </div>
                     <div className="text-center">
-                      <span className="mx-auto block size-6 rounded-full bg-[#C26A51] border border-white/20 shadow-sm" />
-                      <span className="text-[10px] text-[#D7BD9B]/70 mt-1 block">Terracotta</span>
+                      <span className="mx-auto block size-6 rounded-full bg-[#C26A51] border border-black/10 shadow-sm" />
+                      <span className="text-[10px] text-[#795548] mt-1 block">Terracotta</span>
                     </div>
                     <div className="text-center">
-                      <span className="mx-auto block size-6 rounded-full bg-[#D97D64] border border-white/20 shadow-sm" />
-                      <span className="text-[10px] text-[#D7BD9B]/70 mt-1 block">Warm Flush</span>
+                      <span className="mx-auto block size-6 rounded-full bg-[#D97D64] border border-black/10 shadow-sm" />
+                      <span className="text-[10px] text-[#795548] mt-1 block">Warm Flush</span>
                     </div>
                     <div className="text-center">
-                      <span className="mx-auto block size-6 rounded-full bg-[#663B1B] border border-white/20 shadow-sm" />
-                      <span className="text-[10px] text-[#D7BD9B]/70 mt-1 block">Warm Mocha</span>
+                      <span className="mx-auto block size-6 rounded-full bg-[#795548] border border-black/10 shadow-sm" />
+                      <span className="text-[10px] text-[#795548] mt-1 block">Warm Mocha</span>
                     </div>
                   </div>
                 </div>
@@ -161,8 +161,8 @@ export function BeautySection({ onStart }: BeautySectionProps) {
             </div>
 
             {/* Editorial Quote Card */}
-            <div className="mt-6 rounded-2xl border border-[#663B1B]/50 bg-[#663B1B]/20 p-5 text-xs text-[#D7BD9B]/80 leading-relaxed backdrop-blur-sm">
-              <p className="font-semibold text-[#D7BD9B] uppercase tracking-wider">
+            <div className="mt-6 rounded-2xl border border-[#B08A70]/30 bg-white/70 p-5 text-xs text-[#194A49]/80 leading-relaxed backdrop-blur-sm shadow-sm">
+              <p className="font-semibold text-[#795548] uppercase tracking-wider">
                 SkinTune Beauty Philosophy
               </p>
               <p className="mt-1">

@@ -51,10 +51,17 @@ export function getOpenAIKeyDiagnostics() {
   };
 }
 
-export const RECOMMENDATION_MODEL =
-  cleanEnv(process.env["OPENAI_TEXT_MODEL"]) ||
-  cleanEnv(process.env["NEXT_PUBLIC_OPENAI_TEXT_MODEL"]) ||
-  "gpt-4o-mini";
+function getValidTextModel(): string {
+  const model =
+    cleanEnv(process.env["OPENAI_TEXT_MODEL"]) ||
+    cleanEnv(process.env["NEXT_PUBLIC_OPENAI_TEXT_MODEL"]);
+  if (model && !model.includes("5.5") && (model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3"))) {
+    return model;
+  }
+  return "gpt-4o-mini";
+}
+
+export const RECOMMENDATION_MODEL = getValidTextModel();
 
 export const IMAGE_MODEL =
   cleanEnv(process.env["OPENAI_IMAGE_MODEL"]) ||

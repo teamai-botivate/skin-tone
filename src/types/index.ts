@@ -23,6 +23,7 @@ export type SkinTuneProfile = {
   ageGroup: string;
   height: string;
   photoUrl: string;
+  bodyPhotoUrl?: string;
   appearance: AppearanceProfile;
   bodyBuild: string;
   /** Single-select: Fitted / Regular / Relaxed / Oversized. */

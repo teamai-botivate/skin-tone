@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import type { PhotoStatus, SkinTuneProfile } from '@/types';
 import { Shell } from '@/components/common/Shell';
 import { Intro } from '@/components/common/Intro';
@@ -8,7 +8,18 @@ import { FooterActions } from '@/components/common/FooterActions';
 import { CameraCapture } from './CameraCapture';
 import { analyzePhoto } from '../services/photo-analysis';
 import { photoAnalysisStages, photoDiagnostics } from '../data/photo-diagnostics';
-import { Camera, Check, CheckCircle2, ChevronDown, CircleHelp, RefreshCw, Upload } from 'lucide-react';
+import {
+  Camera,
+  Check,
+  CheckCircle2,
+  RotateCcw,
+  Sparkles,
+  Sun,
+  Maximize2,
+  User,
+  Shirt,
+  RefreshCw,
+} from 'lucide-react';
 
 export function PhotoPanel({
   profile,
@@ -26,14 +37,12 @@ export function PhotoPanel({
   );
   const [analyzing, setAnalyzing] = useState(false);
   const [stageIndex, setStageIndex] = useState(0);
-  const [showCamera, setShowCamera] = useState(false);
-  const diagnostic = photoDiagnostics[status];
-  const isDev = process.env.NODE_ENV !== 'production';
+  const [activeCamera, setActiveCamera] = useState<'face' | 'body' | null>(null);
 
   const runAnalysis = (photoUrl: string) => {
     setAnalyzing(true);
     setStageIndex(0);
-    const stepMs = 550;
+    const stepMs = 500;
     const stageTimers = photoAnalysisStages.map((_, i) =>
       window.setTimeout(() => setStageIndex(i), stepMs * i),
     );
@@ -60,254 +69,320 @@ export function PhotoPanel({
     });
   };
 
-  const pickFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result);
-      update({ photoUrl: dataUrl });
-      runAnalysis(dataUrl);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const retry = () => {
-    update({ photoUrl: '' });
-    setStatus('low-confidence');
-  };
-
-  const handleCapture = (dataUrl: string) => {
-    setShowCamera(false);
+  const handleFaceCapture = (dataUrl: string) => {
+    setActiveCamera(null);
     update({ photoUrl: dataUrl });
     runAnalysis(dataUrl);
   };
 
+  const handleBodyCapture = (dataUrl: string) => {
+    setActiveCamera(null);
+    update({ bodyPhotoUrl: dataUrl });
+  };
+
+  const hasFace = Boolean(profile.photoUrl);
+  const hasBody = Boolean(profile.bodyPhotoUrl);
+  const bothCaptured = hasFace && hasBody;
+
   return (
-    <Shell profile={profile} onBack={onBack} onSettings={onBack} step={6} total={11}>
-      <div className="mx-auto max-w-3xl">
+    <Shell profile={profile} onBack={onBack} onSettings={onBack} step={5} total={10}>
+      <div className="mx-auto max-w-5xl">
         <Intro
-          eyebrow="06 / a gentle check"
-          title="A photo helps us notice the details."
-          body="This is only used to tune color and proportion suggestions. It is not a beauty score, identity check, or medical assessment."
+          eyebrow="05 / your selfies"
+          title="Take your face & body selfies."
+          body="Your face selfie tunes color harmony and undertones, while your full body selfie tunes proportions, silhouette, and fabric drape. Camera capture only — kept private on your device."
         >
-          {showCamera && (
-            <CameraCapture onCapture={handleCapture} onClose={() => setShowCamera(false)} />
+          {/* Active Camera Modal */}
+          {activeCamera && (
+            <CameraCapture
+              mode={activeCamera}
+              onCapture={activeCamera === 'face' ? handleFaceCapture : handleBodyCapture}
+              onClose={() => setActiveCamera(null)}
+            />
           )}
-          <div className="mt-8 grid gap-6 md:grid-cols-[.84fr_1.16fr]">
-            <div className="relative flex min-h-[300px] flex-col items-center justify-center overflow-hidden rounded-[1.5rem] border border-border bg-secondary/60 p-6">
-              {profile.photoUrl ? (
-                <img
-                  src={profile.photoUrl}
-                  alt="Your uploaded portrait"
-                  data-testid="img-upload-preview"
-                  className="absolute inset-0 size-full object-cover"
-                />
-              ) : (
-                <>
-                  <div className="grid size-24 place-items-center rounded-full bg-card text-primary">
-                    <Camera size={34} />
+
+          {/* SIDE-BY-SIDE INSTRUCTIONS */}
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            {/* Face Selfie Instructions */}
+            <div className="flex flex-col justify-between rounded-2xl border border-[#B08A70]/35 bg-[#FAF5EE] p-5 sm:p-6 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#795548]">
+                  <Sparkles size={14} className="text-[#194A49]" />
+                  <span>How to take your face selfie</span>
+                </div>
+
+                <div className="mt-4 space-y-3.5 text-xs leading-relaxed text-[#194A49]/85">
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Sun size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Full, natural front light</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Face a window or soft front light so your skin tone is illuminated evenly without harsh shadows.
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-4 text-center text-sm font-semibold">A natural, shoulders-up photo</p>
-                  <p className="mt-1 text-center text-xs text-muted-foreground">No posing required.</p>
-                </>
-              )}
-              <div className="absolute bottom-4 flex flex-wrap justify-center gap-2 px-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCamera(true)}
-                  data-testid="button-open-camera"
-                  className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-lg"
-                >
-                  <Camera size={15} /> Take a Selfie
-                </button>
-                <label className="focus-ring inline-flex cursor-pointer items-center gap-2 rounded-full bg-card px-4 py-2.5 text-sm font-bold shadow-lg">
-                  <Upload size={15} /> {profile.photoUrl ? 'Choose another' : 'Choose from Gallery'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={pickFile}
-                    data-testid="input-photo-gallery"
-                    className="sr-only"
-                  />
-                </label>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <User size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Full face in focus</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Look directly into the camera lens with your entire face clearly visible from forehead to chin.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Sparkles size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Clear facial features</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Keep hair tucked behind ears or off forehead; remove sunglasses, hats, or heavy beauty filters.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Maximize2 size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Eye-level portrait</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Hold phone at arm’s length at eye level for a natural, shoulders-up portrait.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div
-              className={`rounded-[1.5rem] border p-6 ${
-                analyzing
-                  ? 'border-border bg-secondary/50'
-                  : diagnostic.good
-                  ? 'border-accent/30 bg-accent/8'
-                  : 'border-primary/25 bg-primary/5'
-              }`}
-            >
-              {analyzing ? (
-                <div data-testid="panel-analyzing">
-                  <div className="flex items-center gap-3">
-                    <RefreshCw className="animate-spin text-primary" size={22} />
-                    <h2 className="font-serif text-2xl">{photoAnalysisStages[stageIndex]}</h2>
+            {/* Full Body Selfie Instructions */}
+            <div className="flex flex-col justify-between rounded-2xl border border-[#B08A70]/35 bg-[#FAF5EE] p-5 sm:p-6 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#795548]">
+                  <Sparkles size={14} className="text-[#194A49]" />
+                  <span>How to take your full body selfie</span>
+                </div>
+
+                <div className="mt-4 space-y-3.5 text-xs leading-relaxed text-[#194A49]/85">
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Sun size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Full, natural light</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Stand in a bright room facing the light. Avoid standing with bright windows directly behind you.
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-6 space-y-3">
-                    {photoAnalysisStages.map((stage, i) => (
-                      <div
-                        key={stage}
-                        className={`flex items-center gap-3 text-sm transition ${
-                          i <= stageIndex ? 'opacity-100' : 'opacity-35'
-                        }`}
-                      >
-                        <span
-                          className={`grid size-5 shrink-0 place-items-center rounded-full border ${
-                            i < stageIndex
-                              ? 'border-accent bg-accent text-accent-foreground'
-                              : 'border-border'
-                          }`}
-                        >
-                          {i < stageIndex && <Check size={11} strokeWidth={3} />}
-                        </span>
-                        {stage}
-                      </div>
-                    ))}
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Maximize2 size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Head-to-toe in frame</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Ensure your entire body — from the top of your head down to your shoes/feet — is visible.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <User size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Position 6–8 ft away</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Prop phone upright at waist/chest height, use the built-in timer, and step back into frame.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#194A49]/10 text-[#194A49]">
+                      <Shirt size={13} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#194A49]">Natural posture & attire</p>
+                      <p className="mt-0.5 text-muted-foreground">
+                        Stand upright with arms relaxed by your sides. Everyday fitted clothing works best.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              ) : !profile.photoUrl ? (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[.15em] text-muted-foreground">
-                    Photo check
-                  </p>
-                  <h2 className="mt-3 font-serif text-2xl">Waiting for a photo</h2>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    Choose a photo and we’ll check lighting, angle, and clarity right away.
-                  </p>
-                </div>
-              ) : diagnostic.good ? (
-                <div data-testid="panel-photo-good">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[.15em] text-muted-foreground">
-                        Photo check
-                      </p>
-                      <h2 className="mt-3 font-serif text-2xl">{diagnostic.title}</h2>
-                    </div>
-                    <CheckCircle2 className="text-accent" size={24} />
-                  </div>
-                  <div className="mt-6 grid grid-cols-3 gap-3">
-                    <div className="rounded-xl bg-card p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Skin tone
-                      </p>
-                      <p className="mt-1 font-serif text-lg">{profile.appearance.skinTone}</p>
-                    </div>
-                    <div className="rounded-xl bg-card p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Undertone
-                      </p>
-                      <p className="mt-1 font-serif text-lg">{profile.appearance.undertone}</p>
-                    </div>
-                    <div className="rounded-xl bg-card p-3">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        Confidence
-                      </p>
-                      <p className="mt-1 font-serif text-lg">{profile.appearance.confidence}%</p>
-                    </div>
-                  </div>
-                  {isDev && (
-                    <details className="mt-7 border-t border-border/70 pt-4">
-                      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-[.13em] text-muted-foreground">
-                        Preview other diagnostics (dev only) <ChevronDown size={15} />
-                      </summary>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {(Object.keys(photoDiagnostics) as PhotoStatus[]).map((key) => (
-                          <button
-                            type="button"
-                            key={key}
-                            onClick={() => setStatus(key)}
-                            data-testid={`button-diagnostic-${key}`}
-                            className={`focus-ring rounded-lg px-2 py-2 text-left text-xs transition ${
-                              status === key
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-card hover:bg-secondary'
-                            }`}
-                          >
-                            {photoDiagnostics[key].label}
-                          </button>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              ) : (
-                <div data-testid="panel-photo-problem">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[.15em] text-muted-foreground">
-                        Photo check · {diagnostic.label}
-                      </p>
-                      <h2 className="mt-3 font-serif text-2xl">{diagnostic.title}</h2>
-                    </div>
-                    <CircleHelp className="text-primary" size={24} />
-                  </div>
-                  <div className="mt-5 space-y-4 text-sm leading-relaxed">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        Problem
-                      </p>
-                      <p className="mt-1">{diagnostic.problem}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        Why it matters
-                      </p>
-                      <p className="mt-1 text-muted-foreground">{diagnostic.whyItMatters}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        How to improve
-                      </p>
-                      <p className="mt-1 text-muted-foreground">{diagnostic.howToImprove}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={retry}
-                    data-testid="button-retry-photo"
-                    className="focus-ring mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground"
-                  >
-                    <Camera size={15} /> Retry Photo
-                  </button>
-                  {isDev && (
-                    <details className="mt-7 border-t border-border/70 pt-4">
-                      <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-[.13em] text-muted-foreground">
-                        Preview other diagnostics (dev only) <ChevronDown size={15} />
-                      </summary>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        {(Object.keys(photoDiagnostics) as PhotoStatus[]).map((key) => (
-                          <button
-                            type="button"
-                            key={key}
-                            onClick={() => setStatus(key)}
-                            data-testid={`button-diagnostic-${key}`}
-                            className={`focus-ring rounded-lg px-2 py-2 text-left text-xs transition ${
-                              status === key
-                                ? 'bg-primary text-primary-foreground'
-                                : 'bg-card hover:bg-secondary'
-                            }`}
-                          >
-                            {photoDiagnostics[key].label}
-                          </button>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
           </div>
+
+          {/* SIDE-BY-SIDE SELFIE CAPTURE CARDS */}
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
+            {/* Card 1: Face Selfie */}
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-6 shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#795548]">
+                  01 · Face Selfie
+                </span>
+                {hasFace && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    <CheckCircle2 size={12} /> Captured
+                  </span>
+                )}
+              </div>
+
+              <div className="my-6 flex flex-col items-center justify-center">
+                {hasFace ? (
+                  <div className="relative aspect-[3/4] w-full max-w-[260px] overflow-hidden rounded-2xl border border-[#B08A70]/30 shadow-md">
+                    <img
+                      src={profile.photoUrl}
+                      alt="Your face selfie"
+                      data-testid="img-face-selfie-preview"
+                      className="size-full object-cover"
+                    />
+                    {analyzing && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 p-4 text-center backdrop-blur-sm">
+                        <RefreshCw className="animate-spin text-white mb-2" size={24} />
+                        <p className="text-xs font-semibold text-white">
+                          {photoAnalysisStages[stageIndex]}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center p-4">
+                    <div className="grid size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-4">
+                      <Camera size={32} />
+                    </div>
+                    <h3 className="font-serif text-xl font-bold text-[#194A49]">
+                      Take your face selfie
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                      Natural, shoulders-up portrait for undertone and contrast analysis.
+                    </p>
+                  </div>
+                )}
+
+                {hasFace && profile.appearance.skinTone && !analyzing && (
+                  <div className="mt-3 rounded-full bg-card/80 px-3.5 py-1 text-xs font-semibold text-[#194A49] border border-[#B08A70]/30 shadow-xs">
+                    {profile.appearance.skinTone} Tone · {profile.appearance.undertone} Undertone
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={() => setActiveCamera('face')}
+                  data-testid="button-open-face-camera"
+                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-6 py-3 text-xs font-bold transition shadow-sm ${
+                    hasFace
+                      ? 'border border-border bg-card text-foreground hover:border-primary/50'
+                      : 'bg-[#D9BC96] text-[#194A49] hover:bg-[#cfaf86]'
+                  }`}
+                >
+                  {hasFace ? <RotateCcw size={14} /> : <Camera size={15} />}
+                  {hasFace ? 'Retake Face Selfie' : 'Take Face Selfie'}
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2: Full Body Selfie */}
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-6 shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#795548]">
+                  02 · Full Body Selfie
+                </span>
+                {hasBody && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+                    <CheckCircle2 size={12} /> Captured
+                  </span>
+                )}
+              </div>
+
+              <div className="my-6 flex flex-col items-center justify-center">
+                {hasBody ? (
+                  <div className="relative aspect-[3/4] w-full max-w-[260px] overflow-hidden rounded-2xl border border-[#B08A70]/30 shadow-md">
+                    <img
+                      src={profile.bodyPhotoUrl}
+                      alt="Your full body selfie"
+                      data-testid="img-body-selfie-preview"
+                      className="size-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center p-4">
+                    <div className="grid size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-4">
+                      <Camera size={32} />
+                    </div>
+                    <h3 className="font-serif text-xl font-bold text-[#194A49]">
+                      Take your full body selfie
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                      Head-to-toe silhouette to fit cuts, fabric drape, and styling proportions.
+                    </p>
+                  </div>
+                )}
+
+                {hasBody && (
+                  <div className="mt-3 rounded-full bg-card/80 px-3.5 py-1 text-xs font-semibold text-[#194A49] border border-[#B08A70]/30 shadow-xs">
+                    Silhouette & Proportions Ready
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={() => setActiveCamera('body')}
+                  data-testid="button-open-body-camera"
+                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-6 py-3 text-xs font-bold transition shadow-sm ${
+                    hasBody
+                      ? 'border border-border bg-card text-foreground hover:border-primary/50'
+                      : 'bg-[#D9BC96] text-[#194A49] hover:bg-[#cfaf86]'
+                  }`}
+                >
+                  {hasBody ? <RotateCcw size={14} /> : <Camera size={15} />}
+                  {hasBody ? 'Retake Body Selfie' : 'Take Full Body Selfie'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress / Status banner */}
+          <div className="mt-6 flex items-center justify-center text-center">
+            {bothCaptured ? (
+              <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                <CheckCircle2 size={14} /> Both selfies captured — ready for styling analysis
+              </p>
+            ) : hasFace ? (
+              <p className="text-xs text-muted-foreground">
+                Face selfie ready — please take your full body selfie to proceed.
+              </p>
+            ) : hasBody ? (
+              <p className="text-xs text-muted-foreground">
+                Body selfie ready — please take your face selfie to proceed.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Take your face selfie and full body selfie to continue.
+              </p>
+            )}
+          </div>
+
           <FooterActions
             onBack={onBack}
             onContinue={onContinue}
-            disabled={!profile.photoUrl || !diagnostic.good || analyzing}
+            disabled={!bothCaptured}
+            label="Continue to appearance profile"
           />
         </Intro>
       </div>

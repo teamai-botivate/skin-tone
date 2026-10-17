@@ -66,21 +66,21 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
   const current = palettes[activeHarmonizer];
 
   return (
-    <section id="color-palette" className="relative bg-[#194343] text-[#D7BD9B] py-20 lg:py-28 overflow-hidden">
+    <section id="color-palette" className="relative bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 overflow-hidden border-b border-[#B08A70]/30">
       {/* Background radial gradients */}
-      <div className="pointer-events-none absolute right-10 top-20 size-[30rem] rounded-full bg-[#194343]/30 blur-[140px]" />
-      <div className="pointer-events-none absolute left-10 bottom-20 size-[25rem] rounded-full bg-[#663B1B]/25 blur-[120px]" />
+      <div className="pointer-events-none absolute right-10 top-20 size-[30rem] rounded-full bg-[#D9BC96]/25 blur-[140px]" />
+      <div className="pointer-events-none absolute left-10 bottom-20 size-[25rem] rounded-full bg-[#B08A70]/15 blur-[120px]" />
 
       <div className="relative mx-auto max-w-7xl px-5 sm:px-8">
         {/* Section Header */}
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#D7BD9B]">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#795548]">
             Color Intelligence
           </p>
-          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,3.8rem)] leading-[1.05] tracking-tight text-[#D7BD9B]">
+          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,3.8rem)] leading-[1.05] tracking-tight text-[#194A49]">
             Your colors, your palette.
           </h2>
-          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#D7BD9B]/75">
+          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
             Discover the exact color families that illuminate your complexion. Rather than rigid clinical seasons, SkinTune designs an editorial fashion palette curated for how colors reflect onto your face.
           </p>
         </div>
@@ -92,8 +92,8 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             onClick={() => setActiveHarmonizer('forest-luxe')}
             className={`rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition ${
               activeHarmonizer === 'forest-luxe'
-                ? 'bg-[#D7BD9B] text-[#194343] shadow-lg'
-                : 'border border-[#663B1B] bg-[#663B1B]/30 text-[#D7BD9B]/80 hover:text-white'
+                ? 'bg-[#194A49] text-[#F0E5D5] shadow-lg'
+                : 'border border-[#B08A70]/40 bg-white/80 text-[#194A49] hover:bg-white hover:border-[#194A49]/40'
             }`}
           >
             Signature Teal & Mocha
@@ -103,8 +103,8 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             onClick={() => setActiveHarmonizer('warm-olive')}
             className={`rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition ${
               activeHarmonizer === 'warm-olive'
-                ? 'bg-[#D7BD9B] text-[#194343] shadow-lg'
-                : 'border border-[#663B1B] bg-[#663B1B]/30 text-[#D7BD9B]/80 hover:text-white'
+                ? 'bg-[#194A49] text-[#F0E5D5] shadow-lg'
+                : 'border border-[#B08A70]/40 bg-white/80 text-[#194A49] hover:bg-white hover:border-[#194A49]/40'
             }`}
           >
             Warm Earth & Terracotta
@@ -114,8 +114,8 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             onClick={() => setActiveHarmonizer('radiant-gold')}
             className={`rounded-full px-5 py-2.5 text-xs font-bold uppercase tracking-wider transition ${
               activeHarmonizer === 'radiant-gold'
-                ? 'bg-[#D7BD9B] text-[#194343] shadow-lg'
-                : 'border border-[#663B1B] bg-[#663B1B]/30 text-[#D7BD9B]/80 hover:text-white'
+                ? 'bg-[#194A49] text-[#F0E5D5] shadow-lg'
+                : 'border border-[#B08A70]/40 bg-white/80 text-[#194A49] hover:bg-white hover:border-[#194A49]/40'
             }`}
           >
             Champagne & Midnight Sheen
@@ -123,24 +123,24 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
         </div>
 
         {/* Swatches Visual Presentation */}
-        <div className="mt-8 rounded-3xl border border-[#663B1B]/50 bg-[#194343] p-8 sm:p-10 shadow-2xl">
-          <div className="flex flex-col justify-between gap-4 border-b border-[#663B1B]/40 pb-6 md:flex-row md:items-center">
+        <div className="mt-8 rounded-3xl border border-[#B08A70]/30 bg-white/80 p-8 sm:p-10 shadow-xl backdrop-blur-sm">
+          <div className="flex flex-col justify-between gap-4 border-b border-[#B08A70]/25 pb-6 md:flex-row md:items-center">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-[#D7BD9B]/75">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
                 Curated Fashion Spectrum
               </p>
-              <h3 className="font-serif text-3xl font-bold text-[#D7BD9B] mt-1">
+              <h3 className="font-serif text-3xl font-bold text-[#194A49] mt-1">
                 {current.name}
               </h3>
-              <p className="text-sm text-[#D7BD9B]/70 mt-1">
+              <p className="text-sm text-[#194A49]/70 mt-1">
                 {current.description}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-[#663B1B] bg-[#194343]/80 px-3.5 py-1.5 text-[#D7BD9B] font-semibold">
+              <span className="rounded-full border border-[#B08A70]/40 bg-[#FAF5EE] px-3.5 py-1.5 text-[#194A49] font-semibold">
                 {current.undertone}
               </span>
-              <span className="rounded-full border border-[#663B1B] bg-[#194343]/80 px-3.5 py-1.5 text-[#D7BD9B]/80 font-semibold">
+              <span className="rounded-full border border-[#B08A70]/40 bg-[#FAF5EE] px-3.5 py-1.5 text-[#795548] font-semibold">
                 {current.contrast}
               </span>
             </div>
@@ -151,24 +151,24 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             {current.swatches.map((swatch) => (
               <div
                 key={`${swatch.name}-${swatch.hex}`}
-                className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[#194343]/90 p-3 transition-transform duration-300 hover:-translate-y-2 hover:shadow-xl"
+                className="group relative overflow-hidden rounded-2xl border border-[#B08A70]/30 bg-[#FAF5EE] p-3 transition-transform duration-300 hover:-translate-y-2 hover:shadow-xl"
               >
                 {/* Color Block */}
                 <div
-                  className="h-32 w-full rounded-xl border border-white/10 shadow-inner transition-transform group-hover:scale-102"
+                  className="h-32 w-full rounded-xl border border-[#B08A70]/20 shadow-inner transition-transform group-hover:scale-102"
                   style={{ backgroundColor: swatch.hex }}
                 />
                 {/* Label */}
                 <div className="mt-3.5 px-1">
                   <div className="flex items-center justify-between">
-                    <p className="font-serif text-base font-semibold text-[#D7BD9B]">
+                    <p className="font-serif text-base font-semibold text-[#194A49]">
                       {swatch.name}
                     </p>
-                    <span className="text-[10px] font-mono text-[#D7BD9B]/75">
+                    <span className="text-[10px] font-mono text-[#795548]">
                       {swatch.hex}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-[#D7BD9B]/75">
+                  <p className="mt-0.5 text-xs text-[#795548]">
                     {swatch.role}
                   </p>
                 </div>
@@ -177,14 +177,14 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
           </div>
 
           {/* Color Insight Footer */}
-          <div className="mt-10 flex flex-col justify-between gap-6 rounded-2xl border border-[#663B1B]/60 bg-[#663B1B]/25 p-6 sm:flex-row sm:items-center">
+          <div className="mt-10 flex flex-col justify-between gap-6 rounded-2xl border border-[#B08A70]/30 bg-[#FAF5EE] p-6 sm:flex-row sm:items-center">
             <div className="flex items-start gap-3">
-              <Sparkles size={20} className="text-[#D7BD9B] shrink-0 mt-0.5" />
+              <Sparkles size={20} className="text-[#795548] shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-[#D7BD9B]">
+                <p className="text-sm font-semibold text-[#194A49]">
                   Styling Implication
                 </p>
-                <p className="text-xs text-[#D7BD9B]/75 mt-0.5 max-w-2xl">
+                <p className="text-xs text-[#194A49]/75 mt-0.5 max-w-2xl">
                   {current.accentNotes}
                 </p>
               </div>
@@ -192,7 +192,7 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             <button
               type="button"
               onClick={onStart}
-              className="shrink-0 flex items-center gap-2 rounded-full bg-[#D7BD9B] px-6 py-2.5 text-xs font-bold text-[#194343] hover:bg-[#e4cdb0]"
+              className="shrink-0 flex items-center gap-2 rounded-full bg-[#D9BC96] px-6 py-2.5 text-xs font-bold text-[#194A49] hover:bg-[#cfaf86] transition-all duration-300 shadow-sm"
             >
               Analyze My Complexion <ArrowRight size={14} />
             </button>

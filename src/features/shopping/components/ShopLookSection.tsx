@@ -55,7 +55,8 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     age.includes('child') ||
     pronouns.includes('kids') ||
     pronouns.includes('children');
-  const isMan = !isChild && pronouns.includes('men');
+  const isWoman = !isChild && (pronouns.includes('women') || pronouns.includes('female') || pronouns.includes('she/her'));
+  const isMan = !isChild && !isWoman && (pronouns.includes('men') || pronouns.includes('male') || pronouns.includes('he/him'));
 
   const checkLiveHealth = async () => {
     setCheckingHealth(true);
@@ -71,11 +72,11 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     }
   };
 
-  const fetchProducts = async (cat?: ProductCategory | 'all') => {
+  const fetchProducts = async (cat?: ProductCategory | 'all', forceRefresh?: boolean) => {
     setLoading(true);
     setStatus('loading');
     try {
-      const response = await getProductRecommendations(look, profile, cat);
+      const response = await getProductRecommendations(look, profile, cat, forceRefresh);
       setProducts(response.products || []);
       setGroups(response.groups || []);
       setStatus(response.status);
@@ -125,8 +126,13 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     { id: 'outfit', label: 'Outfit', icon: '👗' },
   ];
 
-  if (!isChild && !isMan) {
-    availableTabs.push({ id: 'makeup', label: 'Makeup & Beauty', icon: '💄' });
+  const hasMakeup =
+    products.some((p) => p.category === 'makeup') ||
+    groups.some((g) => g.category === 'makeup') ||
+    applicableCategories.includes('makeup');
+
+  if (!isChild && (!isMan || hasMakeup)) {
+    availableTabs.push({ id: 'makeup', label: isMan ? 'Grooming & Skin' : 'Makeup & Beauty', icon: '💄' });
   }
 
   if (!isChild) {
@@ -311,7 +317,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
 
         <button
           type="button"
-          onClick={() => fetchProducts(activeCategory as ProductCategory | 'all')}
+          onClick={() => fetchProducts(activeCategory as ProductCategory | 'all', true)}
           disabled={loading}
           data-testid="button-refresh-products"
           className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-xs font-bold transition hover:border-primary/50 disabled:opacity-50"
@@ -361,7 +367,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
       </div>
 
       {/* AI Shade Matching Disclaimer (if makeup tab active or any makeup shown) */}
-      {!isChild && !isMan && (activeCategory === 'makeup' || activeCategory === 'all') && disclaimer && (
+      {!isChild && (!isMan || hasMakeup) && (activeCategory === 'makeup' || activeCategory === 'all') && disclaimer && (
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
           <Info size={16} className="mt-0.5 shrink-0 text-primary" />
           <p className="leading-relaxed">
