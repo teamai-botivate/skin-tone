@@ -98,6 +98,10 @@ export type ProductResult = {
   productVerified?: boolean;
   shade?: string;
   color?: string;
+  itemType?: string;
+  targetGender?: 'women' | 'men' | 'child' | 'unisex';
+  style?: string;
+  occasion?: string;
   material?: string;
   description?: string;
   imageUrl?: string;
@@ -105,6 +109,7 @@ export type ProductResult = {
   urlType?: 'exact_product' | 'search_result';
   isVerified?: boolean;
   matchScore?: number;
+  matchConfidence?: number;
   matchReason: string;
   availability?: string;
   source?: string;

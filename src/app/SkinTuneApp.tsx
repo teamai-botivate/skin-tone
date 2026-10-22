@@ -386,11 +386,10 @@ export function SkinTuneApp() {
         profile={profile}
         update={update}
         step={9}
-        eyebrow="09 / the finishing touch"
-        title="How you want to come across, and your budget."
-        body="Last section — then we'll make your five looks."
+        eyebrow="09 / budget"
+        title="What feels comfortable for your budget?"
+        body="Last step — then we'll curate your personalized looks."
         fields={[
-          { kind: 'multi', field: 'impression', label: 'How do you want to come across?', options: impressionOptions, max: 2, allowOther: true, otherPlaceholder: 'Type custom impression (e.g. Mysterious, effortless)...' },
           { kind: 'single', field: 'budget', label: 'What feels comfortable for this edit?', options: budgetOptions, allowOther: true, otherPlaceholder: 'Type custom budget or range...' },
         ]}
         continueLabel="Review my edit"

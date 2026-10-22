@@ -40,8 +40,8 @@ export function Review({
       target: 'colors-occasion',
     },
     {
-      label: 'Impression & budget',
-      value: `${profile.impression.join(', ')} · ${profile.budget}`,
+      label: 'Budget',
+      value: profile.impression?.length ? `${profile.impression.join(', ')} · ${profile.budget}` : profile.budget || 'Flexible',
       target: 'final-prefs',
     },
   ];

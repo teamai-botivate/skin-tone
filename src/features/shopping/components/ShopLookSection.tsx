@@ -26,6 +26,57 @@ import type {
   KeyDiagnostic,
 } from '@/types';
 
+/**
+ * Sanitizes and repairs retailer URLs to ensure users never land on broken /search/ pages
+ * or get redirected to incorrect departments (like AJIO defaulting to men's polo shirts).
+ */
+export function getSafeProductUrl(product: ProductResult, persona: string): string {
+  const url = product.productUrl;
+  if (!url) return '#';
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const genderPrefix = persona === 'man' ? 'men' : persona === 'child' ? 'kids' : 'women';
+    const cleanSearchQuery = `${genderPrefix} ${product.subcategory || product.productName}`.trim();
+
+    // Prevent AJIO empty search path bug (which defaults to men's polo shirts!)
+    if (host.includes('ajio.com') && u.pathname.includes('/search')) {
+      const text = u.searchParams.get('text');
+      if (!text || text === 'undefined' || text === 'null' || text.trim().length === 0) {
+        return `https://www.ajio.com/search/?text=${encodeURIComponent(cleanSearchQuery)}`;
+      }
+    }
+
+    // Prevent Tata CLiQ empty search path bug
+    if (host.includes('tatacliq.com') && u.pathname.includes('/search')) {
+      const text = u.searchParams.get('text') || u.searchParams.get('searchCategory');
+      if (!text || text === 'undefined' || text.trim().length === 0) {
+        return `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(cleanSearchQuery)}`;
+      }
+    }
+
+    // Prevent Nykaa empty search path bug
+    if (host.includes('nykaa') && u.pathname.includes('/search')) {
+      const q = u.searchParams.get('q');
+      if (!q || q === 'undefined' || q.trim().length === 0) {
+        return `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent(cleanSearchQuery)}`;
+      }
+    }
+
+    // Prevent Amazon empty search path bug
+    if (host.includes('amazon') && (u.pathname === '/s' || u.pathname.startsWith('/s/'))) {
+      const k = u.searchParams.get('k');
+      if (!k || k === 'undefined' || k.trim().length === 0) {
+        return `https://www.amazon.in/s?k=${encodeURIComponent(cleanSearchQuery)}`;
+      }
+    }
+
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 interface ShopLookSectionProps {
   look: LookRecommendation;
   profile: SkinTuneProfile;
@@ -103,22 +154,22 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     activeCategory === 'all'
       ? products
       : products.filter((p) => {
-          if (activeCategory === 'footwear-accessories') {
-            return p.category === 'footwear' || p.category === 'accessories';
-          }
-          return p.category === activeCategory;
-        });
+        if (activeCategory === 'footwear-accessories') {
+          return p.category === 'footwear' || p.category === 'accessories';
+        }
+        return p.category === activeCategory;
+      });
 
   // Filter groups by selected tab
   const filteredGroups =
     activeCategory === 'all'
       ? groups
       : groups.filter((g) => {
-          if (activeCategory === 'footwear-accessories') {
-            return g.category === 'footwear' || g.category === 'accessories';
-          }
-          return g.category === activeCategory;
-        });
+        if (activeCategory === 'footwear-accessories') {
+          return g.category === 'footwear' || g.category === 'accessories';
+        }
+        return g.category === activeCategory;
+      });
 
   // Calculate available categories for tabs
   const availableTabs: { id: string; label: string; icon: string }[] = [
@@ -139,12 +190,29 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     availableTabs.push({ id: 'jewellery', label: isMan ? 'Jewellery & Watches' : 'Jewellery', icon: '💎' });
   }
 
-  availableTabs.push({ id: 'footwear-accessories', label: 'Footwear & Accessories', icon: '👠' });
+  const hasFootwear =
+    products.some((p) => p.category === 'footwear') ||
+    groups.some((g) => g.category === 'footwear') ||
+    applicableCategories.includes('footwear');
+
+  const hasAccessories =
+    products.some((p) => p.category === 'accessories') ||
+    groups.some((g) => g.category === 'accessories') ||
+    applicableCategories.includes('accessories');
+
+  if (hasFootwear || hasAccessories) {
+    availableTabs.push({
+      id: 'footwear-accessories',
+      label: 'Footwear & Accessories',
+      icon: '👠',
+    });
+  }
 
   // Render a single product card
   const renderProductCard = (product: ProductResult) => {
     const isExactAndVerified =
       product.urlType === 'exact_product' && product.priceVerified && product.productVerified;
+    const safeUrl = getSafeProductUrl(product, persona);
 
     return (
       <article
@@ -178,19 +246,18 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             <div className="flex items-center gap-1.5">
               {product.priceTier && (
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    product.priceTier === 'budget'
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${product.priceTier === 'budget'
                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                       : product.priceTier === 'premium'
-                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                      : 'bg-primary/10 text-primary'
-                  }`}
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                        : 'bg-primary/10 text-primary'
+                    }`}
                 >
                   {product.priceTier === 'budget'
                     ? 'Budget Pick'
                     : product.priceTier === 'premium'
-                    ? 'Premium Pick'
-                    : 'Mid-Range'}
+                      ? 'Premium Pick'
+                      : 'Mid-Range'}
                 </span>
               )}
 
@@ -203,10 +270,17 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             </div>
           </div>
 
-          {/* Subcategory */}
-          <p className="mt-3 text-[11px] font-bold uppercase tracking-[.14em] text-muted-foreground">
-            {product.subcategory}
-          </p>
+          {/* Subcategory & Gender Indicator */}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[.14em] text-muted-foreground">
+              {product.subcategory}
+            </p>
+            {product.targetGender && (
+              <span className="rounded bg-secondary/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {product.targetGender === 'women' ? "Women's" : product.targetGender === 'men' ? "Men's" : product.targetGender}
+              </span>
+            )}
+          </div>
 
           {/* Brand & Title */}
           <h3 className="mt-1 text-base font-bold text-foreground">
@@ -254,9 +328,8 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
 
             {product.availability && (
               <span
-                className={`text-[11px] font-medium ${
-                  product.availability === 'Out of Stock' ? 'text-amber-500' : 'text-emerald-500'
-                }`}
+                className={`text-[11px] font-medium ${product.availability === 'Out of Stock' ? 'text-amber-500' : 'text-emerald-500'
+                  }`}
               >
                 • {product.availability}
               </span>
@@ -272,10 +345,10 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
           </div>
         </div>
 
-        {/* Shop CTA: opens real product URL in new tab */}
+        {/* Shop CTA: opens verified real product URL or safe search landing in new tab */}
         <div className="mt-5 border-t border-border/60 pt-4">
           <a
-            href={product.productUrl}
+            href={safeUrl}
             target="_blank"
             rel="noopener noreferrer"
             data-testid={`link-product-${product.id}`}
@@ -310,8 +383,8 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             {isChild
               ? 'Age-appropriate, comfortable clothing and accessories matched to your budget.'
               : isMan
-              ? 'Sharp tailoring, footwear, and accessories matched to your tone, build, and occasion.'
-              : 'Real, shoppable fashion, shade-matched beauty, and jewellery across multiple retailers & price points.'}
+                ? 'Sharp tailoring, footwear, and accessories matched to your tone, build, and occasion.'
+                : 'Real, shoppable fashion, shade-matched beauty, and jewellery across multiple retailers & price points.'}
           </p>
         </div>
 
@@ -334,8 +407,6 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
           const count =
             tab.id === 'all'
               ? products.length
-              : tab.id === 'footwear-accessories'
-              ? products.filter((p) => p.category === 'footwear' || p.category === 'accessories').length
               : products.filter((p) => p.category === tab.id).length;
 
           return (
@@ -344,19 +415,17 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               type="button"
               onClick={() => setActiveCategory(tab.id)}
               data-testid={`tab-shop-${tab.id}`}
-              className={`focus-ring inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${
-                isSelected
+              className={`focus-ring inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${isSelected
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
+                }`}
             >
               <span>{tab.icon}</span>
               <span>{tab.label}</span>
               {products.length > 0 && (
                 <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] ${
-                    isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-foreground'
-                  }`}
+                  className={`rounded-full px-2 py-0.5 text-[10px] ${isSelected ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-secondary text-foreground'
+                    }`}
                 >
                   {count}
                 </span>
@@ -482,17 +551,16 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                       🔑 {diag.keyName || diag.provider.toUpperCase()}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        diag.status === 'invalid_key'
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${diag.status === 'invalid_key'
                           ? 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30'
                           : diag.status === 'missing_key'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                          : diag.status === 'rate_limited'
-                          ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30'
-                          : diag.status === 'degraded'
-                          ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                            : diag.status === 'rate_limited'
+                              ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30'
+                              : diag.status === 'degraded'
+                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                                : 'bg-muted text-muted-foreground'
+                        }`}
                     >
                       {diag.status.replace('_', ' ')}
                     </span>

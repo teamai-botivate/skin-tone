@@ -78,7 +78,7 @@ export async function tavilySearch(
       max_results: maxResults,
       ...(includeDomains?.length ? { include_domains: includeDomains } : {}),
     }),
-    signal: AbortSignal.timeout(4000),
+    signal: AbortSignal.timeout(6500),
   });
 
   if (!res.ok) {

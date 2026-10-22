@@ -20,10 +20,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const { look, profile, category } = parsed.data;
+    const { look, profile, category, forceRefresh } = parsed.data;
 
     try {
-      const result = await searchProductsForLook(look, profile, category);
+      const result = await searchProductsForLook(look, profile, category, forceRefresh);
       const validated = ProductRecommendationsResponseSchema.parse(result);
       return NextResponse.json(validated);
     } catch (err) {

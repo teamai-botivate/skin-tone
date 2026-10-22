@@ -91,6 +91,10 @@ export const ProductResultSchema = z.object({
   productVerified: z.boolean().default(false),
   shade: z.string().optional(),
   color: z.string().optional(),
+  itemType: z.string().optional(),
+  targetGender: z.enum(["women", "men", "child", "unisex"]).optional(),
+  style: z.string().optional(),
+  occasion: z.string().optional(),
   material: z.string().optional(),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
@@ -98,6 +102,7 @@ export const ProductResultSchema = z.object({
   urlType: z.enum(["exact_product", "search_result"]).default("exact_product"),
   isVerified: z.boolean().optional(),
   matchScore: z.number().min(0).max(100).optional(),
+  matchConfidence: z.number().min(0).max(100).optional(),
   matchReason: z.string(),
   availability: z.string().default("In Stock"),
   source: z.string().optional(),
@@ -117,6 +122,7 @@ export const ProductRecommendationsRequestSchema = z.object({
   look: LookRecommendationSchema,
   profile: SkinTuneProfileSchema,
   category: z.enum(["outfit", "makeup", "jewellery", "accessories", "footwear", "all"]).optional(),
+  forceRefresh: z.boolean().optional(),
 });
 export type ProductRecommendationsRequest = z.infer<typeof ProductRecommendationsRequestSchema>;
 
