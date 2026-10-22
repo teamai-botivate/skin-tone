@@ -38,7 +38,7 @@ export function StepShell({
   children,
   onBack,
   step,
-  total = 11,
+  total = 9,
 }: {
   profile: SkinTuneProfile;
   children: ReactNode;

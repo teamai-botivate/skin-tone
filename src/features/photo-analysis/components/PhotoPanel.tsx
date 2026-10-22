@@ -85,7 +85,7 @@ export function PhotoPanel({
   const bothCaptured = hasFace && hasBody;
 
   return (
-    <Shell profile={profile} onBack={onBack} onSettings={onBack} step={5} total={10}>
+    <Shell profile={profile} onBack={onBack} onSettings={onBack} step={5} total={9}>
       <div className="mx-auto max-w-5xl">
         <Intro
           eyebrow="05 / your selfies"

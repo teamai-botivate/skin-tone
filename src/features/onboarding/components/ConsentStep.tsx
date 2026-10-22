@@ -18,7 +18,7 @@ export function ConsentStep({
   step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={9}>
       <Intro
         eyebrow="04 / your choice"
         title="A portrait can make color guidance more precise."
@@ -64,7 +64,7 @@ export function AppearanceStep({
   step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={9}>
       <Intro
         eyebrow="06 / what we noticed"
         title="Your appearance profile is ready."

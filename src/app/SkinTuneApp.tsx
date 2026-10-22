@@ -42,7 +42,6 @@ type Screen =
   | 'appearance'
   | 'body-style'
   | 'colors-occasion'
-  | 'final-prefs'
   | 'review'
   | 'generating'
   | 'results'
@@ -78,7 +77,6 @@ const wizardScreens: Screen[] = [
   'appearance',
   'body-style',
   'colors-occasion',
-  'final-prefs',
   'review',
 ];
 
@@ -166,7 +164,7 @@ export function SkinTuneApp() {
         onPrivacy={() => go('settings')}
         onQuickStart={(occasion) => {
           update({ occasion });
-          go(profile.name ? 'final-prefs' : 'name');
+          go(profile.name ? 'colors-occasion' : 'name');
         }}
         hasExistingProfile={Boolean(profile.name)}
         onGoHome={() => go('home')}
@@ -192,7 +190,7 @@ export function SkinTuneApp() {
         }}
         onQuickStart={(occasion) => {
           update({ occasion });
-          go('final-prefs');
+          go('colors-occasion');
         }}
         onDiscover={() => go('welcome')}
       />
@@ -369,28 +367,14 @@ export function SkinTuneApp() {
         profile={profile}
         update={update}
         step={8}
-        eyebrow="08 / colours & the moment"
-        title="Colour, comfort, and where you're headed."
+        eyebrow="08 / colours, occasion & budget"
+        title="Colour, comfort, occasion, and your budget."
         body="Everything you need for this look, in one go."
         fields={[
           { kind: 'multi', field: 'colorsLove', label: 'Which colors do you reach for?', options: colorLoveOptions, max: 5, allowOther: true, otherPlaceholder: 'Type custom color (e.g. Emerald teal, powder blue)...' },
           { kind: 'multi', field: 'colorsAvoid', label: 'Anything you tend to avoid?', options: colorAvoidOptions, required: false, allowOther: true, otherPlaceholder: 'Type custom color to avoid (e.g. Mustard, neon yellow)...' },
           { kind: 'single', field: 'occasion', label: 'Where are you getting dressed for?', options: occasionOptions, allowOther: true, otherPlaceholder: 'Type custom occasion (e.g. Concert, art opening, graduation)...' },
-        ]}
-        onNext={() => go('final-prefs')}
-        onBack={back}
-      />
-    ),
-    'final-prefs': (
-      <SectionStep
-        profile={profile}
-        update={update}
-        step={9}
-        eyebrow="09 / budget"
-        title="What feels comfortable for your budget?"
-        body="Last step — then we'll curate your personalized looks."
-        fields={[
-          { kind: 'single', field: 'budget', label: 'What feels comfortable for this edit?', options: budgetOptions, allowOther: true, otherPlaceholder: 'Type custom budget or range...' },
+          { kind: 'single', field: 'budget', label: 'What feels comfortable for your budget?', options: budgetOptions, allowOther: true, otherPlaceholder: 'Type custom budget or range...' },
         ]}
         continueLabel="Review my edit"
         onNext={() => go('review')}

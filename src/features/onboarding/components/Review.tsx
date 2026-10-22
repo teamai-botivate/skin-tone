@@ -41,15 +41,15 @@ export function Review({
     },
     {
       label: 'Budget',
-      value: profile.impression?.length ? `${profile.impression.join(', ')} · ${profile.budget}` : profile.budget || 'Flexible',
-      target: 'final-prefs',
+      value: profile.budget || 'Flexible',
+      target: 'colors-occasion',
     },
   ];
 
   return (
-    <StepShell profile={profile} onBack={onBack} step={10} total={10}>
+    <StepShell profile={profile} onBack={onBack} step={9} total={9}>
       <Intro
-        eyebrow="10 / your edit, at a glance"
+        eyebrow="09 / your edit, at a glance"
         title={`This sounds like ${profile.name}.`}
         body="Look it over, make any changes, then we'll make five complete looks around it."
       >
