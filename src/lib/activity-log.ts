@@ -11,7 +11,7 @@ export type LogStep = {
 /** Console-logs one step transition with a timestamp, prefixed for easy filtering in DevTools. */
 function logToConsole(label: string, status: LogStatus, detail?: string) {
   const time = new Date().toISOString().split('T')[1]?.replace('Z', '');
-  const prefix = `[SkinTune ${time}]`;
+  const prefix = `[LetStyle ${time}]`;
   if (status === 'error') console.error(`${prefix} ✗ ${label}${detail ? ` — ${detail}` : ''}`);
   else if (status === 'done') console.log(`${prefix} ✓ ${label}`);
   else if (status === 'active') console.log(`${prefix} … ${label}`);

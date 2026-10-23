@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AvatarCreateRequestSchema, AvatarCreateResponseSchema, type Avatar } from "@/lib/skintune-schemas";
 import { getVtoProvider } from "@/lib/providers/vto";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 import { randomUUID } from "node:crypto";
 
 export async function POST(req: Request) {
@@ -28,14 +29,7 @@ export async function POST(req: Request) {
       const data = AvatarCreateResponseSchema.parse({ avatar });
       return NextResponse.json(data);
     } catch (err) {
-      logger.error({ err }, "Failed to create avatar");
-      return NextResponse.json(
-        {
-          error: "Failed to create avatar",
-          message: err instanceof Error ? err.message : String(err),
-        },
-        { status: 502 },
-      );
+      return safeErrorResponse(err, "Failed to create avatar", 502);
     }
   } catch (err) {
     logger.error({ err }, "Malformed avatar/create request");

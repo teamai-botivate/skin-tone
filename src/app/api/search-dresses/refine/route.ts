@@ -5,6 +5,7 @@ import {
 } from "@/lib/skintune-schemas";
 import { runDressSearch, collectAvoidTitles } from "@/lib/dress-search-server";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 
 export async function POST(req: Request) {
   try {
@@ -28,11 +29,7 @@ export async function POST(req: Request) {
       });
       return NextResponse.json(data);
     } catch (err) {
-      logger.error({ err }, "Failed to refine dress search");
-      return NextResponse.json(
-        { error: "Failed to refine dress search", message: err instanceof Error ? err.message : String(err) },
-        { status: 502 },
-      );
+      return safeErrorResponse(err, "Failed to refine dress search", 502);
     }
   } catch (err) {
     logger.error({ err }, "Malformed search-dresses/refine request");

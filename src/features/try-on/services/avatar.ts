@@ -17,7 +17,8 @@
 
 import type { SkinTuneProfile } from '@/types';
 
-const STORAGE_KEY = 'skintune-avatar-versions';
+const STORAGE_KEY = 'letstyle-avatar-versions';
+const LEGACY_STORAGE_KEY = 'skintune-avatar-versions';
 
 export type Avatar = {
   id: string;
@@ -38,7 +39,7 @@ async function readErrorMessage(res: Response, fallback: string): Promise<string
 
 function loadVersions(): Avatar[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as Avatar[]) : [];
   } catch {
     return [];

@@ -1,5 +1,5 @@
-import { SkinTuneApp } from './SkinTuneApp';
+import { LetStyleApp } from './LetStyleApp';
 
 export default function HomePage() {
-  return <SkinTuneApp />;
+  return <LetStyleApp />;
 }

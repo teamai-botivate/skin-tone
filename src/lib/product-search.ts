@@ -73,6 +73,9 @@ export function getApplicableCategories(
   }
 
   if (requestedCategory && requestedCategory !== "all") {
+    if (requestedCategory === "footwear-accessories") {
+      return categories.filter((c) => c === "footwear" || c === "accessories");
+    }
     const valid = requestedCategory as ProductCategory;
     if (categories.includes(valid)) {
       return [valid];
@@ -187,14 +190,17 @@ export function getCanonicalProductUrl(rawUrl: string): string {
 
     // Myntra: /<brand>/<name>/<id>/buy -> keep pathname
     if (host.includes("myntra.com")) {
+      const buyMatch = u.pathname.match(/(.*\/buy)/i);
+      if (buyMatch) {
+        return `https://www.myntra.com${buyMatch[1]}`;
+      }
       if (u.pathname.includes("/search")) {
-        const q = u.searchParams.get("q");
+        const q = u.searchParams.get("q") || u.searchParams.get("rawQuery");
         if (q && q.trim().length > 0 && q !== "undefined") {
-          const slug = q.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
-          return `https://www.myntra.com/${slug}`;
+          return `https://www.myntra.com/search?q=${encodeURIComponent(q.trim())}`;
         }
       }
-      return `${u.origin}${u.pathname}`;
+      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
     }
 
     // AJIO: /p/<id>
@@ -209,7 +215,7 @@ export function getCanonicalProductUrl(rawUrl: string): string {
           return `https://www.ajio.com/search/?text=${encodeURIComponent(text.trim())}`;
         }
       }
-      return `${u.origin}${u.pathname}`;
+      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
     }
 
     // Tata CLiQ: /p-<id>
@@ -224,7 +230,12 @@ export function getCanonicalProductUrl(rawUrl: string): string {
           return `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(text.trim())}`;
         }
       }
-      return `${u.origin}${u.pathname}`;
+      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
+    }
+
+    // Preserve search params for search or query-based URLs
+    if (u.search && (u.pathname.includes("/search") || u.pathname === "/s" || u.pathname.startsWith("/s/") || u.searchParams.has("q") || u.searchParams.has("text") || u.searchParams.has("k"))) {
+      return `${u.origin}${u.pathname}${u.search}`;
     }
 
     return `${u.origin}${u.pathname}`;
@@ -284,6 +295,9 @@ export function isValidProductUrl(urlStr: string): boolean {
 
     // 2. Reject placeholder IDs
     for (const pat of BANNED_PLACEHOLDER_PATTERNS) {
+      if (pat === "000000" && (host.includes("tatacliq.com") || pathname.includes("mp000000"))) {
+        continue;
+      }
       if (pathname.includes(pat)) {
         return false;
       }
@@ -822,7 +836,7 @@ export function checkProductConsistency(
           };
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // 15. Keyword token overlap check
@@ -923,6 +937,7 @@ export function validatePriceMatch(
  */
 export async function verifyProductPage(urlStr: string): Promise<{
   success: boolean;
+  retailerRestricted?: boolean;
   price?: number;
   originalPrice?: number;
   currency?: string;
@@ -942,8 +957,17 @@ export async function verifyProductPage(urlStr: string): Promise<{
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(3500),
     });
+
+    if (res.status === 403 || res.status === 429) {
+      return {
+        success: false,
+        retailerRestricted: true,
+        reason: `Retailer automated access restricted (HTTP ${res.status} bot protection)`,
+        finalUrl: urlStr,
+      };
+    }
 
     if (!res.ok) {
       return { success: false, reason: `HTTP status ${res.status}` };
@@ -970,7 +994,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
         if (isOrigEthnicOrWomen && isFinalUnrelated) {
           return { success: false, reason: `Retailer redirected to unrelated department: ${finalUrl}` };
         }
-      } catch {}
+      } catch { }
     }
 
     const html = await res.text();
@@ -979,6 +1003,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
     if (
       html.includes("404 - Not Found") ||
       html.includes("Page Not Found") ||
+      html.includes("Page not found") ||
       html.includes("This product is no longer available") ||
       html.includes("Item has been discontinued")
     ) {
@@ -1018,13 +1043,16 @@ export async function verifyProductPage(urlStr: string): Promise<{
               }
 
               if (item.image) {
-                imageUrl =
-                  imageUrl ||
-                  (Array.isArray(item.image)
-                    ? item.image[0]
-                    : typeof item.image === "object"
-                      ? item.image.url
-                      : item.image);
+                let imgCandidate = Array.isArray(item.image)
+                  ? item.image[0]
+                  : typeof item.image === "object"
+                    ? item.image.url
+                    : item.image;
+                if (typeof imgCandidate === "string") {
+                  imgCandidate = imgCandidate.replace(/h_\(\$height\),q_\(\$qualityPercentage\),w_\(\$width\)/g, "h_560,q_90,w_420");
+                  if (imgCandidate.startsWith("http:")) imgCandidate = imgCandidate.replace(/^http:/, "https:");
+                  imageUrl = imageUrl || imgCandidate;
+                }
               }
 
               const offers = item.offers;
@@ -1069,7 +1097,12 @@ export async function verifyProductPage(urlStr: string): Promise<{
             if (pdp.price?.mrp && pdp.price?.mrp > (price || 0)) originalPrice = Math.round(pdp.price.mrp);
             if (pdp.name) productName = pdp.name;
             if (pdp.brand?.name) brand = pdp.brand.name;
-            if (pdp.media?.albums?.[0]?.images?.[0]?.src) imageUrl = pdp.media.albums[0].images[0].src;
+            if (pdp.media?.albums?.[0]?.images?.[0]?.src) {
+              let imgSrc = pdp.media.albums[0].images[0].src;
+              imgSrc = imgSrc.replace(/h_\(\$height\),q_\(\$qualityPercentage\),w_\(\$width\)/g, "h_560,q_90,w_420");
+              if (imgSrc.startsWith("http:")) imgSrc = imgSrc.replace(/^http:/, "https:");
+              imageUrl = imgSrc;
+            }
             if (pdp.flags?.outOfStock) availability = "Out of Stock";
           }
         } catch { }
@@ -2086,16 +2119,128 @@ export interface RequirementSpec {
   disclaimer?: string;
 }
 
+export type DetectedAccessory = {
+  type: "earrings" | "necklace" | "bracelet" | "watch" | "ring" | "maang_tikka" | "bag" | "belt" | "other_accessory";
+  category: "jewellery" | "accessories";
+  title: string;
+  sourceDetail?: string;
+  material?: string;
+};
+
+/**
+ * Dynamically identifies all accessories and jewellery visibly included, specified, or
+ * recommended for a specific look, without hardcoding or forcing fixed categories.
+ */
+export function extractDynamicLookAccessories(
+  look: LookRecommendation,
+  persona: PersonaType,
+): DetectedAccessory[] {
+  const detected: DetectedAccessory[] = [];
+  const seenTypes = new Set<string>();
+
+  const isChild = persona === "child";
+  const isMan = persona === "man";
+
+  function classifyPhrase(phrase: string): {
+    type: DetectedAccessory["type"];
+    category: "jewellery" | "accessories";
+  } | null {
+    const l = phrase.toLowerCase();
+    if (/\b(?:watch|watches|timepiece|timepieces|chronograph)\b/i.test(l)) {
+      return { type: "watch", category: "jewellery" };
+    }
+    if (/\b(?:ring|rings|band|finger ring|cocktail ring)\b/i.test(l) && !l.includes("earring") && !l.includes("spring") && !l.includes("string")) {
+      if (isChild) return null;
+      return { type: "ring", category: "jewellery" };
+    }
+    if (/\b(?:jhumka|jhumkas|earring|earrings|stud|studs|hoop|hoops|chandbali|chandbalis|huggie|huggies|dangler|danglers)\b/i.test(l)) {
+      if (isChild) return null;
+      return { type: "earrings", category: "jewellery" };
+    }
+    if (/\b(?:necklace|necklaces|chain|chains|pendant|pendants|choker|chokers|haar|mangalsutra|locket)\b/i.test(l)) {
+      if (isChild) return null;
+      return { type: "necklace", category: "jewellery" };
+    }
+    if (/\b(?:bangle|bangles|kada|kadas|bracelet|bracelets|cuff|cuffs|choodi|choodiyan|wristlet)\b/i.test(l)) {
+      return { type: "bracelet", category: "jewellery" };
+    }
+    if (/\b(?:maang tikka|tikka|mathapatti|matha patti|passa|borla|hairpin|paranda)\b/i.test(l)) {
+      if (isChild || isMan) return null;
+      return { type: "maang_tikka", category: "jewellery" };
+    }
+    if (/\b(?:bag|bags|potli|potlis|clutch|clutches|tote|totes|crossbody|purse|purses|satchel|handbag|handbags|briefcase|messenger)\b/i.test(l)) {
+      return { type: "bag", category: "accessories" };
+    }
+    if (/\b(?:belt|belts|kamarbandh|waist belt)\b/i.test(l)) {
+      return { type: "belt", category: "accessories" };
+    }
+    if (/\b(?:stole|stoles|pocket square|brooch|brooches|cufflink|cufflinks|sunglasses)\b/i.test(l)) {
+      return { type: "other_accessory", category: "accessories" };
+    }
+    return null;
+  }
+
+  // 1. Inspect structured pieces in look.pieces
+  for (const p of look.pieces || []) {
+    const c = (p?.category || "").toLowerCase();
+    const n = (p?.name || "").trim();
+    if (!n) continue;
+    if (
+      c.includes("jewel") ||
+      c.includes("acc") ||
+      c.includes("finish") ||
+      c.includes("bag") ||
+      c.includes("watch") ||
+      c.includes("belt")
+    ) {
+      const match = classifyPhrase(n);
+      if (match && !seenTypes.has(match.type)) {
+        seenTypes.add(match.type);
+        detected.push({
+          type: match.type,
+          category: match.category,
+          title: n,
+          sourceDetail: p.detail,
+        });
+      }
+    }
+  }
+
+  // 2. Inspect look.jewellery and look.accessories text fields
+  const combinedText = `${look.jewellery || ""} | ${look.accessories || ""}`;
+  const segments = combinedText
+    .split(/[|,;&]|\band\b|\bwith\b/i)
+    .map((s) => s.trim().replace(/^\*+|\*+$/g, ""))
+    .filter((s) => s.length > 2 && !/^(none|clean|minimal|natural|child-friendly)$/i.test(s));
+
+  for (const seg of segments) {
+    const match = classifyPhrase(seg);
+    if (match && !seenTypes.has(match.type)) {
+      seenTypes.add(match.type);
+      const cleanTitle = seg
+        .replace(/^(?:a|an|the|one|small|subtle|sleek|matching|pair of|set of)\s+/i, "")
+        .replace(/[.]+$/, "")
+        .trim();
+      const capTitle = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+      detected.push({
+        type: match.type,
+        category: match.category,
+        title: capTitle,
+      });
+    }
+  }
+
+  return detected;
+}
+
 /**
  * Formulate specific styling requirements based on the recommended look and profile.
  * Intelligently deconstructs complete looks into distinct visible fashion and accessory items:
  * - Outer Blazer / Jacket
  * - Matching Formal Trousers / Bottom (or Skirt)
  * - Inner Top / Camisole / Corset (when layered/visible)
- * - Ear Jewellery (Minimal Studs / Huggies for office, or Festive earrings)
- * - Wrist Jewellery / Bracelet (Sleek minimalist bracelet / bangle)
- * - Footwear (Matching formal pumps / loafers)
- * - Handbags / Accessories (Structured office work tote / shoulder bag)
+ * - Cohesive dynamic accessories & jewellery (earrings, necklaces, bracelets, watches, rings, bags)
+ * - Footwear (Matching formal pumps / loafers / juttis)
  * - Personalized Makeup Suite
  */
 export function planRequirementSpecs(
@@ -2235,9 +2380,9 @@ export function planRequirementSpecs(
       (isGarbaOrNavratri && persona !== "man") ||
       Boolean(
         onePiece &&
-          (onePiece.name.toLowerCase().includes("lehenga") ||
-            onePiece.name.toLowerCase().includes("chaniya") ||
-            onePiece.name.toLowerCase().includes("ghagra")),
+        (onePiece.name.toLowerCase().includes("lehenga") ||
+          onePiece.name.toLowerCase().includes("chaniya") ||
+          onePiece.name.toLowerCase().includes("ghagra")),
       );
 
     // Check if outfit description indicates a layered suit/blazer + trouser + top
@@ -2442,117 +2587,138 @@ export function planRequirementSpecs(
     }
   }
 
-  // 2. Jewellery Requirements (Ear Jewellery & Wrist Jewellery / Bracelet)
-  if (applicableCategories.includes("jewellery") && persona !== "child") {
-    const jewStr = (look.jewellery || "").toLowerCase();
+  // Extract all dynamic accessories specified, visible, or recommended for this specific look
+  const dynamicAccessories = extractDynamicLookAccessories(look, persona);
+  const includeJewellery =
+    (applicableCategories.includes("jewellery") || (applicableCategories as string[]).includes("footwear-accessories")) &&
+    persona !== "child";
+  const includeAccessories =
+    applicableCategories.includes("accessories") || (applicableCategories as string[]).includes("footwear-accessories");
 
-    // Check if bracelet / bangle / wristwear is specified in pieces, look.jewellery, or look.accessories
-    const wristPiece = pieces.find((p) => {
-      const name = (p?.name || "").toLowerCase();
-      const cat = (p?.category || "").toLowerCase();
-      return (
-        name.includes("bracelet") ||
-        name.includes("bangle") ||
-        name.includes("cuff") ||
-        name.includes("wrist") ||
-        (cat.includes("jewel") && (name.includes("bracelet") || name.includes("bangle")))
-      );
-    });
+  // 2. Dynamic Jewellery Requirements (Earrings, Jhumkas, Necklaces, Chains, Bangles, Bracelets, Watches, Rings, Maang Tikkas)
+  if (includeJewellery) {
+    const jewelleryItems = dynamicAccessories.filter((a) => a.category === "jewellery");
 
-    const hasWristMention =
-      Boolean(wristPiece) ||
-      jewStr.includes("bracelet") ||
-      jewStr.includes("bangle") ||
-      jewStr.includes("cuff") ||
-      (look.accessories || "").toLowerCase().includes("bracelet") ||
-      (look.accessories || "").toLowerCase().includes("bangle");
+    if (jewelleryItems.length > 0) {
+      for (const item of jewelleryItems) {
+        let styleReq = "";
+        let searchQuery = "";
+        let materialHint = "";
 
-    // 2a. Ear Jewellery
-    const earPiece = pieces.find((p) => {
-      const name = (p?.name || "").toLowerCase();
-      return (
-        name.includes("earring") ||
-        name.includes("stud") ||
-        name.includes("huggie") ||
-        name.includes("hoop") ||
-        name.includes("jhumka")
-      );
-    });
-
-    if (isGarbaOrNavratri || isTraditionalOrFestive) {
-      const earTitle = earPiece?.name || (isGarbaOrNavratri ? "Oxidised Silver Traditional Jhumkas" : "Kundan / Pearl Jhumkas");
-      specs.push({
-        category: "jewellery",
-        itemTitle: earTitle,
-        itemSubcategory: "earrings",
-        targetGender,
-        stylingRequirement: isGarbaOrNavratri
-          ? "Authentic oxidised silver tribal dome jhumkas with ghungroo bell drops"
-          : `Festive ${undertone} gold-plated kundan or pearl chandbali earrings`,
-        searchQuery: `${targetGender} ${isGarbaOrNavratri ? "oxidised silver jhumkas" : "kundan jhumkas"} Zaveri Pearls Priyaasi Myntra Nykaa`,
-        preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
-        materialHint: isGarbaOrNavratri
-          ? "Oxidised German silver / brass with mirror or ghungroo drops"
-          : "Gold-plated brass with kundan stones and faux pearls",
-        matchContext: "Traditional jhumkas with authentic movement that beautifully complement festive lighting.",
-      });
-
-      const wristTitle =
-        wristPiece?.name ||
-        (isGarbaOrNavratri ? "Layered Oxidised Silver Bangles / Kada Set" : "Gold-Plated Kundan Kada / Bangles Set");
-      specs.push({
-        category: "jewellery",
-        itemTitle: wristTitle,
-        itemSubcategory: "bracelet",
-        targetGender,
-        stylingRequirement: isGarbaOrNavratri
-          ? "Stack of textured oxidised silver bangles with delicate ghungroos"
-          : "Traditional gold-plated kundan openable kada pair or festive bangle stack",
-        searchQuery: `${targetGender} ${isGarbaOrNavratri ? "oxidised silver bangles kada" : "traditional kundan bangles"} Zaveri Pearls Myntra AJIO`,
-        preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
-        materialHint: isGarbaOrNavratri ? "Oxidised silver plating with ghungroos" : "Gold-plated brass with meenakari or kundan work",
-        matchContext: "Authentic festive wrist stack that adds sound and sparkle to your hand movements.",
-      });
-    } else {
-      let earTitle = earPiece?.name || (isOfficeOrFormal ? "Minimal Stud Earrings" : isDateNight ? "Dainty Crystal Drop Earrings" : "Earrings");
-      let earStyle = isOfficeOrFormal
-        ? `Understated minimal stud or sleek huggie earrings (${undertone} gold-tone)`
-        : isDateNight
-          ? `Delicate crystal drop earrings harmonizing with your ${undertone} undertone`
-          : `${look.jewellery || earTitle} (${undertone} undertone harmony)`;
-      let earQuery = isOfficeOrFormal
-        ? `${targetGender} minimal gold stud earrings GIVA OR Myntra OR Nykaa`
-        : `${targetGender} ${earTitle} Myntra Nykaa AJIO`;
-
-      specs.push({
-        category: "jewellery",
-        itemTitle: earTitle,
-        itemSubcategory: "earrings",
-        targetGender,
-        stylingRequirement: earStyle,
-        searchQuery: earQuery,
-        preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
-        materialHint: isOfficeOrFormal
-          ? "Minimalist 14K/18K gold-plated / sterling silver / delicate pearl studs"
-          : "Fashion jewellery / gold-tone plated / brass",
-        matchContext: `Understated design tailored to balance your neckline geometry and silhouette.`,
-      });
-
-      if (hasWristMention || isOfficeOrFormal || isDateNight) {
-        const wristTitle = wristPiece?.name || (isOfficeOrFormal ? "Sleek Minimal Gold Bracelet / Bangle" : "Dainty Layered Chain Bracelet");
-        const wristStyle = `Sleek minimal cuff, delicate chain bracelet, or slim bangle (${undertone} gold-tone)`;
-        const wristQuery = `${targetGender} minimal sleek gold bracelet bangle GIVA OR Myntra OR Nykaa`;
+        if (item.type === "earrings") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            styleReq = isGarbaOrNavratri
+              ? "Authentic oxidised silver tribal dome jhumkas with ghungroo bell drops"
+              : `Festive ${undertone} gold-plated kundan or pearl chandbali earrings`;
+            searchQuery = `${targetGender} ${isGarbaOrNavratri ? "oxidised silver jhumkas" : "kundan jhumkas"} Zaveri Pearls Priyaasi Myntra Nykaa`;
+            materialHint = isGarbaOrNavratri
+              ? "Oxidised German silver / brass with mirror or ghungroo drops"
+              : "Gold-plated brass with kundan stones and faux pearls";
+          } else {
+            styleReq = isOfficeOrFormal
+              ? `Understated minimal stud or sleek huggie earrings (${undertone} gold-tone)`
+              : isDateNight
+                ? `Delicate crystal drop earrings harmonizing with your ${undertone} undertone`
+                : `${item.title} (${undertone} undertone harmony)`;
+            searchQuery = isOfficeOrFormal
+              ? `${targetGender} minimal gold stud earrings GIVA OR Myntra OR Nykaa`
+              : `${targetGender} ${item.title} Myntra Nykaa AJIO`;
+            materialHint = isOfficeOrFormal
+              ? "Minimalist 14K/18K gold-plated / sterling silver / delicate pearl studs"
+              : "Fashion jewellery / gold-tone plated / brass";
+          }
+        } else if (item.type === "necklace") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            styleReq = `Traditional ${undertone} gold-plated kundan or temple choker / necklace set`;
+            searchQuery = `${targetGender} ${item.title} kundan choker necklace Zaveri Pearls Myntra Nykaa`;
+            materialHint = "Gold-plated brass with kundan, meenakari, or faux pearls";
+          } else {
+            styleReq = `Minimalist sleek pendant chain or refined necklace (${undertone} tone)`;
+            searchQuery = `${targetGender} ${item.title} minimal pendant chain necklace GIVA Myntra Nykaa`;
+            materialHint = "Sterling silver / 18K gold plated / minimalist chain";
+          }
+        } else if (item.type === "bracelet") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            styleReq = isGarbaOrNavratri
+              ? "Stack of textured oxidised silver bangles with delicate ghungroos"
+              : "Traditional gold-plated kundan openable kada pair or festive bangle stack";
+            searchQuery = `${targetGender} ${isGarbaOrNavratri ? "oxidised silver bangles kada" : "traditional kundan bangles"} Zaveri Pearls Myntra AJIO`;
+            materialHint = isGarbaOrNavratri ? "Oxidised silver plating with ghungroos" : "Gold-plated brass with meenakari or kundan work";
+          } else {
+            styleReq = `Sleek minimal cuff, delicate chain bracelet, or slim bangle (${undertone} gold-tone)`;
+            searchQuery = `${targetGender} ${item.title} minimal sleek bracelet bangle GIVA OR Myntra OR Nykaa`;
+            materialHint = "Sleek delicate gold-tone bangle / minimalist cuff / link bracelet";
+          }
+        } else if (item.type === "watch") {
+          styleReq = `Sophisticated analog watch with clean dial and coordinating leather or metallic mesh strap`;
+          searchQuery = `${targetGender} ${item.title} analog watch Titan Fossil Myntra Tata CLiQ`;
+          materialHint = "Stainless steel / leather strap with water resistance";
+        } else if (item.type === "ring") {
+          styleReq = isTraditionalOrFestive
+            ? `Traditional adjustable cocktail ring with intricate floral or kundan motif`
+            : `Minimalist polished band or sculptural statement ring in ${undertone} finish`;
+          searchQuery = `${targetGender} ${item.title} ring band GIVA Myntra Nykaa`;
+          materialHint = "Sterling silver / gold-plated brass with cubic zirconia or kundan";
+        } else if (item.type === "maang_tikka") {
+          styleReq = `Delicate festive maang tikka with pearl drops and kundan embellishments`;
+          searchQuery = `women ${item.title} maang tikka Zaveri Pearls Priyaasi Myntra Nykaa`;
+          materialHint = "Gold-plated alloy with kundan and pearl beads";
+        } else {
+          styleReq = `${item.title} complementing the outfit palette and ${undertone} undertone`;
+          searchQuery = `${targetGender} ${item.title} Myntra Nykaa AJIO`;
+          materialHint = "Curated jewellery";
+        }
 
         specs.push({
           category: "jewellery",
-          itemTitle: wristTitle,
-          itemSubcategory: "bracelet",
+          itemTitle: item.title,
+          itemSubcategory: item.type,
           targetGender,
-          stylingRequirement: wristStyle,
-          searchQuery: wristQuery,
+          stylingRequirement: styleReq,
+          searchQuery: searchQuery.trim(),
           preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
-          materialHint: "Sleek delicate gold-tone bangle / minimalist cuff / link bracelet",
-          matchContext: `Subtle wrist accent that balances your timepiece or sleeve length with minimal elegance.`,
+          materialHint,
+          matchContext: `${item.title} complementing the silhouette and harmonizing with your ${undertone} undertone.`,
+        });
+      }
+    } else {
+      // Fallback if no specific jewellery was found in look, but category was explicitly selected
+      if (isGarbaOrNavratri || isTraditionalOrFestive) {
+        specs.push({
+          category: "jewellery",
+          itemTitle: isGarbaOrNavratri ? "Oxidised Silver Traditional Jhumkas" : "Kundan / Pearl Jhumkas",
+          itemSubcategory: "earrings",
+          targetGender,
+          stylingRequirement: isGarbaOrNavratri
+            ? "Authentic oxidised silver tribal dome jhumkas with ghungroo bell drops"
+            : `Festive ${undertone} gold-plated kundan or pearl chandbali earrings`,
+          searchQuery: `${targetGender} ${isGarbaOrNavratri ? "oxidised silver jhumkas" : "kundan jhumkas"} Zaveri Pearls Priyaasi Myntra Nykaa`,
+          preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
+          materialHint: isGarbaOrNavratri
+            ? "Oxidised German silver / brass with mirror or ghungroo drops"
+            : "Gold-plated brass with kundan stones and faux pearls",
+          matchContext: "Traditional jhumkas with authentic movement that beautifully complement festive lighting.",
+        });
+      } else {
+        const earTitle = isOfficeOrFormal ? "Minimal Stud Earrings" : isDateNight ? "Dainty Crystal Drop Earrings" : "Earrings";
+        specs.push({
+          category: "jewellery",
+          itemTitle: earTitle,
+          itemSubcategory: "earrings",
+          targetGender,
+          stylingRequirement: isOfficeOrFormal
+            ? `Understated minimal stud or sleek huggie earrings (${undertone} gold-tone)`
+            : isDateNight
+              ? `Delicate crystal drop earrings harmonizing with your ${undertone} undertone`
+              : `${earTitle} (${undertone} undertone harmony)`,
+          searchQuery: isOfficeOrFormal
+            ? `${targetGender} minimal gold stud earrings GIVA OR Myntra OR Nykaa`
+            : `${targetGender} ${earTitle} Myntra Nykaa AJIO`,
+          preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ"],
+          materialHint: isOfficeOrFormal
+            ? "Minimalist 14K/18K gold-plated / sterling silver / delicate pearl studs"
+            : "Fashion jewellery / gold-tone plated / brass",
+          matchContext: `Understated design tailored to balance your neckline geometry and silhouette.`,
         });
       }
     }
@@ -2605,44 +2771,74 @@ export function planRequirementSpecs(
     });
   }
 
-  // 4. Accessories Requirement
-  if (applicableCategories.includes("accessories")) {
-    const accPiece = pieces.find((p) => {
-      const cat = (p?.category || "").toLowerCase();
-      const name = (p?.name || "").toLowerCase();
-      return (
-        cat.includes("acc") ||
-        cat.includes("bag") ||
-        name.includes("bag") ||
-        name.includes("belt") ||
-        name.includes("tote") ||
-        name.includes("clutch") ||
-        name.includes("potli") ||
-        name.includes("watch")
-      );
-    });
-    let accTitle = accPiece?.name || (look.accessories || "").split(",")[0];
-    let accStyle = "";
-    let accQuery = "";
+  // 4. Dynamic Accessories Requirement (Bags, Clutches, Totes, Potlis, Belts)
+  if (includeAccessories) {
+    const accessoryItems = dynamicAccessories.filter((a) => a.category === "accessories");
 
-    if (accTitle && accTitle.toLowerCase() !== "none") {
-      if (isGarbaOrNavratri || isTraditionalOrFestive) {
-        accTitle = accTitle || "Embroidered Festive Potli Bag with Pearl Handle";
-        accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
-        accQuery = `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`;
-      } else if (isOfficeOrFormal) {
-        accTitle = accTitle || (persona === "man" ? "Structured Leather Briefcase / Laptop Bag" : "Structured Leather Work Laptop Tote Bag");
-        accStyle = `Structured tote with dual handles and clean laptop compartment`;
-        accQuery = `${targetGender} ${dominantHumanColor} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`;
-      } else if (isDateNight || isParty) {
-        accTitle = accTitle || "Sleek Metallic Crossbody / Evening Clutch";
-        accStyle = `Compact evening clutch with chain strap`;
-        accQuery = `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
-      } else {
-        accTitle = accTitle || "Structured Shoulder Bag / Daily Tote";
-        accStyle = `Clean everyday bag`;
-        accQuery = `${targetGender} ${dominantHumanColor} shoulder bag tote Myntra AJIO`;
+    if (accessoryItems.length > 0) {
+      for (const item of accessoryItems) {
+        let accStyle = "";
+        let accQuery = "";
+
+        if (item.type === "bag") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} potli bag festive clutch Myntra Nykaa AJIO`;
+          } else if (isOfficeOrFormal) {
+            accStyle = `Structured tote with dual handles and clean laptop compartment`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`;
+          } else if (isDateNight || isParty) {
+            accStyle = `Compact evening clutch with chain strap`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
+          } else {
+            accStyle = `Clean everyday bag`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} shoulder bag tote Myntra AJIO`;
+          }
+        } else if (item.type === "belt") {
+          accStyle = isTraditionalOrFestive
+            ? `Embellished festive waist belt / kamarbandh coordinating with outfit drape`
+            : `Tailored structured belt in coordinating finish with clean buckle`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} belt Myntra AJIO Tata CLiQ`;
+        } else {
+          accStyle = `Finishing accent coordinating with your ${dominantHumanColor} outfit`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} Myntra AJIO`;
+        }
+
+        specs.push({
+          category: "accessories",
+          itemTitle: item.title,
+          itemSubcategory: item.type,
+          targetGender,
+          dominantColor: dominantHumanColor,
+          stylingRequirement: accStyle,
+          searchQuery: accQuery.trim(),
+          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion"],
+          matchContext: `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
+        });
       }
+    } else {
+      // Fallback if no specific accessory was found in look, but category was requested
+      let accTitle = isGarbaOrNavratri || isTraditionalOrFestive
+        ? "Embroidered Festive Potli Bag with Pearl Handle"
+        : isOfficeOrFormal
+          ? (persona === "man" ? "Structured Leather Briefcase / Laptop Bag" : "Structured Leather Work Laptop Tote Bag")
+          : isDateNight || isParty
+            ? "Sleek Metallic Crossbody / Evening Clutch"
+            : "Structured Shoulder Bag / Daily Tote";
+      let accStyle = isGarbaOrNavratri || isTraditionalOrFestive
+        ? `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`
+        : isOfficeOrFormal
+          ? `Structured tote with dual handles and clean laptop compartment`
+          : isDateNight || isParty
+            ? `Compact evening clutch with chain strap`
+            : `Clean everyday bag`;
+      let accQuery = isGarbaOrNavratri || isTraditionalOrFestive
+        ? `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`
+        : isOfficeOrFormal
+          ? `${targetGender} ${dominantHumanColor} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`
+          : isDateNight || isParty
+            ? `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`
+            : `${targetGender} ${dominantHumanColor} shoulder bag tote Myntra AJIO`;
 
       specs.push({
         category: "accessories",
@@ -3801,6 +3997,46 @@ export function getBenchmarkCandidatesForRequirement(
 }
 
 /**
+ * Sanitizes benchmark candidate URLs that contain guessed or unverified product IDs
+ * into authentic, reliable retailer search URLs. Ensures users never land on 404s
+ * or map to an unrelated garment (e.g. Lakshita Kurta instead of Libas Lehenga).
+ */
+export function sanitizeBenchmarkUrl(retailer: string, brand: string, title: string, originalUrl: string): string {
+  // If original URL is already an authentic retailer search URL, keep it
+  if (
+    originalUrl.includes("/search") ||
+    originalUrl.includes("/s?") ||
+    originalUrl.includes("?searchCategory=") ||
+    originalUrl.includes("?q=") ||
+    originalUrl.includes("?text=")
+  ) {
+    return originalUrl;
+  }
+
+  // Any benchmark product URL containing a product slug or ID path is a benchmark template,
+  // which may be outdated or guessed. Convert it to a guaranteed clean live search URL on that retailer.
+  const hasGuessedId =
+    /\/(?:\d{5,12}|[0-9a-f]{6,})\/buy/i.test(originalUrl) ||
+    /\/p\/[a-zA-Z0-9_]+/i.test(originalUrl) ||
+    /\/p-\w+/i.test(originalUrl) ||
+    /\/dp\/[a-zA-Z0-9]+/i.test(originalUrl) ||
+    /https?:\/\/(?:www\.)?(?:myntra|ajio|tatacliq|nykaafashion|nykaa|amazon)\.(?:com|in)/i.test(originalUrl);
+
+  if (hasGuessedId) {
+    const cleanQuery = `${brand} ${title}`.replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
+    const q = encodeURIComponent(cleanQuery);
+    const r = (retailer || "").toLowerCase();
+    if (r.includes("myntra")) return `https://www.myntra.com/search?q=${q}`;
+    if (r.includes("ajio")) return `https://www.ajio.com/search/?text=${q}`;
+    if (r.includes("tata") || r.includes("cliq")) return `https://www.tatacliq.com/search/?searchCategory=all&text=${q}`;
+    if (r.includes("nykaa")) return `https://www.nykaafashion.com/search/result/?q=${q}`;
+    if (r.includes("amazon")) return `https://www.amazon.in/s?k=${q}`;
+    return `https://www.myntra.com/search?q=${q}`;
+  }
+  return originalUrl;
+}
+
+/**
  * Searches and verifies MULTIPLE real product alternatives across retailers and price points
  * for a single styling requirement.
  */
@@ -3818,7 +4054,7 @@ async function searchAlternativesForRequirement(
   const colorsAvoidList = Array.isArray(profile.colorsAvoid) ? profile.colorsAvoid : [];
   const colorsAvoidStr = colorsAvoidList.join(", ");
 
-  const prompt = `You are SkinTune's Multi-Retailer Product Discovery Engine.
+  const prompt = `You are LetStyle's Multi-Retailer Product Discovery Engine.
 Your task is to search the web for 3 distinct, REAL, currently available products in India from multiple trusted retailers (Myntra, AJIO, Nykaa, Nykaa Fashion, Amazon India, Tata CLiQ, Fabindia, Manyavar, SUGAR, Lakmé, MAC, GIVA) that satisfy this EXACT styling requirement:
 
 STYLING REQUIREMENT:
@@ -3982,17 +4218,101 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     }
   }
 
-  // 2. Fallback: OpenAI Web Search Preview (if Tavily was unavailable or returned insufficient results)
+  // 2. Fallback: OpenAI Live Web Search with structured product schema
   if (candidateList.length < 2) {
     try {
       const openai = getOpenAIClient();
+      const RESULT_JSON_SCHEMA = {
+        type: "object",
+        properties: {
+          products: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                pageUrl: { type: "string" },
+                imageUrl: { type: ["string", "null"] },
+                title: { type: "string" },
+                brand: { type: "string" },
+                retailer: { type: "string" },
+                price: { type: ["number", "null"] },
+                originalPrice: { type: ["number", "null"] },
+                material: { type: ["string", "null"] },
+                tier: { type: "string", enum: ["budget", "mid", "premium"] },
+              },
+              required: ["pageUrl", "imageUrl", "title", "brand", "retailer", "price", "originalPrice", "material", "tier"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["products"],
+        additionalProperties: false,
+      };
+
       const response = await openai.responses.create({
-        model: RECOMMENDATION_MODEL,
-        tools: [{ type: "web_search_preview" }],
-        input: prompt,
+        model: "gpt-4o-mini",
+        tools: [{ type: "web_search" }],
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `Search for real, purchasable, currently available products in India for: ${spec.searchQuery}.
+Strictly adhere to:
+1. Target gender: ${spec.targetGender || "unisex"}.
+2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}.
+3. Approved retailers only: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Amazon India (amazon.in).
+4. Provide REAL exact product page URLs found directly on retailer websites. Never invent product IDs or fake slugs.
+5. Provide real prices in INR and real retailer product image URLs if present in search results.`,
+              },
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "web_search_products",
+            strict: true,
+            schema: RESULT_JSON_SCHEMA,
+          },
+        },
       });
 
       const outputText = response.output_text || "";
+
+      if (outputText) {
+        try {
+          const parsed = JSON.parse(outputText);
+          if (Array.isArray(parsed.products)) {
+            for (const prod of parsed.products) {
+              const cleanCandidateUrl = cleanUrl(prod.pageUrl);
+              if (cleanCandidateUrl && isValidProductUrl(cleanCandidateUrl)) {
+                const canonicalUrl = getCanonicalProductUrl(cleanCandidateUrl);
+                const finalTitle = prod.title || spec.itemTitle;
+                const finalBrand = prod.brand || finalTitle.split(" ")[0] || "Curated";
+                const identityKey = getProductIdentityKey(finalTitle, finalBrand);
+
+                if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 3) {
+                  seenCanonicalUrls.add(canonicalUrl);
+                  seenIdentityKeys.add(identityKey);
+                  candidateList.push({
+                    tier: (prod.tier as PriceTier) || "mid",
+                    productTitle: finalTitle,
+                    brand: finalBrand,
+                    retailer: prod.retailer || spec.preferredRetailers[0] || "Online Store",
+                    price: prod.price ? Math.round(prod.price) : undefined,
+                    originalPrice: prod.originalPrice ? Math.round(prod.originalPrice) : undefined,
+                    url: canonicalUrl,
+                    imageUrl: prod.imageUrl || undefined,
+                    material: prod.material || undefined,
+                  });
+                }
+              }
+            }
+          }
+        } catch { }
+      }
 
       // Extract search citations from tool annotations
       const citations: Array<{ title: string; url: string }> = [];
@@ -4205,30 +4525,39 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
 
     let finalPrice = cand.price;
     let finalOriginalPrice = cand.originalPrice;
-    let priceVerified = Boolean(cand.price);
-    let productVerified = determineUrlType(cand.url) === "exact_product";
-    let availability = "In Stock";
+    let priceVerified = false;
+    let productVerified = false;
+    let availability: string | undefined = undefined;
     let imageUrl = cand.imageUrl;
     let finalTitle = cand.productTitle;
     let finalBrand = cand.brand;
 
-    // If price or image wasn't extracted from snippet, do a fast page verification
-    if (!finalPrice || !imageUrl) {
-      const pageData = await verifyProductPage(cand.url);
-      if (pageData.success) {
-        if (pageData.price) {
-          finalPrice = pageData.price;
-          if (pageData.originalPrice) finalOriginalPrice = pageData.originalPrice;
-          priceVerified = true;
-        }
-        productVerified = true;
-        if (pageData.availability) availability = pageData.availability;
-        if (pageData.imageUrl) imageUrl = pageData.imageUrl;
-        if (pageData.productName && pageData.productName.length > 5) {
-          finalTitle = pageData.productName;
-        }
-        if (pageData.brand) finalBrand = pageData.brand;
+    // Fast page verification on destination product page
+    const pageData = await verifyProductPage(cand.url);
+    if (pageData.success) {
+      if (pageData.price) {
+        finalPrice = pageData.price;
+        if (pageData.originalPrice) finalOriginalPrice = pageData.originalPrice;
+        priceVerified = true;
       }
+      productVerified = true;
+      if (pageData.availability) availability = pageData.availability;
+      if (pageData.imageUrl) imageUrl = pageData.imageUrl;
+      if (pageData.productName && pageData.productName.length > 5) {
+        finalTitle = pageData.productName;
+      }
+      if (pageData.brand) finalBrand = pageData.brand;
+    } else if (pageData.retailerRestricted) {
+      // Retailer bot protection (HTTP 403 / 429) e.g. AJIO Akamai protection
+      // URL is a genuine exact product page from search provider, but server automated fetch was blocked.
+      // Retain search data, but do NOT falsely claim priceVerified or productVerified
+      priceVerified = false;
+      productVerified = false;
+      availability = undefined;
+    } else {
+      // HTTP 404, discontinued, or invalid redirect -> reject candidate!
+      logger.info({ url: cand.url, reason: pageData.reason }, "Dropping product candidate: page returned 404, discontinued, or invalid redirect");
+      return null;
     }
 
     // Post-verification consistency check on resolved data
@@ -4254,8 +4583,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       return null;
     }
 
-    const finalImageUrl =
-      imageUrl || getVerifiedProductImage(spec.category, spec.itemTitle, finalTitle, candIdx);
+    const finalImageUrl = imageUrl || undefined;
 
     const urlType = determineUrlType(cand.url);
     const computedTier = cand.tier || assignPriceTier(finalPrice, budgetLimit);
@@ -4301,7 +4629,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       imageUrl: finalImageUrl,
       productUrl: cand.url,
       urlType,
-      isVerified: true,
+      isVerified: priceVerified && productVerified,
       matchScore,
       matchConfidence: matchScore,
       matchReason: spec.matchContext,
@@ -4316,7 +4644,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
 
   // 4. Guaranteed Multi-Retailer Benchmark Supplementation
   // If fewer than 2 verified options were returned from live search,
-  // supplement with verified benchmark candidates to ensure multi-retailer shopping diversity
+  // supplement with benchmark candidates to ensure multi-retailer shopping diversity
   if (verifiedProducts.length < 2) {
     const benchmarks = getBenchmarkCandidatesForRequirement(
       spec,
@@ -4326,7 +4654,8 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     );
     for (const b of benchmarks) {
       if (verifiedProducts.length >= 3) break;
-      const canonicalUrl = getCanonicalProductUrl(b.url);
+      const cleanBenchUrl = sanitizeBenchmarkUrl(b.retailer, b.brand, b.productTitle, b.url);
+      const canonicalUrl = getCanonicalProductUrl(cleanBenchUrl);
       if (seenCanonicalUrls.has(canonicalUrl)) continue;
       seenCanonicalUrls.add(canonicalUrl);
 
@@ -4335,9 +4664,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       const formattedOriginalPrice = b.originalPrice
         ? `${symbol}${b.originalPrice.toLocaleString("en-IN")}`
         : undefined;
-      const finalImg =
-        b.imageUrl ||
-        getVerifiedProductImage(spec.category, spec.itemTitle, b.productTitle, verifiedProducts.length);
+      const finalImg = b.imageUrl || undefined;
 
       verifiedProducts.push({
         id: `bench-${spec.category}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
@@ -4353,8 +4680,8 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         formattedOriginalPrice,
         currency: "INR",
         priceTier: b.tier,
-        priceVerified: true,
-        productVerified: true,
+        priceVerified: false,
+        productVerified: false,
         shade: b.shade,
         color: spec.dominantColor,
         itemType: spec.itemSubcategory || spec.itemTitle,
@@ -4363,13 +4690,13 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         occasion: profile.occasion || "Special Event",
         material: b.material,
         imageUrl: finalImg,
-        productUrl: b.url,
-        urlType: determineUrlType(b.url),
-        isVerified: true,
-        matchScore: 92,
-        matchConfidence: 92,
+        productUrl: cleanBenchUrl,
+        urlType: determineUrlType(cleanBenchUrl),
+        isVerified: false,
+        matchScore: 90,
+        matchConfidence: 90,
         matchReason: spec.matchContext,
-        availability: "In Stock",
+        availability: undefined,
         source: "curated_benchmark",
         lastChecked: new Date().toISOString(),
       });
@@ -4431,7 +4758,7 @@ export async function searchProductsForLook(
       provider: "system",
       status: "missing_key",
       message: "Neither OPENAI_API_KEY nor TAVILY_API_KEY is configured in your environment.",
-      suggestedFix: "Add OPENAI_API_KEY or TAVILY_API_KEY to artifacts/skintune-next/.env.local and restart the server.",
+      suggestedFix: "Add OPENAI_API_KEY or TAVILY_API_KEY to .env.local and restart the server.",
     });
   }
 

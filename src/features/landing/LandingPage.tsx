@@ -49,7 +49,7 @@ export function LandingPage({
         onExplore={scrollToCategories}
       />
 
-      {/* 3. What can SkinTune style for you? (Categories) */}
+      {/* 3. What can LetStyle style for you? (Categories) */}
       <StyleCategories
         onStart={onStart}
       />

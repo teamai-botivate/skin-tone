@@ -13,13 +13,11 @@ export async function GET() {
       openai: {
         configured: openai.isConfigured,
         validFormat: openai.formatValid,
-        maskedKey: openai.maskedKey,
         model: openai.model,
       },
       tavily: {
         configured: tavily.isConfigured,
         validFormat: tavily.formatValid,
-        maskedKey: tavily.maskedKey,
       },
     },
   });

@@ -465,21 +465,27 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
 export const getLookRecommendations = async (
   profile: SkinTuneProfile,
 ): Promise<LookRecommendation[]> => {
-  try {
-    const { photoUrl: _photoUrl, ...profileForRequest } = profile;
-    const res = await fetch('/api/recommendations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ profile: profileForRequest }),
-    });
-    if (!res.ok) throw new Error(`Recommendations request failed: ${res.status}`);
-    const data = (await res.json()) as { recommendations: LookRecommendation[] };
-    if (!data.recommendations?.length) throw new Error('Empty recommendations response');
-    return data.recommendations;
-  } catch (err) {
-    console.warn('Falling back to personalized fallback recommendations:', err);
-    // Simulated thinking latency so the fallback feels natural
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    return generateFallbackLooks(profile);
+  const { photoUrl: _photoUrl, ...profileForRequest } = profile;
+  const res = await fetch('/api/recommendations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile: profileForRequest }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    const msg =
+      errData?.message ||
+      errData?.error ||
+      `Styling recommendations service returned HTTP ${res.status}. Please check backend logs or verify server configuration.`;
+    throw new Error(msg);
   }
+
+  const data = (await res.json()) as { recommendations: LookRecommendation[] };
+  if (!data.recommendations?.length) {
+    throw new Error('Recommendations engine returned empty recommendations. Please retry.');
+  }
+
+  return data.recommendations;
 };
+

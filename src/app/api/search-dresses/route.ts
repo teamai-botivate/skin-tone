@@ -5,6 +5,7 @@ import {
 } from "@/lib/skintune-schemas";
 import { runDressSearch } from "@/lib/dress-search-server";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 
 export async function POST(req: Request) {
   try {
@@ -28,14 +29,7 @@ export async function POST(req: Request) {
       });
       return NextResponse.json(data);
     } catch (err) {
-      logger.error({ err }, "Failed to search for dresses");
-      return NextResponse.json(
-        {
-          error: "Failed to search for dresses",
-          message: err instanceof Error ? err.message : String(err),
-        },
-        { status: 502 },
-      );
+      return safeErrorResponse(err, "Failed to search for dresses", 502);
     }
   } catch (err) {
     logger.error({ err }, "Malformed search-dresses request");

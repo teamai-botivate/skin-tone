@@ -32,7 +32,7 @@ export type OccasionContext = {
   details: string;
 };
 
-const generateOneLookImage = async (
+export const generateOneLookImage = async (
   look: LookRecommendation,
   profileForRequest: Omit<SkinTuneProfile, 'photoUrl'>,
   context: OccasionContext,
@@ -51,7 +51,10 @@ const generateOneLookImage = async (
         siblingVibes: siblingVibes.length ? siblingVibes : undefined,
       }),
     });
-    if (!res.ok) throw new Error(`Image generation request failed: ${res.status}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.message || errData?.error || `Image generation request failed: ${res.status}`);
+    }
     const data = (await res.json()) as { look: LookRecommendation };
     if (!data.look) throw new Error('Empty image generation response');
     return data.look;
@@ -60,6 +63,7 @@ const generateOneLookImage = async (
     return look;
   }
 };
+
 
 /**
  * Generate visuals for a set of recommendations. Fires one request per look

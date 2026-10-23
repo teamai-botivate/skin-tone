@@ -34,7 +34,7 @@ export function Home({
         <div className="grid gap-10 lg:grid-cols-[1.1fr_.9fr] lg:items-end">
           <div className="animate-rise">
             <p className="text-xs font-bold uppercase tracking-[.22em] text-primary">
-              How can SkinTune style you today?
+              How can LetStyle style you today?
             </p>
             <h1 className="mt-4 max-w-2xl font-serif text-[clamp(3rem,7vw,6.2rem)] leading-[.88] tracking-[-.05em]">
               Good to see you,<br />

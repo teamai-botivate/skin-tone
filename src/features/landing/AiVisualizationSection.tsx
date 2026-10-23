@@ -71,7 +71,7 @@ export function AiVisualizationSection({ onStart }: AiVisualizationSectionProps)
             </h2>
 
             <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-              Instead of static text checklists or guessing how items pair, SkinTune turns your personal styling recommendations into high-fidelity photorealistic visuals.
+              Instead of static text checklists or guessing how items pair, LetStyle turns your personal styling recommendations into high-fidelity photorealistic visuals.
             </p>
 
             {/* 3 Value Points */}
@@ -113,7 +113,7 @@ export function AiVisualizationSection({ onStart }: AiVisualizationSectionProps)
                     Conversational Refinement
                   </h3>
                   <p className="mt-1 text-xs sm:text-sm text-[#194A49]/75 leading-relaxed">
-                    Want higher contrast, a shorter hemline, or different shoe color? Simply request changes and SkinTune regenerates the look instantly.
+                    Want higher contrast, a shorter hemline, or different shoe color? Simply request changes and LetStyle regenerates the look instantly.
                   </p>
                 </div>
               </div>

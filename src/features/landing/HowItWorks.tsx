@@ -21,7 +21,7 @@ export function HowItWorks({ onStart }: HowItWorksProps) {
       title: 'Let AI understand your style',
       subtitle: 'Harmony & Proportions',
       description:
-        'SkinTune analyzes visible styling harmony — matching undertones with color palettes, neckline cuts with jewellery proportions, and facial framing with flattering hairstyles and makeup.',
+        'LetStyle analyzes visible styling harmony — matching undertones with color palettes, neckline cuts with jewellery proportions, and facial framing with flattering hairstyles and makeup.',
       icon: Sparkles,
       details: ['Undertone calibration', 'Silhouette balancing', 'Jewellery & makeup pairing'],
     },

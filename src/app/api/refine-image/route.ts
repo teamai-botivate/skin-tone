@@ -7,6 +7,7 @@ import {
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient, IMAGE_MODEL, RECOMMENDATION_MODEL } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 
 function buildRefinementPrompt(look: LookRecommendation, customization: string, hasOriginalPhoto: boolean): string {
   const parts = [
@@ -38,9 +39,9 @@ async function refineViaResponsesApi(
 ): Promise<string> {
   const imageInputs = originalPhotoUrl
     ? [
-        { type: "input_image" as const, image_url: originalPhotoUrl, detail: "original" as const },
-        { type: "input_image" as const, image_url: generatedImageUrl, detail: "original" as const },
-      ]
+      { type: "input_image" as const, image_url: originalPhotoUrl, detail: "original" as const },
+      { type: "input_image" as const, image_url: generatedImageUrl, detail: "original" as const },
+    ]
     : [{ type: "input_image" as const, image_url: generatedImageUrl, detail: "original" as const }];
 
   const response = await openai.responses.create({
@@ -142,13 +143,6 @@ export async function POST(req: Request) {
     const data = RefineImageResponseSchema.parse({ look: { ...look, imageUrl } });
     return NextResponse.json(data);
   } catch (err) {
-    logger.error({ err }, "Failed to refine look image");
-    return NextResponse.json(
-      {
-        error: "Failed to refine look image",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
-    );
+    return safeErrorResponse(err, "Failed to refine look image", 502);
   }
 }

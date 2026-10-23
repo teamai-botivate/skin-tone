@@ -31,8 +31,13 @@ export function Review({
     { label: 'Profile', value: `${profile.pronouns} · ${profile.ageGroup}`, target: 'profile' },
     {
       label: 'Style direction',
-      value: profile.style.length ? profile.style.join(', ') : 'Versatile styling',
+      value: profile.style.length ? profile.style.join(', ') : 'Personalized style',
       target: 'body-style',
+    },
+    {
+      label: 'Custom styling',
+      value: profile.customStyleNotes ? `"${profile.customStyleNotes}"` : 'Optional / not specified',
+      target: 'custom-style',
     },
     {
       label: 'Colours & moment',
@@ -47,9 +52,9 @@ export function Review({
   ];
 
   return (
-    <StepShell profile={profile} onBack={onBack} step={9} total={9}>
+    <StepShell profile={profile} onBack={onBack} step={10} total={10}>
       <Intro
-        eyebrow="09 / your edit, at a glance"
+        eyebrow="10 / your edit, at a glance"
         title={`This sounds like ${profile.name}.`}
         body="Look it over, make any changes, then we'll make five complete looks around it."
       >

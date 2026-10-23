@@ -25,8 +25,8 @@ export function Settings({
         <p className="text-xs font-bold uppercase tracking-[.2em] text-primary">Privacy, plainly</p>
         <h1 className="mt-4 font-serif text-5xl tracking-[-.04em]">Your space, your call.</h1>
         <p className="mt-5 leading-relaxed text-muted-foreground">
-          SkinTune is a frontend prototype. Your profile and feedback live only in this browser's local storage.
-          There is no account, server upload, or hidden score. SkinTune never makes medical or diagnostic claims.
+          LetStyle is a frontend prototype. Your profile and feedback live only in this browser's local storage.
+          There is no account, server upload, or hidden score. LetStyle never makes medical or diagnostic claims.
         </p>
         <div className="mt-10 space-y-3">
           <div className="flex gap-4 rounded-2xl border border-border bg-card p-5">
@@ -44,7 +44,7 @@ export function Settings({
             <div>
               <p className="font-semibold">What we remember</p>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                Your choices, saved looks, and feedback stay available so returning to SkinTune feels continuous.
+                Your choices, saved looks, and feedback stay available so returning to LetStyle feels continuous.
               </p>
             </div>
           </div>
@@ -53,7 +53,7 @@ export function Settings({
           <div className="flex items-start gap-4">
             <Trash2 className="mt-0.5 shrink-0 text-destructive" />
             <div className="flex-1">
-              <p className="font-semibold">Delete my SkinTune data</p>
+              <p className="font-semibold">Delete my LetStyle data</p>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 Remove your saved profile, photo preview, saved looks, and feedback from this browser.
               </p>

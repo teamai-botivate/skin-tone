@@ -280,7 +280,7 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
               {/* Reasoning Box */}
               <div className="mt-5 rounded-2xl border border-[#B08A70]/30 bg-[#B08A70]/10 p-4.5 text-[#194A49]">
                 <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
-                  Why SkinTune Chose This
+                  Why LetStyle Chose This
                 </p>
                 <p className="mt-1.5 text-sm text-[#194A49]/85 leading-relaxed">
                   {current.reasoning}

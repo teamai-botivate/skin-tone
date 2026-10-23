@@ -92,7 +92,7 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
             Complete the look.
           </h2>
           <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-            True styling doesn’t end with clothes. SkinTune considers how your jewellery metals, scale, and neckline geometries orchestrate for every specific occasion.
+            True styling doesn’t end with clothes. LetStyle considers how your jewellery metals, scale, and neckline geometries orchestrate for every specific occasion.
           </p>
         </div>
 

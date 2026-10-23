@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SkinTuneProfileSchema = z.object({
+export const LetStyleProfileSchema = z.object({
   name: z.string(),
   pronouns: z.string(),
   ageGroup: z.string(),
@@ -22,8 +22,12 @@ export const SkinTuneProfileSchema = z.object({
   occasion: z.string(),
   impression: z.array(z.string()),
   budget: z.string(),
+  customStyleNotes: z.string().optional().default(''),
 });
-export type SkinTuneProfile = z.infer<typeof SkinTuneProfileSchema>;
+export type LetStyleProfile = z.infer<typeof LetStyleProfileSchema>;
+
+export const SkinTuneProfileSchema = LetStyleProfileSchema;
+export type SkinTuneProfile = LetStyleProfile;
 
 export const LookPieceSchema = z.object({
   category: z.string(),
@@ -104,7 +108,7 @@ export const ProductResultSchema = z.object({
   matchScore: z.number().min(0).max(100).optional(),
   matchConfidence: z.number().min(0).max(100).optional(),
   matchReason: z.string(),
-  availability: z.string().default("In Stock"),
+  availability: z.string().optional(),
   source: z.string().optional(),
   lastChecked: z.string().optional(),
 });

@@ -5,6 +5,7 @@ import {
 } from "@/lib/skintune-schemas";
 import { searchProductsForLook } from "@/lib/product-search";
 import { logger } from "@/lib/logger";
+import { sanitizeErrorMessage } from "@/lib/safe-error";
 
 export async function POST(req: Request) {
   try {
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
       const validated = ProductRecommendationsResponseSchema.parse(result);
       return NextResponse.json(validated);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const safeMsg = sanitizeErrorMessage(err, "Product recommendations search failed");
       logger.error({ err, lookId: look.id }, "Failed to process product recommendations");
       return NextResponse.json({
         lookId: look.id,
@@ -38,12 +39,12 @@ export async function POST(req: Request) {
         disclaimer: "Real product discovery is currently taking longer than expected. Please try again shortly.",
         searchedAt: new Date().toISOString(),
         totalFound: 0,
-        errorMessage: errMsg,
+        errorMessage: safeMsg,
         diagnostics: [
           {
             provider: "system",
             status: "error",
-            message: errMsg,
+            message: safeMsg,
             suggestedFix: "Check server logs or verify your API keys in .env.local",
           },
         ],

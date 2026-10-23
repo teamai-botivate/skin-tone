@@ -5,9 +5,10 @@ import {
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient, RECOMMENDATION_MODEL } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 import { z } from "zod";
 
-const SYSTEM_PROMPT = `You are SkinTune's photo-quality and appearance analysis assistant. You are given one photo a user uploaded for styling purposes — most commonly an ordinary phone selfie, not a studio photo.
+const SYSTEM_PROMPT = `You are LetStyle's photo-quality and appearance analysis assistant. You are given one photo a user uploaded for styling purposes — most commonly an ordinary phone selfie, not a studio photo.
 
 Strictly verify photo clarity and full face visibility. While natural everyday selfies are welcome, you must strictly reject photos that are blurry, out of focus, or where the entire face (from forehead down to chin) is not fully visible in the frame.
 If the photo is noticeably blurred or out of focus, return "blurry".
@@ -96,13 +97,6 @@ export async function POST(req: Request) {
     const data = AnalyzePhotoResponseSchema.parse(modelResult);
     return NextResponse.json(data);
   } catch (err) {
-    logger.error({ err }, "Failed to analyze photo");
-    return NextResponse.json(
-      {
-        error: "Failed to analyze photo",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
-    );
+    return safeErrorResponse(err, "Failed to analyze photo", 502);
   }
 }

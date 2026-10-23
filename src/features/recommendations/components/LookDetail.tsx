@@ -4,14 +4,14 @@ import { useState } from 'react';
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
 import { Header } from '@/components/common/Header';
 import { LookVisual, hasRealImage } from './LookVisual';
-import { refineLookImage } from '../services/image-generation';
+import { refineLookImage, generateOneLookImage } from '../services/image-generation';
 import { ShopLookSection } from '@/features/shopping';
-import { Download, Wand2, RefreshCw, Check, Save, X } from 'lucide-react';
+import { Download, Wand2, RefreshCw, Check, Save, X, Sparkles } from 'lucide-react';
 
 function downloadLookImage(imageUrl: string, title: string) {
   const link = document.createElement('a');
   link.href = imageUrl;
-  link.download = `skintune-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.jpg`;
+  link.download = `letstyle-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.jpg`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -38,7 +38,33 @@ export function LookDetail({
   const [customization, setCustomization] = useState('');
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState('');
+  const [generatingVisual, setGeneratingVisual] = useState(false);
+  const [generateVisualError, setGenerateVisualError] = useState('');
   const hasImage = hasRealImage(look.imageUrl);
+
+  const submitGenerateVisual = async () => {
+    setGeneratingVisual(true);
+    setGenerateVisualError('');
+    try {
+      const { photoUrl, ...profileForRequest } = profile;
+      const updated = await generateOneLookImage(
+        look,
+        profileForRequest,
+        { occasion: profile.occasion, details: profile.customStyleNotes || '' },
+        photoUrl || '',
+        [],
+      );
+      if (hasRealImage(updated.imageUrl)) {
+        onRefined(updated);
+      } else {
+        setGenerateVisualError('Image generation timed out or could not complete. Please try again.');
+      }
+    } catch (err) {
+      setGenerateVisualError(err instanceof Error ? err.message : 'Visual generation failed. Please try again.');
+    } finally {
+      setGeneratingVisual(false);
+    }
+  };
 
   const submitRetry = async () => {
     if (!customization.trim()) return;
@@ -62,6 +88,7 @@ export function LookDetail({
     }
   };
 
+
   const pronouns = (profile.pronouns || '').toLowerCase();
   const age = (profile.ageGroup || '').toLowerCase();
   const isChild =
@@ -81,7 +108,7 @@ export function LookDetail({
         <div className="grid gap-8 lg:grid-cols-[.9fr_1.1fr] lg:items-start">
           <div>
             <LookVisual look={look} large />
-            {hasImage && (
+            {hasImage ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -100,7 +127,26 @@ export function LookDetail({
                   <Wand2 size={15} /> Retry with changes
                 </button>
               </div>
+            ) : (
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={submitGenerateVisual}
+                    disabled={generatingVisual}
+                    data-testid="button-generate-visual"
+                    className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm"
+                  >
+                    {generatingVisual ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                    {generatingVisual ? 'Generating AI Visual…' : 'Generate AI Visual'}
+                  </button>
+                </div>
+                {generateVisualError && (
+                  <p className="text-xs font-semibold text-destructive">{generateVisualError}</p>
+                )}
+              </div>
             )}
+
             {showRetry && (
               <div
                 className="mt-4 animate-rise rounded-2xl border border-primary/25 bg-primary/5 p-5"
@@ -211,7 +257,7 @@ export function LookDetail({
               </div>
             </div>
             <div className="mt-8 rounded-2xl border border-accent/25 bg-accent/7 p-5">
-              <p className="font-serif text-2xl">Why SkinTune chose this</p>
+              <p className="font-serif text-2xl">Why LetStyle chose this</p>
               <ul className="mt-4 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                 {look.reasoning.map((reason, rIdx) => (
                   <li key={`${reason}-${rIdx}`} className="flex gap-2">

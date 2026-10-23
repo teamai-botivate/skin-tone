@@ -11,6 +11,7 @@ export function OptionCard({
   selected,
   onClick,
   disabled = false,
+  compact = false,
 }: {
   label: string;
   description?: string;
@@ -19,6 +20,7 @@ export function OptionCard({
   selected: boolean;
   onClick: () => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -27,27 +29,33 @@ export function OptionCard({
       onClick={onClick}
       data-testid={`option-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
       aria-pressed={selected}
-      className={`focus-ring group relative flex min-h-[76px] w-full items-center gap-4 rounded-[1.15rem] border p-4 text-left transition duration-200 ${
+      className={`focus-ring group relative flex w-full items-center text-left transition duration-200 border ${
+        compact
+          ? 'min-h-[44px] sm:min-h-[46px] gap-2 sm:gap-2.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2'
+          : 'min-h-[62px] sm:min-h-[68px] gap-3 sm:gap-4 rounded-[1.15rem] p-3 sm:p-3.5'
+      } ${
         selected
-          ? 'border-primary bg-primary/8 shadow-[0_8px_24px_hsl(var(--primary)/.12)]'
+          ? 'border-primary bg-primary/8 shadow-[0_4px_16px_hsl(var(--primary)/.10)]'
           : 'border-border bg-card hover:-translate-y-0.5 hover:border-primary/45'
       } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
     >
       {color ? (
         <span
-          className={`grid size-11 shrink-0 place-items-center rounded-full border border-black/15 shadow-md transition-transform duration-200 ${
-            selected ? 'ring-2 ring-primary ring-offset-2 scale-105' : 'hover:scale-102'
-          }`}
+          className={`grid shrink-0 place-items-center rounded-full border border-black/15 shadow-sm transition-transform duration-200 ${
+            compact ? 'size-6 sm:size-7' : 'size-9 sm:size-10'
+          } ${selected ? 'ring-2 ring-primary ring-offset-2 scale-105' : 'hover:scale-102'}`}
           style={{ background: color }}
           aria-hidden
         >
           {selected && (
-            <Check size={18} strokeWidth={3.5} className="text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]" />
+            <Check size={compact ? 12 : 16} strokeWidth={3.5} className="text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]" />
           )}
         </span>
       ) : icon ? (
         <span
-          className={`grid size-11 shrink-0 place-items-center rounded-full text-xl ${
+          className={`grid shrink-0 place-items-center rounded-full ${
+            compact ? 'size-7 sm:size-7.5 text-sm' : 'size-9 sm:size-10 text-lg'
+          } ${
             selected ? 'bg-primary text-primary-foreground' : 'bg-secondary'
           }`}
           aria-hidden
@@ -56,26 +64,39 @@ export function OptionCard({
         </span>
       ) : (
         <span
-          className={`grid size-10 shrink-0 place-items-center rounded-full ${
+          className={`grid shrink-0 place-items-center rounded-full ${
+            compact ? 'size-6 sm:size-6.5' : 'size-8 sm:size-9'
+          } ${
             selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
           }`}
           aria-hidden
         >
-          <Check size={16} strokeWidth={3} className={selected ? '' : 'opacity-0'} />
+          <Check size={compact ? 11 : 15} strokeWidth={3} className={selected ? '' : 'opacity-0'} />
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold">{label}</span>
+        <span className={`block font-semibold leading-tight ${compact ? 'text-xs sm:text-[13px]' : 'text-sm sm:text-base'}`}>{label}</span>
         {description && (
-          <span className="mt-1 block text-sm leading-snug text-muted-foreground">{description}</span>
+          <span
+            title={description}
+            className={`block leading-tight text-muted-foreground ${
+              compact
+                ? 'mt-0.5 text-[10px] sm:text-[11px] line-clamp-1'
+                : 'mt-0.5 text-xs sm:text-sm'
+            }`}
+          >
+            {description}
+          </span>
         )}
       </span>
       <span
-        className={`grid size-6 shrink-0 place-items-center rounded-full border ${
+        className={`grid shrink-0 place-items-center rounded-full border ${
+          compact ? 'size-4.5 sm:size-5' : 'size-5.5 sm:size-6'
+        } ${
           selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-transparent'
         }`}
       >
-        <Check size={14} strokeWidth={3} />
+        <Check size={compact ? 10 : 13} strokeWidth={3} />
       </span>
     </button>
   );
@@ -90,6 +111,7 @@ export function ChoiceGrid({
   otherPlaceholder,
   max,
   onMultiChange,
+  compact = false,
 }: {
   options: SelectOption[];
   value: string | string[];
@@ -99,6 +121,7 @@ export function ChoiceGrid({
   allowOther?: boolean;
   otherPlaceholder?: string;
   max?: number;
+  compact?: boolean;
 }) {
   // Check if "Other" is currently selected
   const otherItem = multi
@@ -164,7 +187,7 @@ export function ChoiceGrid({
   };
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className={`grid ${compact ? 'gap-1.5 sm:gap-2 sm:grid-cols-2' : 'gap-2.5 sm:gap-3 sm:grid-cols-2'}`}>
       {options.map((item) => {
         const selected = multi ? (value as string[]).includes(item.label) : value === item.label;
         return (
@@ -175,6 +198,7 @@ export function ChoiceGrid({
             icon={item.icon}
             color={item.color}
             selected={selected}
+            compact={compact}
             onClick={() => toggle(item.label)}
           />
         );
@@ -191,6 +215,7 @@ export function ChoiceGrid({
           }
           icon="✏️"
           selected={isOtherSelected}
+          compact={compact}
           onClick={handleToggleOther}
         />
       )}

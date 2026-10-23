@@ -10,7 +10,7 @@ export function BeautySection({ onStart }: BeautySectionProps) {
     {
       category: 'BASE',
       title: 'Skin-Identical Coverage & Finish',
-      description: 'Whether your undertone calls for a dewy luminous skin tint or a velvet satin veil, SkinTune matches finish and coverage to your skin tone and event lighting.',
+      description: 'Whether your undertone calls for a dewy luminous skin tint or a velvet satin veil, LetStyle matches finish and coverage to your skin tone and event lighting.',
       shadeExample: 'Medium Warm Olive · Luminous Sheen',
       swatch: '#D5A478',
     },
@@ -38,7 +38,7 @@ export function BeautySection({ onStart }: BeautySectionProps) {
     {
       category: 'OVERALL STYLE',
       title: 'Occasion & Wardrobe Synchronization',
-      description: 'Your makeup is never designed in a vacuum. SkinTune balances makeup intensity with your clothing neckline, fabric weight, and jewellery reflectivity.',
+      description: 'Your makeup is never designed in a vacuum. LetStyle balances makeup intensity with your clothing neckline, fabric weight, and jewellery reflectivity.',
       shadeExample: 'Quiet Luxury Day-to-Evening Transition',
       swatch: '#194A49',
     },
@@ -67,7 +67,7 @@ export function BeautySection({ onStart }: BeautySectionProps) {
             </h2>
 
             <p className="mt-4 max-w-xl text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-              SkinTune is far more than an outfit picker. We calculate the exact makeup shades, finishes, and techniques that harmonize with your natural complexion.
+              LetStyle is far more than an outfit picker. We calculate the exact makeup shades, finishes, and techniques that harmonize with your natural complexion.
             </p>
 
             {/* Feature List Cards */}
@@ -163,7 +163,7 @@ export function BeautySection({ onStart }: BeautySectionProps) {
             {/* Editorial Quote Card */}
             <div className="mt-6 rounded-2xl border border-[#B08A70]/30 bg-white/70 p-5 text-xs text-[#194A49]/80 leading-relaxed backdrop-blur-sm shadow-sm">
               <p className="font-semibold text-[#795548] uppercase tracking-wider">
-                SkinTune Beauty Philosophy
+                LetStyle Beauty Philosophy
               </p>
               <p className="mt-1">
                 “Beauty shouldn’t feel like following someone else’s viral tutorial. It’s about discovering the exact shade undertones that illuminate your natural coloring.”

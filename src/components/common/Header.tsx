@@ -37,12 +37,12 @@ export function Header({
             onClick={onSettings}
             data-testid="button-open-settings"
             className="focus-ring flex items-center gap-2"
-            aria-label="Open SkinTune home"
+            aria-label="Open LetStyle home"
           >
             <span className="grid size-9 place-items-center rounded-[13px] bg-primary text-primary-foreground shadow-sm">
               <Sparkles size={18} />
             </span>
-            <span className="font-serif text-xl font-semibold tracking-tight">SkinTune</span>
+            <span className="font-serif text-xl font-semibold tracking-tight">LetStyle</span>
           </button>
         </div>
         {step && total && (

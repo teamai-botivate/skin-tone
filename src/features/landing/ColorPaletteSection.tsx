@@ -81,7 +81,7 @@ export function ColorPaletteSection({ onStart }: ColorPaletteSectionProps) {
             Your colors, your palette.
           </h2>
           <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-            Discover the exact color families that illuminate your complexion. Rather than rigid clinical seasons, SkinTune designs an editorial fashion palette curated for how colors reflect onto your face.
+            Discover the exact color families that illuminate your complexion. Rather than rigid clinical seasons, LetStyle designs an editorial fashion palette curated for how colors reflect onto your face.
           </p>
         </div>
 

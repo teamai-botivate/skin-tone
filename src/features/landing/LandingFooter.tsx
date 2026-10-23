@@ -25,7 +25,7 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
                 <Sparkles size={18} strokeWidth={2.5} />
               </span>
               <span className="font-serif text-2xl font-bold tracking-tight text-[#194A49]">
-                SkinTune
+                LetStyle
               </span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#194A49]/75">
@@ -125,7 +125,7 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
 
         {/* Bottom bar */}
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-[#B08A70]/30 pt-8 text-xs text-[#795548] sm:flex-row">
-          <span>© 2025 SkinTune. All rights reserved.</span>
+          <span>© 2025 LetStyle. All rights reserved.</span>
           <span>Teal · Mocha · Linen</span>
         </div>
       </div>

@@ -210,8 +210,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
 
   // Render a single product card
   const renderProductCard = (product: ProductResult) => {
-    const isExactAndVerified =
-      product.urlType === 'exact_product' && product.priceVerified && product.productVerified;
+    const isExactProduct = product.urlType === 'exact_product';
     const safeUrl = getSafeProductUrl(product, persona);
 
     return (
@@ -247,10 +246,10 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               {product.priceTier && (
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${product.priceTier === 'budget'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      : product.priceTier === 'premium'
-                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                        : 'bg-primary/10 text-primary'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : product.priceTier === 'premium'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                      : 'bg-primary/10 text-primary'
                     }`}
                 >
                   {product.priceTier === 'budget'
@@ -326,7 +325,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               </span>
             )}
 
-            {product.availability && (
+            {product.productVerified && product.availability && (
               <span
                 className={`text-[11px] font-medium ${product.availability === 'Out of Stock' ? 'text-amber-500' : 'text-emerald-500'
                   }`}
@@ -354,7 +353,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             data-testid={`link-product-${product.id}`}
             className="focus-ring inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition hover:brightness-105"
           >
-            {isExactAndVerified
+            {isExactProduct
               ? `View on ${product.retailer}`
               : `Search on ${product.retailer}`}
             <ExternalLink size={13} />
@@ -416,8 +415,8 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               onClick={() => setActiveCategory(tab.id)}
               data-testid={`tab-shop-${tab.id}`}
               className={`focus-ring inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${isSelected
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
                 }`}
             >
               <span>{tab.icon}</span>
@@ -552,14 +551,14 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                     </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${diag.status === 'invalid_key'
-                          ? 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30'
-                          : diag.status === 'missing_key'
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                            : diag.status === 'rate_limited'
-                              ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30'
-                              : diag.status === 'degraded'
-                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-                                : 'bg-muted text-muted-foreground'
+                        ? 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30'
+                        : diag.status === 'missing_key'
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                          : diag.status === 'rate_limited'
+                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30'
+                            : diag.status === 'degraded'
+                              ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                              : 'bg-muted text-muted-foreground'
                         }`}
                     >
                       {diag.status.replace('_', ' ')}
@@ -631,11 +630,9 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                         <span className="text-[10px] font-bold text-red-500">Missing</span>
                       )}
                     </div>
-                    {healthStatus.keys?.openai?.maskedKey && (
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        Key: {healthStatus.keys.openai.maskedKey} ({healthStatus.keys.openai.validFormat ? 'Valid format' : 'Unrecognized format'})
-                      </p>
-                    )}
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Status: {healthStatus.keys?.openai?.configured ? (healthStatus.keys.openai.validFormat ? 'Valid format' : 'Unrecognized format') : 'Not set in server environment'}
+                    </p>
                     <p className="text-[10px] text-muted-foreground">
                       Model: {healthStatus.keys?.openai?.model || 'gpt-4o-mini'}
                     </p>
@@ -652,11 +649,9 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                         <span className="text-[10px] font-bold text-red-500">Missing</span>
                       )}
                     </div>
-                    {healthStatus.keys?.tavily?.maskedKey && (
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        Key: {healthStatus.keys.tavily.maskedKey} ({healthStatus.keys.tavily.validFormat ? 'Valid format' : 'Unrecognized format'})
-                      </p>
-                    )}
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Status: {healthStatus.keys?.tavily?.configured ? (healthStatus.keys.tavily.validFormat ? 'Valid format' : 'Unrecognized format') : 'Not set in server environment'}
+                    </p>
                   </div>
                 </div>
               </div>

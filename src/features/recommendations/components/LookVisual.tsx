@@ -54,11 +54,20 @@ const generatingStages = [
   'Adding the finishing touches',
 ];
 
-export function Generating() {
+export function Generating({
+  error,
+  onRetry,
+  onBack,
+}: {
+  error?: string | null;
+  onRetry?: () => void;
+  onBack?: () => void;
+} = {}) {
   const [active, setActive] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
+    if (error) return;
     const stageTimer = window.setInterval(
       () => setActive((value) => (value + 1) % generatingStages.length),
       2600,
@@ -68,10 +77,53 @@ export function Generating() {
       window.clearInterval(stageTimer);
       window.clearInterval(clockTimer);
     };
-  }, []);
+  }, [error]);
 
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
+
+  if (error) {
+    return (
+      <div className="noise min-h-[100dvh] bg-background text-foreground">
+        <div className="mx-auto flex min-h-[100dvh] max-w-xl flex-col justify-center px-6 py-16">
+          <div className="mb-8 flex items-center gap-2">
+            <span className="grid size-10 place-items-center rounded-[14px] bg-primary text-primary-foreground">
+              <Sparkles size={19} />
+            </span>
+            <span className="font-serif text-2xl">LetStyle</span>
+          </div>
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-destructive">Generation Notice</p>
+            <h2 className="mt-2 font-serif text-2xl font-semibold text-foreground">
+              Unable to generate styling recommendations
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{error}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  data-testid="button-retry-generate"
+                  className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
+                >
+                  <RefreshCw size={15} /> Try again
+                </button>
+              )}
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-bold hover:border-primary/50"
+                >
+                  Back to edit profile
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="noise min-h-[100dvh] bg-background text-foreground">
@@ -80,7 +132,7 @@ export function Generating() {
           <span className="grid size-10 place-items-center rounded-[14px] bg-primary text-primary-foreground">
             <Sparkles size={19} className="animate-pulse" />
           </span>
-          <span className="font-serif text-2xl">SkinTune</span>
+          <span className="font-serif text-2xl">LetStyle</span>
         </div>
         <p className="text-xs font-bold uppercase tracking-[.24em] text-primary">Your personal edit</p>
         <h1 className="mt-5 max-w-xl font-serif text-[clamp(3rem,8vw,6.5rem)] leading-[.88] tracking-[-.05em]">
@@ -111,3 +163,4 @@ export function Generating() {
     </div>
   );
 }
+

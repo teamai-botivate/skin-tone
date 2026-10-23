@@ -18,11 +18,11 @@ export function ConsentStep({
   step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={step} total={9}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
       <Intro
         eyebrow="04 / your choice"
         title="A portrait can make color guidance more precise."
-        body="If you choose to share one, we’ll look at visible styling cues like light, contrast, and framing. SkinTune does not identify you, diagnose anything, or judge attractiveness."
+        body="If you choose to share one, we’ll look at visible styling cues like light, contrast, and framing. LetStyle does not identify you, diagnose anything, or judge attractiveness."
       >
         <div className="space-y-3">
           <div className="flex gap-4 rounded-2xl border border-border bg-card p-5">
@@ -64,7 +64,7 @@ export function AppearanceStep({
   step?: number;
 }) {
   return (
-    <StepShell profile={profile} onBack={onBack} step={step} total={9}>
+    <StepShell profile={profile} onBack={onBack} step={step} total={10}>
       <Intro
         eyebrow="06 / what we noticed"
         title="Your appearance profile is ready."

@@ -17,7 +17,7 @@ export type AppearanceProfile = {
   contrast: string;
 };
 
-export type SkinTuneProfile = {
+export type LetStyleProfile = {
   name: string;
   pronouns: string;
   ageGroup: string;
@@ -35,10 +35,13 @@ export type SkinTuneProfile = {
   occasion: string;
   impression: string[];
   budget: string;
+  customStyleNotes?: string;
 };
 
+export type SkinTuneProfile = LetStyleProfile;
+
 /** Alias kept for continuity with backend contract. */
-export type UserProfile = SkinTuneProfile;
+export type UserProfile = LetStyleProfile;
 
 export type LookPiece = {
   category: string;

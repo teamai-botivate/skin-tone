@@ -8,9 +8,10 @@ import {
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient, RECOMMENDATION_MODEL } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 import { z } from "zod";
 
-const SYSTEM_PROMPT = `You are SkinTune's styling engine. Given a user's appearance, persona, body, taste, and occasion profile, propose exactly 5 distinct complete-look recommendations.
+const SYSTEM_PROMPT = `You are LetStyle's styling engine. Given a user's appearance, persona, body, taste, and occasion profile, propose exactly 5 distinct complete-look recommendations.
 
 Guidelines:
 - Each look must be a genuinely complete styling recommendation tailored specifically to the person's persona (Women, Men, or Children):
@@ -70,7 +71,7 @@ function buildUserPrompt(profile: SkinTuneProfile): string {
 - Body build: ${profile.bodyBuild || "not specified"}
 - Fit preference: ${profile.fit || "no strong preference"}
 - Style worlds: ${profile.style.join(", ") || "open to suggestion"}
-- Colours loved: ${profile.colorsLove.join(", ") || "no strong favourites stated"}
+${profile.customStyleNotes ? `- Custom styling request from user: "${profile.customStyleNotes}". Prioritize their specific garment, cut, silhouette, and aesthetic preferences closely.\n` : ""}- Colours loved: ${profile.colorsLove.join(", ") || "no strong favourites stated"}
 - Colours to avoid: ${profile.colorsAvoid.join(", ") || "none stated"}
 - Restrictions: ${profile.restrictions.join(", ") || "none stated"}
 - Occasion: ${profile.occasion || "not specified"}
@@ -174,14 +175,6 @@ export async function POST(req: Request) {
     const data = RecommendationsResponseSchema.parse({ recommendations });
     return NextResponse.json(data);
   } catch (err) {
-    logger.error({ err }, "Failed to generate recommendations");
-    console.error("recommendations route error detail:", err);
-    return NextResponse.json(
-      {
-        error: "Failed to generate recommendations",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
-    );
+    return safeErrorResponse(err, "Failed to generate recommendations", 502);
   }
 }

@@ -3,7 +3,7 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'SkinTune — AI-Powered Personal Color & Styling',
+  title: 'LetStyle — AI-Powered Personal Color & Styling',
   description: 'Discover your optimal color palette, outfits, and personalized fashion recommendations powered by AI.',
   icons: {
     icon: '/favicon.svg',

@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 
+if (typeof window !== "undefined") {
+  throw new Error("openai-client module can only be executed on the server.");
+}
+
 let client: OpenAI | null = null;
 
 function cleanEnv(val?: string): string {
@@ -13,18 +17,17 @@ function cleanEnv(val?: string): string {
 
 /**
  * Lazily-constructed singleton OpenAI client.
+ * Strictly reads server-side OPENAI_API_KEY.
  */
 export function getOpenAIClient(): OpenAI {
   if (client) return client;
-  const rawKey =
-    process.env["OPENAI_API_KEY"] ||
-    process.env["NEXT_PUBLIC_OPENAI_API_KEY"];
+  const rawKey = process.env["OPENAI_API_KEY"];
   const apiKey = cleanEnv(rawKey);
 
   if (!apiKey) {
     throw new Error(
-      "OPENAI_API_KEY is not set. Configure it as an environment variable " +
-        "to enable AI recommendations and image generation.",
+      "OPENAI_API_KEY is not set. Configure it as a server environment variable " +
+      "to enable AI recommendations and image generation.",
     );
   }
   client = new OpenAI({ apiKey });
@@ -32,29 +35,21 @@ export function getOpenAIClient(): OpenAI {
 }
 
 export function getOpenAIKeyDiagnostics() {
-  const rawKey =
-    process.env["OPENAI_API_KEY"] ||
-    process.env["NEXT_PUBLIC_OPENAI_API_KEY"];
+  const rawKey = process.env["OPENAI_API_KEY"];
   const apiKey = cleanEnv(rawKey);
   const isConfigured = Boolean(apiKey);
   const formatValid = isConfigured && (apiKey.startsWith("sk-") || apiKey.startsWith("sk-proj-"));
-  const maskedKey = isConfigured
-    ? `${apiKey.slice(0, 7)}...${apiKey.slice(-4)}`
-    : undefined;
 
   return {
     isConfigured,
     formatValid,
-    maskedKey,
     model: RECOMMENDATION_MODEL,
     keyName: "OPENAI_API_KEY",
   };
 }
 
 function getValidTextModel(): string {
-  const model =
-    cleanEnv(process.env["OPENAI_TEXT_MODEL"]) ||
-    cleanEnv(process.env["NEXT_PUBLIC_OPENAI_TEXT_MODEL"]);
+  const model = cleanEnv(process.env["OPENAI_TEXT_MODEL"]);
   if (model && !model.includes("5.5") && (model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3"))) {
     return model;
   }
@@ -63,7 +58,12 @@ function getValidTextModel(): string {
 
 export const RECOMMENDATION_MODEL = getValidTextModel();
 
-export const IMAGE_MODEL =
-  cleanEnv(process.env["OPENAI_IMAGE_MODEL"]) ||
-  cleanEnv(process.env["NEXT_PUBLIC_OPENAI_IMAGE_MODEL"]) ||
-  "dall-e-3";
+function getValidImageModel(): string {
+  const model = cleanEnv(process.env["OPENAI_IMAGE_MODEL"]);
+  if (model && model !== "dall-e-3") {
+    return model;
+  }
+  return "gpt-image-2.5-flare";
+}
+
+export const IMAGE_MODEL = getValidImageModel();

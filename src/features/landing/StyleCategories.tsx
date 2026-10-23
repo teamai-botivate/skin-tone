@@ -89,7 +89,7 @@ export function StyleCategories({ onSelectCategory, onStart }: StyleCategoriesPr
             styling guide.
           </h2>
           <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-            SkinTune brings beauty and fashion intelligence together in one seamless experience.
+            LetStyle brings beauty and fashion intelligence together in one seamless experience.
             Rather than generic trends, we harmonize what suits your specific coloring, build, and lifestyle.
           </p>
         </div>

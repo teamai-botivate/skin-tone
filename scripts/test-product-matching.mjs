@@ -20,7 +20,7 @@ import {
 } from "../src/features/recommendations/services/recommendation-engine.ts";
 
 console.log("======================================================================");
-console.log("SKINTUNE: FULL VERIFICATION SUITE — 15 CRITICAL RECOMMENDATION SCENARIOS");
+console.log("LETSTYLE: FULL VERIFICATION SUITE — 15 CRITICAL RECOMMENDATION SCENARIOS");
 console.log("======================================================================");
 
 // -----------------------------------------------------------------------------

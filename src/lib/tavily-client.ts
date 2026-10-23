@@ -1,5 +1,9 @@
 import { logger } from "./logger";
 
+if (typeof window !== "undefined") {
+  throw new Error("tavily-client module can only be executed on the server.");
+}
+
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 
 export type TavilyImage = {
@@ -29,13 +33,11 @@ function cleanEnv(val?: string): string {
 }
 
 export function getTavilyApiKey(): string {
-  const rawKey =
-    process.env["TAVILY_API_KEY"] ||
-    process.env["NEXT_PUBLIC_TAVILY_API_KEY"];
+  const rawKey = process.env["TAVILY_API_KEY"];
   const key = cleanEnv(rawKey);
   if (!key) {
     throw new Error(
-      "TAVILY_API_KEY is not set. Configure it as an environment variable " +
+      "TAVILY_API_KEY is not set. Configure it as a server environment variable " +
         "to enable real-dress web search.",
     );
   }
@@ -43,20 +45,14 @@ export function getTavilyApiKey(): string {
 }
 
 export function getTavilyKeyDiagnostics() {
-  const rawKey =
-    process.env["TAVILY_API_KEY"] ||
-    process.env["NEXT_PUBLIC_TAVILY_API_KEY"];
+  const rawKey = process.env["TAVILY_API_KEY"];
   const key = cleanEnv(rawKey);
   const isConfigured = Boolean(key);
   const formatValid = isConfigured && (key.startsWith("tvly-") || key.length > 20);
-  const maskedKey = isConfigured
-    ? `${key.slice(0, 6)}...${key.slice(-4)}`
-    : undefined;
 
   return {
     isConfigured,
     formatValid,
-    maskedKey,
     keyName: "TAVILY_API_KEY",
   };
 }
@@ -82,8 +78,7 @@ export async function tavilySearch(
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Tavily search failed: ${res.status} ${body.slice(0, 300)}`);
+    throw new Error(`Tavily search failed with status ${res.status}`);
   }
 
   const data = (await res.json()) as {

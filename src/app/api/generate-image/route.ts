@@ -8,6 +8,7 @@ import {
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient, IMAGE_MODEL, RECOMMENDATION_MODEL } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
+import { safeErrorResponse } from "@/lib/safe-error";
 
 type OccasionContext = { occasion: string; details: string };
 
@@ -412,13 +413,6 @@ export async function POST(req: Request) {
     const data = GenerateImageResponseSchema.parse({ look: { ...look, imageUrl } });
     return NextResponse.json(data);
   } catch (err) {
-    logger.error({ err }, "Failed to generate image for look");
-    return NextResponse.json(
-      {
-        error: "Failed to generate look image",
-        message: err instanceof Error ? err.message : String(err),
-      },
-      { status: 502 },
-    );
+    return safeErrorResponse(err, "Failed to generate look image", 502);
   }
 }

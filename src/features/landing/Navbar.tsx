@@ -34,14 +34,14 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
             }
           }}
           className="group flex items-center gap-2.5 text-left focus:outline-none"
-          aria-label="SkinTune Homepage"
+          aria-label="LetStyle Homepage"
         >
           <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#D9BC96] to-[#B08A70] text-[#194A49] shadow-sm transition-transform duration-200 group-hover:scale-105">
             <Sparkles size={18} strokeWidth={2.5} />
           </span>
           <div className="flex flex-col">
             <span className="font-serif text-2xl font-bold tracking-tight text-[#194A49] transition-colors group-hover:text-[#194A49]/80">
-              SkinTune
+              LetStyle
             </span>
             <span className="text-[9px] uppercase tracking-[0.24em] text-[#795548] font-semibold -mt-1">
               Personal Styling AI
