@@ -39,31 +39,25 @@ export const generateOneLookImage = async (
   photoUrl: string,
   siblingVibes: string[],
 ): Promise<LookRecommendation> => {
-  try {
-    const res = await fetch('/api/generate-image', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        look,
-        profile: profileForRequest,
-        context,
-        photoUrl: photoUrl || undefined,
-        siblingVibes: siblingVibes.length ? siblingVibes : undefined,
-      }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => null);
-      throw new Error(errData?.message || errData?.error || `Image generation request failed: ${res.status}`);
-    }
-    const data = (await res.json()) as { look: LookRecommendation };
-    if (!data.look) throw new Error('Empty image generation response');
-    return data.look;
-  } catch (err) {
-    console.warn(`Falling back to placeholder visual for ${look.id}:`, err);
-    return look;
+  const res = await fetch('/api/generate-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      look,
+      profile: profileForRequest,
+      context,
+      photoUrl: photoUrl || undefined,
+      siblingVibes: siblingVibes.length ? siblingVibes : undefined,
+    }),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || errData?.message || `Image generation request failed: ${res.status}`);
   }
+  const data = (await res.json()) as { look: LookRecommendation };
+  if (!data.look) throw new Error('Empty image generation response');
+  return data.look;
 };
-
 
 /**
  * Generate visuals for a set of recommendations. Fires one request per look
@@ -83,16 +77,17 @@ export const generateLookImages = async (
 ): Promise<LookRecommendation[]> => {
   const { photoUrl, ...profileForRequest } = profile;
   return Promise.all(
-    recommendations.map((look) => {
-      // Every OTHER look's vibe word in this batch, so the backend's
-      // per-look styling agent can deliberately avoid repeating an
-      // expression/pose already "claimed" elsewhere in the same 5 — see
-      // GenerateImageRequestSchema.siblingVibes.
+    recommendations.map(async (look) => {
       const siblingVibes = recommendations
         .filter((other) => other.id !== look.id)
         .map((other) => other.vibe)
         .filter((vibe): vibe is string => Boolean(vibe));
-      return generateOneLookImage(look, profileForRequest, context, photoUrl, siblingVibes);
+      try {
+        return await generateOneLookImage(look, profileForRequest, context, photoUrl, siblingVibes);
+      } catch (err) {
+        console.warn(`Falling back to placeholder visual for ${look.id}:`, err);
+        return look;
+      }
     }),
   );
 };

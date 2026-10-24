@@ -12,7 +12,6 @@ export type PhotoAnalysisResult = {
   undertone: string;
   contrast: string;
   confidence: number;
-  creditsRemaining?: number;
 };
 
 export const analyzePhoto = async (photoUrl: string): Promise<PhotoAnalysisResult> => {

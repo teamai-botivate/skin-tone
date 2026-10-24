@@ -86,7 +86,7 @@ const wizardScreens: Screen[] = [
 ];
 
 export function LetStyleApp() {
-  const { user, credits, openAuthModal, refreshUser } = useAuth();
+  const { user, openAuthModal, refreshUser } = useAuth();
   const [screen, setScreen] = useState<Screen>('welcome');
   const [profile, setProfile] = useState<SkinTuneProfile>(initialProfile);
   const [detailId, setDetailId] = useState('look-01');
@@ -139,13 +139,6 @@ export function LetStyleApp() {
       openAuthModal('signup', () => {
         go('generating');
       });
-      return;
-    }
-    if (credits < 2) {
-      setGenerationError(
-        `Insufficient credits. Generating your 5 complete personalized looks requires 2 credits, but you have ${credits} remaining.`,
-      );
-      go('generating');
       return;
     }
     go('generating');

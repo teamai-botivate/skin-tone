@@ -14,7 +14,6 @@ import {
   resetRateLimit,
   getClientIp,
 } from "@/lib/auth";
-import { grantInitialCredits, INITIAL_FREE_CREDITS } from "@/lib/credits";
 import { logger } from "@/lib/logger";
 
 const SignupRequestSchema = z.object({
@@ -88,9 +87,6 @@ export async function POST(req: Request) {
     // Reset rate limit on successful registration
     await resetRateLimit(rateLimitKey);
 
-    // Grant initial free credits exactly once in DB ledger
-    const { balance } = await grantInitialCredits(user.id, INITIAL_FREE_CREDITS);
-
     // Create secure session
     const sessionToken = await createSession(user.id);
 
@@ -103,7 +99,6 @@ export async function POST(req: Request) {
         name: user.name,
         email: user.email,
       },
-      credits: balance,
     });
 
     // Set secure HttpOnly session cookie

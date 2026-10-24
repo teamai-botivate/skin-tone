@@ -12,7 +12,6 @@ import {
   resetRateLimit,
   getClientIp,
 } from "@/lib/auth";
-import { getCreditBalance } from "@/lib/credits";
 import { logger } from "@/lib/logger";
 
 const LoginRequestSchema = z.object({
@@ -71,9 +70,6 @@ export async function POST(req: Request) {
     // Create secure session in DB
     const sessionToken = await createSession(user.id);
 
-    // Fetch up-to-date credit balance from DB
-    const balance = await getCreditBalance(user.id);
-
     logger.info({ userId: user.id }, "User logged in successfully");
 
     const response = NextResponse.json({
@@ -83,7 +79,6 @@ export async function POST(req: Request) {
         name: user.name,
         email: user.email,
       },
-      credits: balance,
     });
 
     response.cookies.set(SESSION_COOKIE_NAME, sessionToken, getCookieOptions());

@@ -193,19 +193,9 @@ export function AuthModal() {
         </h2>
         <p className="mt-1 text-xs text-[#795548] leading-relaxed">
           {tab === 'login'
-            ? 'Sign in to access your saved looks, credits, and personalized edits.'
-            : 'Get started with 20 free styling credits for AI outfits and visuals.'}
+            ? 'Sign in to access your saved looks and personalized edits.'
+            : 'Create an account to save your personalized looks and style journal.'}
         </p>
-
-        {/* Free Credits Callout for Signup */}
-        {tab === 'signup' && (
-          <div className="mt-3.5 flex items-center gap-2 rounded-2xl border border-[#D9BC96] bg-[#D9BC96]/20 p-3 text-xs text-[#194A49]">
-            <Sparkles size={16} className="text-[#B08A70] shrink-0" />
-            <span>
-              <strong>20 Free Credits</strong> granted instantly upon account creation.
-            </span>
-          </div>
-        )}
 
         {/* Error message banner */}
         {error && (
@@ -357,7 +347,7 @@ export function AuthModal() {
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <>
-                <span>{tab === 'login' ? 'Sign In' : 'Claim 20 Free Credits'}</span>
+                <span>{tab === 'login' ? 'Sign In' : 'Create Account'}</span>
                 <ArrowRight size={15} />
               </>
             )}
@@ -377,7 +367,7 @@ export function AuthModal() {
                 }}
                 className="font-bold text-[#194A49] underline underline-offset-2 hover:opacity-80"
               >
-                Sign up for 20 free credits
+                Create an account
               </button>
             </p>
           ) : (

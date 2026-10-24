@@ -14,5 +14,5 @@ export interface UserSession {
 }
 
 export interface AuthenticatedUser extends User {
-  credits: number;
+  credits?: number;
 }

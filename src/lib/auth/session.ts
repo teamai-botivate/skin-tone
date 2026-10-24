@@ -1,6 +1,5 @@
 import { getDb } from "../db";
 import { User, AuthenticatedUser } from "./types";
-import { getCreditBalance } from "../credits";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -74,15 +73,12 @@ export async function validateSession(token: string): Promise<AuthenticatedUser 
     return null;
   }
 
-  const credits = await getCreditBalance(userRow.id);
-
   return {
     id: userRow.id,
     email: userRow.email,
     name: userRow.name,
     createdAt: userRow.created_at,
     updatedAt: userRow.updated_at,
-    credits,
   };
 }
 

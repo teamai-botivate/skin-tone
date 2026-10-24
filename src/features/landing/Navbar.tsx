@@ -177,7 +177,7 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
             </button>
             <div className="my-2 border-t border-[#B08A70]/30 pt-4 flex flex-col gap-3">
               <div className="flex items-center justify-between pb-2">
-                <span className="text-xs font-bold text-[#194A49]">Account & Credits</span>
+                <span className="text-xs font-bold text-[#194A49]">Account</span>
                 <UserMenu />
               </div>
               <button

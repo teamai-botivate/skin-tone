@@ -35,7 +35,7 @@ export function LookDetail({
   onFeedback: () => void;
   onRefined: (look: LookRecommendation) => void;
 }) {
-  const { user, credits, openAuthModal, refreshUser } = useAuth();
+  const { user, openAuthModal, refreshUser } = useAuth();
   const [showRetry, setShowRetry] = useState(false);
   const [customization, setCustomization] = useState('');
   const [refining, setRefining] = useState(false);
@@ -51,11 +51,6 @@ export function LookDetail({
       });
       return;
     }
-    if (credits < 3) {
-      setGenerateVisualError(`Insufficient credits. Generating an AI visual requires 3 credits, but you have ${credits} available.`);
-      return;
-    }
-
     setGeneratingVisual(true);
     setGenerateVisualError('');
     try {
@@ -89,11 +84,6 @@ export function LookDetail({
       });
       return;
     }
-    if (credits < 3) {
-      setRefineError(`Insufficient credits. Refining a look visual requires 3 credits, but you have ${credits} available.`);
-      return;
-    }
-
     setRefining(true);
     setRefineError('');
     try {
@@ -166,7 +156,7 @@ export function LookDetail({
                     className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm"
                   >
                     {generatingVisual ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                    {generatingVisual ? 'Generating AI Visual…' : 'Generate AI Visual (3 credits)'}
+                    {generatingVisual ? 'Generating AI Visual…' : 'Generate AI Visual'}
                   </button>
                 </div>
                 {generateVisualError && (
@@ -203,7 +193,7 @@ export function LookDetail({
                     className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {refining ? <RefreshCw size={15} className="animate-spin" /> : <Wand2 size={15} />}{' '}
-                    {refining ? 'Regenerating…' : 'Regenerate this look (3 credits)'}
+                    {refining ? 'Regenerating…' : 'Regenerate this look'}
                   </button>
                   <button
                     type="button"

@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        setCredits(data.credits ?? 0);
+        setCredits(0);
       } else {
         setUser(null);
         setCredits(0);
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(json.user);
-      setCredits(json.credits ?? 20);
+      setCredits(0);
       setIsAuthModalOpen(false);
 
       if (authSuccessCallback) {
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setUser(json.user);
-      setCredits(json.credits ?? 0);
+      setCredits(0);
       setIsAuthModalOpen(false);
 
       if (authSuccessCallback) {
