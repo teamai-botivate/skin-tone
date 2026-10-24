@@ -128,20 +128,12 @@ export async function POST(req: Request) {
       );
     }
 
-    // Record failed attempt for rate limiting on actual failures
-    try {
-      const clientIp = getClientIp(req);
-      await recordFailedAttempt(`signup:${clientIp}`, 5, 60 * 60 * 1000, 60 * 60 * 1000);
-    } catch {
-      // ignore
-    }
-
     return NextResponse.json(
       {
         error:
           process.env.NODE_ENV === "development" && err?.message
             ? `Registration failed: ${err.message}`
-            : "Registration failed. Please check your information and try again.",
+            : "Registration failed. Please try again in a moment.",
       },
       { status: 500 },
     );

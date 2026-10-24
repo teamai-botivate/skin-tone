@@ -131,6 +131,10 @@ export async function getAuthenticatedUser(req: Request): Promise<AuthenticatedU
  * Retrieves client IP from request for rate limiting.
  */
 export function getClientIp(req: Request): string {
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) {
+    return cfIp.trim();
+  }
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
     return forwardedFor.split(",")[0].trim();
