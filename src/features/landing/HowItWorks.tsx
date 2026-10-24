@@ -120,7 +120,7 @@ export function HowItWorks({ onStart }: HowItWorksProps) {
             onClick={onStart}
             className="flex items-center gap-2 rounded-full bg-[#D9BC96] px-6 py-3 text-sm font-bold text-[#194A49] transition-all hover:bg-[#cfaf86] hover:shadow-lg shadow-sm"
           >
-            Start Your Style <ArrowRight size={15} />
+            Style Your Way <ArrowRight size={15} />
           </button>
         </div>
       </div>

@@ -102,7 +102,7 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
                   onClick={onStart}
                   className="hover:text-[#194A49] font-medium transition-colors inline-flex items-center gap-1"
                 >
-                  Start Your Style <ArrowUpRight size={13} />
+                  Style Your Way <ArrowUpRight size={13} />
                 </button>
               </li>
               <li>

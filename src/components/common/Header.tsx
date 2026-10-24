@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowLeft, Sparkles, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
+import { UserMenu } from '@/features/auth';
 
 export function Header({
   onBack,
@@ -59,22 +60,9 @@ export function Header({
             </span>
           </div>
         )}
-        {name ? (
-          <button
-            type="button"
-            onClick={onSettings}
-            data-testid="button-profile-menu"
-            className="focus-ring flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-secondary"
-          >
-            <span className="grid size-8 place-items-center rounded-full bg-accent text-sm font-bold text-accent-foreground">
-              {name.slice(0, 1).toUpperCase()}
-            </span>
-            <span className="hidden text-sm font-semibold sm:block">{name}</span>
-            <ChevronDown size={15} className="text-muted-foreground" />
-          </button>
-        ) : (
-          <span className="size-9" />
-        )}
+        <div className="flex items-center gap-3">
+          <UserMenu />
+        </div>
       </div>
     </header>
   );

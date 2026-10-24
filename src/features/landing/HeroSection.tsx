@@ -27,9 +27,9 @@ export function HeroSection({ onStart, onExplore }: HeroSectionProps) {
             </div>
 
             {/* Main Editorial Headline */}
-            <h1 className="mt-6 font-serif text-[clamp(2.75rem,5.5vw,5.2rem)] leading-[0.98] tracking-[-0.04em] text-[#194A49]">
-              Discover what looks <br className="hidden sm:inline" />
-              best on <span className="italic text-[#194A49]">YOU.</span>
+            <h1 className="mt-6 font-serif text-[clamp(2.5rem,5.2vw,5.2rem)] leading-[0.98] tracking-[-0.035em] text-[#194A49]">
+              Your Next Look? <br />
+              <span className="italic text-[#194A49]">LetStyle</span> It.
             </h1>
 
             {/* Clear, immediate product explanation */}
@@ -65,7 +65,7 @@ export function HeroSection({ onStart, onExplore }: HeroSectionProps) {
                 data-testid="button-start"
                 className="group flex min-h-[52px] items-center gap-3 rounded-full bg-[#D9BC96] px-8 py-3.5 text-base font-bold text-[#194A49] shadow-[0_8px_24px_rgba(217,188,150,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#cfaf86] hover:shadow-[0_12px_30px_rgba(217,188,150,0.45)] focus:ring-2 focus:ring-[#D9BC96] focus:outline-none"
               >
-                <span>Start Your Style</span>
+                <span>Style Your Way</span>
                 <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
               </button>
 

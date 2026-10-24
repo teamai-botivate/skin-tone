@@ -6,7 +6,8 @@ import { Header } from '@/components/common/Header';
 import { LookVisual, hasRealImage } from './LookVisual';
 import { refineLookImage, generateOneLookImage } from '../services/image-generation';
 import { ShopLookSection } from '@/features/shopping';
-import { Download, Wand2, RefreshCw, Check, Save, X, Sparkles } from 'lucide-react';
+import { useAuth } from '@/features/auth';
+import { Download, Wand2, RefreshCw, Check, Save, X, Sparkles, Coins } from 'lucide-react';
 
 function downloadLookImage(imageUrl: string, title: string) {
   const link = document.createElement('a');
@@ -34,6 +35,7 @@ export function LookDetail({
   onFeedback: () => void;
   onRefined: (look: LookRecommendation) => void;
 }) {
+  const { user, credits, openAuthModal, refreshUser } = useAuth();
   const [showRetry, setShowRetry] = useState(false);
   const [customization, setCustomization] = useState('');
   const [refining, setRefining] = useState(false);
@@ -43,6 +45,17 @@ export function LookDetail({
   const hasImage = hasRealImage(look.imageUrl);
 
   const submitGenerateVisual = async () => {
+    if (!user) {
+      openAuthModal('signup', () => {
+        submitGenerateVisual();
+      });
+      return;
+    }
+    if (credits < 3) {
+      setGenerateVisualError(`Insufficient credits. Generating an AI visual requires 3 credits, but you have ${credits} available.`);
+      return;
+    }
+
     setGeneratingVisual(true);
     setGenerateVisualError('');
     try {
@@ -54,12 +67,14 @@ export function LookDetail({
         photoUrl || '',
         [],
       );
+      refreshUser();
       if (hasRealImage(updated.imageUrl)) {
         onRefined(updated);
       } else {
         setGenerateVisualError('Image generation timed out or could not complete. Please try again.');
       }
     } catch (err) {
+      refreshUser();
       setGenerateVisualError(err instanceof Error ? err.message : 'Visual generation failed. Please try again.');
     } finally {
       setGeneratingVisual(false);
@@ -68,6 +83,17 @@ export function LookDetail({
 
   const submitRetry = async () => {
     if (!customization.trim()) return;
+    if (!user) {
+      openAuthModal('signup', () => {
+        submitRetry();
+      });
+      return;
+    }
+    if (credits < 3) {
+      setRefineError(`Insufficient credits. Refining a look visual requires 3 credits, but you have ${credits} available.`);
+      return;
+    }
+
     setRefining(true);
     setRefineError('');
     try {
@@ -77,11 +103,13 @@ export function LookDetail({
         { occasion: profile.occasion, details: '' },
         customization.trim(),
       );
+      refreshUser();
       onRefined(refined);
       setShowRetry(false);
       setCustomization('');
     } catch (err) {
-      setRefineError('That retry didn’t go through. Please try again.');
+      refreshUser();
+      setRefineError(err instanceof Error ? err.message : 'That retry didn’t go through. Please try again.');
       console.warn('Refine failed:', err);
     } finally {
       setRefining(false);
@@ -138,7 +166,7 @@ export function LookDetail({
                     className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm"
                   >
                     {generatingVisual ? <RefreshCw size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                    {generatingVisual ? 'Generating AI Visual…' : 'Generate AI Visual'}
+                    {generatingVisual ? 'Generating AI Visual…' : 'Generate AI Visual (3 credits)'}
                   </button>
                 </div>
                 {generateVisualError && (
@@ -175,7 +203,7 @@ export function LookDetail({
                     className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {refining ? <RefreshCw size={15} className="animate-spin" /> : <Wand2 size={15} />}{' '}
-                    {refining ? 'Regenerating…' : 'Regenerate this look'}
+                    {refining ? 'Regenerating…' : 'Regenerate this look (3 credits)'}
                   </button>
                   <button
                     type="button"

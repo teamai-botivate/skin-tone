@@ -112,37 +112,43 @@ async function refineViaImagesEdit(
   return imageUrl;
 }
 
+import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
+
 export async function POST(req: Request) {
-  try {
-    const rawBody = await req.json();
-    const parsed = RefineImageRequestSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request body", details: parsed.error.flatten() }, { status: 400 });
-    }
+  return await executePaidOperation(
+    req,
+    {
+      cost: CREDIT_COSTS.REFINE_IMAGE,
+      operationType: "refine_image",
+      schema: RefineImageRequestSchema,
+      getDescription: (data) => `Look refinement for ${data.look.title}`,
+    },
+    async (data) => {
+      const { look, photoUrl, customization } = data;
 
-    const { look, photoUrl, customization } = parsed.data;
+      if (!look.imageUrl || look.imageUrl.startsWith("/replace-with-generated")) {
+        const err = new Error("This look has no generated image yet to refine.");
+        (err as any).status = 400;
+        throw err;
+      }
 
-    if (!look.imageUrl || look.imageUrl.startsWith("/replace-with-generated")) {
-      return NextResponse.json({ error: "This look has no generated image yet to refine." }, { status: 400 });
-    }
+      const openai = getOpenAIClient();
+      const prompt = buildRefinementPrompt(look, customization, Boolean(photoUrl));
 
-    const openai = getOpenAIClient();
-    const prompt = buildRefinementPrompt(look, customization, Boolean(photoUrl));
+      let imageUrl: string;
+      try {
+        imageUrl = await refineViaResponsesApi(openai, prompt, look.imageUrl, photoUrl);
+      } catch (responsesApiErr) {
+        logger.warn(
+          { err: responsesApiErr, lookId: look.id },
+          "Responses API refinement failed, falling back to images.edit",
+        );
+        imageUrl = await refineViaImagesEdit(openai, prompt, look.imageUrl, photoUrl);
+      }
 
-    let imageUrl: string;
-    try {
-      imageUrl = await refineViaResponsesApi(openai, prompt, look.imageUrl, photoUrl);
-    } catch (responsesApiErr) {
-      logger.warn(
-        { err: responsesApiErr, lookId: look.id },
-        "Responses API refinement failed, falling back to images.edit",
-      );
-      imageUrl = await refineViaImagesEdit(openai, prompt, look.imageUrl, photoUrl);
-    }
-
-    const data = RefineImageResponseSchema.parse({ look: { ...look, imageUrl } });
-    return NextResponse.json(data);
-  } catch (err) {
-    return safeErrorResponse(err, "Failed to refine look image", 502);
-  }
+      return RefineImageResponseSchema.parse({ look: { ...look, imageUrl } });
+    },
+  );
 }
+
+

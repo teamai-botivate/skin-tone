@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
+import { useAuth } from '@/features/auth';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -85,6 +86,7 @@ const wizardScreens: Screen[] = [
 ];
 
 export function LetStyleApp() {
+  const { user, credits, openAuthModal, refreshUser } = useAuth();
   const [screen, setScreen] = useState<Screen>('welcome');
   const [profile, setProfile] = useState<SkinTuneProfile>(initialProfile);
   const [detailId, setDetailId] = useState('look-01');
@@ -96,6 +98,13 @@ export function LetStyleApp() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [deletedNotice, setDeletedNotice] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Sync user's name to profile if not yet set
+  useEffect(() => {
+    if (user?.name && !profile.name) {
+      setProfile((old) => ({ ...old, name: user.name }));
+    }
+  }, [user?.name, profile.name]);
 
   // Load from localStorage on client mount
   useEffect(() => {
@@ -126,6 +135,19 @@ export function LetStyleApp() {
   };
   const saveProfile = () => {
     localStorage.setItem('letstyle-profile', JSON.stringify(profile));
+    if (!user) {
+      openAuthModal('signup', () => {
+        go('generating');
+      });
+      return;
+    }
+    if (credits < 2) {
+      setGenerationError(
+        `Insufficient credits. Generating your 5 complete personalized looks requires 2 credits, but you have ${credits} remaining.`,
+      );
+      go('generating');
+      return;
+    }
     go('generating');
   };
   const openSettings = () => go(profile.name ? 'settings' : 'welcome');
@@ -137,20 +159,23 @@ export function LetStyleApp() {
     let active = true;
     setGenerationError(null);
     getLookRecommendations(profile)
-      .then((recommendations) =>
-        generateLookImages(recommendations, profile, {
+      .then((recommendations) => {
+        refreshUser();
+        return generateLookImages(recommendations, profile, {
           occasion: profile.occasion,
           details: profile.customStyleNotes || '',
-        }),
-      )
+        });
+      })
       .then((result) => {
         if (active) {
+          refreshUser();
           setGeneratedLooks(result);
           go('results');
         }
       })
       .catch((err) => {
         if (active) {
+          refreshUser();
           console.error('Styling recommendation failed:', err);
           setGenerationError(err instanceof Error ? err.message : String(err));
         }

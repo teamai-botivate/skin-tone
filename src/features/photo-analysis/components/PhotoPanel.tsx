@@ -19,7 +19,9 @@ import {
   User,
   Shirt,
   RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
+import { useAuth } from '@/features/auth';
 
 export function PhotoPanel({
   profile,
@@ -32,14 +34,17 @@ export function PhotoPanel({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  const { user, openAuthModal, refreshUser } = useAuth();
   const [status, setStatus] = useState<PhotoStatus>(
     profile.appearance.confidence ? 'good' : 'low-confidence',
   );
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [stageIndex, setStageIndex] = useState(0);
   const [activeCamera, setActiveCamera] = useState<'face' | 'body' | null>(null);
 
   const runAnalysis = (photoUrl: string) => {
+    setAnalysisError(null);
     setAnalyzing(true);
     setStageIndex(0);
     const stepMs = 500;
@@ -49,24 +54,32 @@ export function PhotoPanel({
     const minDisplayMs = stepMs * photoAnalysisStages.length;
     const startedAt = Date.now();
 
-    analyzePhoto(photoUrl).then((result) => {
-      const elapsed = Date.now() - startedAt;
-      const settle = () => {
+    analyzePhoto(photoUrl)
+      .then((result) => {
+        refreshUser();
+        const elapsed = Date.now() - startedAt;
+        const settle = () => {
+          stageTimers.forEach((timer) => window.clearTimeout(timer));
+          setAnalyzing(false);
+          setStatus(result.status);
+          update({
+            appearance: {
+              skinTone: result.skinTone,
+              undertone: result.undertone,
+              confidence: result.confidence,
+              contrast: result.contrast,
+            },
+          });
+        };
+        if (elapsed >= minDisplayMs) settle();
+        else window.setTimeout(settle, minDisplayMs - elapsed);
+      })
+      .catch((err) => {
+        refreshUser();
         stageTimers.forEach((timer) => window.clearTimeout(timer));
         setAnalyzing(false);
-        setStatus(result.status);
-        update({
-          appearance: {
-            skinTone: result.skinTone,
-            undertone: result.undertone,
-            confidence: result.confidence,
-            contrast: result.contrast,
-          },
-        });
-      };
-      if (elapsed >= minDisplayMs) settle();
-      else window.setTimeout(settle, minDisplayMs - elapsed);
-    });
+        setAnalysisError(err instanceof Error ? err.message : String(err));
+      });
   };
 
   const handleFaceCapture = (dataUrl: string) => {
@@ -99,6 +112,25 @@ export function PhotoPanel({
               onCapture={activeCamera === 'face' ? handleFaceCapture : handleBodyCapture}
               onClose={() => setActiveCamera(null)}
             />
+          )}
+
+          {/* Analysis Error Alert */}
+          {analysisError && (
+            <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-700">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-red-500 shrink-0" />
+                <span>{analysisError}</span>
+              </div>
+              {profile.photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => runAnalysis(profile.photoUrl)}
+                  className="rounded-full bg-red-100 px-3 py-1 font-bold text-red-800 hover:bg-red-200"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
           )}
 
           {/* SIDE-BY-SIDE INSTRUCTIONS */}

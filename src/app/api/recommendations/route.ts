@@ -135,46 +135,47 @@ const RESPONSE_JSON_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
+
 export async function POST(req: Request) {
-  try {
-    const rawBody = await req.json();
-    const parsed = RecommendationsRequestSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid request body", details: parsed.error.flatten() },
-        { status: 400 },
-      );
-    }
-
-    const openai = getOpenAIClient();
-    const completion = await openai.chat.completions.create({
-      model: RECOMMENDATION_MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(parsed.data.profile) },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "skintune_recommendations",
-          strict: true,
-          schema: RESPONSE_JSON_SCHEMA,
+  return await executePaidOperation(
+    req,
+    {
+      cost: CREDIT_COSTS.RECOMMENDATIONS,
+      operationType: "recommendations",
+      schema: RecommendationsRequestSchema,
+      description: "5 complete-look styling recommendations",
+    },
+    async (data) => {
+      const openai = getOpenAIClient();
+      const completion = await openai.chat.completions.create({
+        model: RECOMMENDATION_MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: buildUserPrompt(data.profile) },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "skintune_recommendations",
+            strict: true,
+            schema: RESPONSE_JSON_SCHEMA,
+          },
         },
-      },
-    });
+      });
 
-    const raw = completion.choices[0]?.message?.content;
-    if (!raw) throw new Error("Model returned no content");
+      const raw = completion.choices[0]?.message?.content;
+      if (!raw) throw new Error("Model returned no content");
 
-    const modelResult = ModelOutputSchema.parse(JSON.parse(raw));
-    const recommendations: LookRecommendation[] = modelResult.recommendations.map((look) => ({
-      ...look,
-      imageUrl: "/replace-with-generated/pending.webp",
-    }));
+      const modelResult = ModelOutputSchema.parse(JSON.parse(raw));
+      const recommendations: LookRecommendation[] = modelResult.recommendations.map((look) => ({
+        ...look,
+        imageUrl: "/replace-with-generated/pending.webp",
+      }));
 
-    const data = RecommendationsResponseSchema.parse({ recommendations });
-    return NextResponse.json(data);
-  } catch (err) {
-    return safeErrorResponse(err, "Failed to generate recommendations", 502);
-  }
+      return RecommendationsResponseSchema.parse({ recommendations });
+    },
+  );
 }
+
+

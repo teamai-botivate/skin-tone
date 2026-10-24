@@ -11,3 +11,10 @@ node_modules/
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+

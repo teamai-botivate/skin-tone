@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Sparkles, Menu, X, ArrowRight, ShieldCheck, User } from 'lucide-react';
+import { UserMenu } from '@/features/auth';
 
 interface NavbarProps {
   onStart: () => void;
@@ -90,6 +91,8 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
 
         {/* Right CTA Area */}
         <div className="hidden items-center gap-4 md:flex">
+          <UserMenu />
+
           <button
             type="button"
             onClick={onPrivacy}
@@ -117,7 +120,7 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
             data-testid="button-navbar-start"
             className="group flex items-center gap-2 rounded-full bg-[#D9BC96] px-5 py-2.5 text-sm font-bold text-[#194A49] shadow-[0_4px_14px_rgba(217,188,150,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#cfaf86] hover:shadow-[0_6px_20px_rgba(217,188,150,0.45)]"
           >
-            <span>Start Your Style</span>
+            <span>Style Your Way</span>
             <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
           </button>
         </div>
@@ -173,6 +176,10 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
               Color Palette
             </button>
             <div className="my-2 border-t border-[#B08A70]/30 pt-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-2">
+                <span className="text-xs font-bold text-[#194A49]">Account & Credits</span>
+                <UserMenu />
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -205,7 +212,7 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
                 }}
                 className="flex items-center justify-center gap-2 rounded-full bg-[#D9BC96] py-3 text-sm font-bold text-[#194A49] shadow-sm hover:bg-[#cfaf86]"
               >
-                Start Your Style <ArrowRight size={15} />
+                Style Your Way <ArrowRight size={15} />
               </button>
             </div>
           </nav>

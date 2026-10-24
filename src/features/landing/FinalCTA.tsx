@@ -38,7 +38,7 @@ export function FinalCTA({ onStart }: FinalCTAProps) {
             data-testid="button-start-final"
             className="group flex min-h-[58px] items-center gap-3 rounded-full bg-[#D9BC96] px-9 py-4 text-lg font-bold text-[#194A49] shadow-[0_10px_30px_rgba(217,188,150,0.35)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#cfaf86] hover:shadow-[0_16px_40px_rgba(217,188,150,0.5)] focus:ring-4 focus:ring-[#D9BC96]/40 focus:outline-none"
           >
-            <span>Start Your Style</span>
+            <span>Style Your Way</span>
             <ArrowRight size={20} className="transition-transform group-hover:translate-x-1" />
           </button>
         </div>

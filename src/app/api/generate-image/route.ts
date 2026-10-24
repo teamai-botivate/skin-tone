@@ -365,54 +365,59 @@ async function editViaImagesEdit(
   return imageUrl;
 }
 
+import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
+
 export async function POST(req: Request) {
-  try {
-    const rawBody = await req.json();
-    const parsed = GenerateImageRequestSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request body", details: parsed.error.flatten() }, { status: 400 });
-    }
+  return await executePaidOperation(
+    req,
+    {
+      cost: CREDIT_COSTS.GENERATE_IMAGE,
+      operationType: "generate_image",
+      schema: GenerateImageRequestSchema,
+      getOperationId: (data) => data.look.id,
+      getDescription: (data) => `Visual generation for ${data.look.title}`,
+    },
+    async (data) => {
+      const { look, profile, context, photoUrl, siblingVibes } = data;
 
-    const { look, profile, context, photoUrl, siblingVibes } = parsed.data;
+      const openai = getOpenAIClient();
+      const stylingAddendum = photoUrl
+        ? await writeStylingAddendum(openai, look, profile, context, photoUrl, siblingVibes ?? [])
+        : null;
+      const prompt = buildLookEditPrompt(look, profile, context, stylingAddendum);
 
-    const openai = getOpenAIClient();
-    const stylingAddendum = photoUrl
-      ? await writeStylingAddendum(openai, look, profile, context, photoUrl, siblingVibes ?? [])
-      : null;
-    const prompt = buildLookEditPrompt(look, profile, context, stylingAddendum);
+      let imageUrl: string | undefined;
 
-    let imageUrl: string | undefined;
-
-    if (photoUrl) {
-      try {
-        imageUrl = await editViaResponsesApi(openai, prompt, photoUrl);
-      } catch (responsesApiErr) {
-        logger.warn(
-          { err: responsesApiErr, lookId: look.id },
-          "Responses API image edit failed, falling back to images.edit",
-        );
-        imageUrl = await editViaImagesEdit(openai, prompt, photoUrl);
+      if (photoUrl) {
+        try {
+          imageUrl = await editViaResponsesApi(openai, prompt, photoUrl);
+        } catch (responsesApiErr) {
+          logger.warn(
+            { err: responsesApiErr, lookId: look.id },
+            "Responses API image edit failed, falling back to images.edit",
+          );
+          imageUrl = await editViaImagesEdit(openai, prompt, photoUrl);
+        }
+      } else {
+        const result = await openai.images.generate({
+          model: IMAGE_MODEL,
+          prompt,
+          size: "1024x1536",
+          quality: "high",
+          moderation: "low",
+          output_format: "jpeg",
+          output_compression: 90,
+          n: 1,
+        });
+        const image = result.data?.[0];
+        imageUrl = image?.b64_json ? `data:image/jpeg;base64,${image.b64_json}` : image?.url;
       }
-    } else {
-      const result = await openai.images.generate({
-        model: IMAGE_MODEL,
-        prompt,
-        size: "1024x1536",
-        quality: "high",
-        moderation: "low",
-        output_format: "jpeg",
-        output_compression: 90,
-        n: 1,
-      });
-      const image = result.data?.[0];
-      imageUrl = image?.b64_json ? `data:image/jpeg;base64,${image.b64_json}` : image?.url;
-    }
 
-    if (!imageUrl) throw new Error("Image provider returned no image");
+      if (!imageUrl) throw new Error("Image provider returned no image");
 
-    const data = GenerateImageResponseSchema.parse({ look: { ...look, imageUrl } });
-    return NextResponse.json(data);
-  } catch (err) {
-    return safeErrorResponse(err, "Failed to generate look image", 502);
-  }
+      return GenerateImageResponseSchema.parse({ look: { ...look, imageUrl } });
+    },
+  );
 }
+
+

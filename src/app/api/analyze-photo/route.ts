@@ -5,8 +5,8 @@ import {
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient, RECOMMENDATION_MODEL } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
-import { safeErrorResponse } from "@/lib/safe-error";
 import { z } from "zod";
+import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
 
 const SYSTEM_PROMPT = `You are LetStyle's photo-quality and appearance analysis assistant. You are given one photo a user uploaded for styling purposes — most commonly an ordinary phone selfie, not a studio photo.
 
@@ -38,14 +38,13 @@ const ModelOutputSchema = z.object({
   confidence: z.number(),
 });
 
-export async function POST(req: Request) {
-  try {
-    const rawBody = await req.json();
-    const parsed = AnalyzePhotoRequestSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request body", details: parsed.error.flatten() }, { status: 400 });
-    }
+import { getAuthenticatedUser } from "@/lib/auth";
+import { safeErrorResponse } from "@/lib/safe-error";
 
+export async function POST(req: Request) {
+  const user = await getAuthenticatedUser(req);
+
+  const runAnalysis = async (data: z.infer<typeof AnalyzePhotoRequestSchema>) => {
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: RECOMMENDATION_MODEL,
@@ -55,7 +54,7 @@ export async function POST(req: Request) {
           role: "user",
           content: [
             { type: "text", text: "Analyze this photo for styling purposes." },
-            { type: "image_url", image_url: { url: parsed.data.photoUrl } },
+            { type: "image_url", image_url: { url: data.photoUrl } },
           ],
         },
       ],
@@ -94,9 +93,35 @@ export async function POST(req: Request) {
     }
 
     const modelResult = ModelOutputSchema.parse(JSON.parse(raw));
-    const data = AnalyzePhotoResponseSchema.parse(modelResult);
-    return NextResponse.json(data);
-  } catch (err) {
-    return safeErrorResponse(err, "Failed to analyze photo", 502);
+    return { data: AnalyzePhotoResponseSchema.parse(modelResult) };
+  };
+
+  // If unauthenticated guest during onboarding, allow preview analysis directly
+  if (!user) {
+    try {
+      const rawBody = await req.json().catch(() => null);
+      const parsed = AnalyzePhotoRequestSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      }
+      const res = await runAnalysis(parsed.data);
+      return NextResponse.json(res);
+    } catch (err) {
+      logger.warn({ err }, "Guest photo analysis failed");
+      return safeErrorResponse(err, "Photo analysis failed. Please try another photo.", 502);
+    }
   }
+
+  // If authenticated user, execute paid operation with ledger and credit deduction
+  return await executePaidOperation(
+    req,
+    {
+      cost: CREDIT_COSTS.ANALYZE_PHOTO,
+      operationType: "analyze_photo",
+      schema: AnalyzePhotoRequestSchema,
+      description: "AI photo tone and clarity analysis",
+    },
+    runAnalysis,
+  );
 }
+

@@ -118,7 +118,10 @@ export const refineLookImage = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ look, profile: profileForRequest, context, photoUrl: photoUrl || undefined, customization }),
   });
-  if (!res.ok) throw new Error(`Image refinement request failed: ${res.status}`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => null);
+    throw new Error(errData?.error || errData?.message || `Image refinement request failed: ${res.status}`);
+  }
   const data = (await res.json()) as { look: LookRecommendation };
   if (!data.look) throw new Error('Empty image refinement response');
   return data.look;

@@ -54,6 +54,30 @@ const profileFemaleFestive = {
   customStyleNotes: 'Rich emerald green flared lehenga with gold zardozi embroidery and statement jewellery',
 };
 
+let authHeaders = {};
+
+async function authenticateTestUser() {
+  console.log('Authenticating regression test user...');
+  const testEmail = `regression_${Date.now()}@example.com`;
+  const res = await fetch(`${DEV_URL}/api/auth/signup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Regression User',
+      email: testEmail,
+      password: 'Password123!',
+      confirmPassword: 'Password123!',
+    }),
+  });
+  if (res.ok) {
+    const cookie = res.headers.get('set-cookie');
+    if (cookie) {
+      authHeaders = { Cookie: cookie.split(';')[0] };
+      console.log('✓ Successfully authenticated test user with session cookie.\n');
+    }
+  }
+}
+
 async function runCheck1_PersonalizedRecommendations() {
   console.log('================================================================');
   console.log('CHECK 1: Personalized recommendations using actual user inputs');
@@ -62,7 +86,7 @@ async function runCheck1_PersonalizedRecommendations() {
   console.log('\n--> Testing Profile 1: Vikram (Male, Corporate Boardroom, Navy/Charcoal)');
   const res1 = await fetch(`${DEV_URL}/api/recommendations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({ profile: profileMaleFormal }),
   });
   assert.equal(res1.status, 200, 'Vikram recommendations must return 200');
@@ -89,7 +113,7 @@ async function runCheck1_PersonalizedRecommendations() {
   console.log('\n--> Testing Profile 2: Meera (Female, Sangeet Ceremony, Emerald Green/Gold)');
   const res2 = await fetch(`${DEV_URL}/api/recommendations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({ profile: profileFemaleFestive }),
   });
   assert.equal(res2.status, 200, 'Meera recommendations must return 200');
@@ -123,7 +147,7 @@ async function runCheck2_TwoImageGenerations(vLook, mLook) {
   const t0 = Date.now();
   const res1 = await fetch(`${DEV_URL}/api/generate-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       look: vLook,
       profile: profileMaleFormal,
@@ -145,7 +169,7 @@ async function runCheck2_TwoImageGenerations(vLook, mLook) {
   const t1 = Date.now();
   const res2 = await fetch(`${DEV_URL}/api/generate-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       look: mLook,
       profile: profileFemaleFestive,
@@ -180,7 +204,7 @@ async function runCheck3_ProductUrlDestinationCheck(look) {
 
   const res = await fetch(`${DEV_URL}/api/product-recommendations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       look,
       profile: profileFemaleFestive,
@@ -307,7 +331,7 @@ async function runCheck5_MissingOrInvalidConfig() {
   console.log('--> Testing malformed request to /api/recommendations...');
   const resBad = await fetch(`${DEV_URL}/api/recommendations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({ profile: { name: '' } }),
   });
   console.log('  Malformed request status:', resBad.status);
@@ -316,11 +340,21 @@ async function runCheck5_MissingOrInvalidConfig() {
   assert.equal(badData.error, 'Invalid request body');
   console.log('  ✓ Safely returned 400 for malformed input without leaking internals.');
 
+  // Test 1b: Unauthenticated request should return 401
+  console.log('--> Testing unauthenticated request to /api/recommendations...');
+  const resUnauth = await fetch(`${DEV_URL}/api/recommendations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ profile: { name: '' } }),
+  });
+  assert.equal(resUnauth.status, 401, 'Should reject unauthenticated request with 401');
+  console.log('  ✓ Safely returned 401 for unauthenticated request.');
+
   // Test 2: Malformed input to /api/generate-image
   console.log('--> Testing malformed request to /api/generate-image...');
   const resBadImg = await fetch(`${DEV_URL}/api/generate-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({ look: { id: '' } }),
   });
   assert.equal(resBadImg.status, 400);
@@ -332,7 +366,7 @@ async function runCheck5_MissingOrInvalidConfig() {
   console.log('--> Testing malformed request to /api/product-recommendations...');
   const resBadProd = await fetch(`${DEV_URL}/api/product-recommendations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({}),
   });
   assert.equal(resBadProd.status, 400);
@@ -364,7 +398,7 @@ async function runCheck6_ImageGenerationRules() {
   console.log('--> Testing refine attempt on look with placeholder image (/replace-with-generated/...)...');
   const refineRes = await fetch(`${DEV_URL}/api/refine-image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders },
     body: JSON.stringify({
       look: {
         id: 'look-refine-test',
@@ -443,6 +477,7 @@ async function main() {
   console.log('LETSTYLE COMPREHENSIVE FINAL REGRESSION CHECK');
   console.log('################################################################\n');
 
+  await authenticateTestUser();
   const { vLook1, mLook1 } = await runCheck1_PersonalizedRecommendations();
   await runCheck2_TwoImageGenerations(vLook1, mLook1);
   await runCheck3_ProductUrlDestinationCheck(mLook1);

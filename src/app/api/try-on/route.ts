@@ -1,20 +1,18 @@
-import { NextResponse } from "next/server";
 import { TryOnRequestSchema, TryOnResponseSchema } from "@/lib/skintune-schemas";
 import { getVtoProvider } from "@/lib/providers/vto";
-import { logger } from "@/lib/logger";
-import { safeErrorResponse } from "@/lib/safe-error";
+import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
 
 export async function POST(req: Request) {
-  try {
-    const rawBody = await req.json();
-    const parsed = TryOnRequestSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid request body", details: parsed.error.flatten() }, { status: 400 });
-    }
-
-    const { dress, profile, photoUrl } = parsed.data;
-
-    try {
+  return await executePaidOperation(
+    req,
+    {
+      cost: CREDIT_COSTS.TRY_ON,
+      operationType: "try_on",
+      schema: TryOnRequestSchema,
+      description: "Virtual try-on",
+    },
+    async (data) => {
+      const { dress, profile, photoUrl } = data;
       const provider = getVtoProvider();
       const imageUrl = await provider.generateTryOn({
         avatarImageUrl: photoUrl,
@@ -29,13 +27,7 @@ export async function POST(req: Request) {
         },
       });
 
-      const data = TryOnResponseSchema.parse({ imageUrl });
-      return NextResponse.json(data);
-    } catch (err) {
-      return safeErrorResponse(err, "Failed to generate try-on image", 502);
-    }
-  } catch (err) {
-    logger.error({ err }, "Malformed try-on request");
-    return NextResponse.json({ error: "Malformed request" }, { status: 400 });
-  }
+      return TryOnResponseSchema.parse({ imageUrl });
+    },
+  );
 }
