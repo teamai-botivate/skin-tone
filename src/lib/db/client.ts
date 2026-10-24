@@ -9,8 +9,12 @@ export interface DatabaseClient {
   transaction<T>(fn: (tx: DatabaseClient) => Promise<T>): Promise<T>;
 }
 
-let dbInstance: DatabaseClient | null = null;
-let initialized = false;
+declare global {
+  // eslint-disable-next-line no-var
+  var _letstyle_db: DatabaseClient | undefined;
+  // eslint-disable-next-line no-var
+  var _letstyle_db_init_promise: Promise<void> | undefined;
+}
 
 function normalizeSqlForSqlite(sql: string): string {
   // Convert $1, $2, etc. to ? for SQLite
@@ -88,8 +92,10 @@ async function createSqliteClient(dbPath?: string): Promise<DatabaseClient> {
   const resolvedPath = dbPath || path.resolve(process.cwd(), "letstyle.db");
   const sqlite = new DatabaseSync(resolvedPath);
 
-  // Enable WAL mode and foreign keys for optimal performance and concurrency
+  // Enable WAL mode, busy timeout, synchronous mode, and foreign keys for optimal performance and concurrency
   sqlite.exec("PRAGMA journal_mode = WAL;");
+  sqlite.exec("PRAGMA busy_timeout = 10000;");
+  sqlite.exec("PRAGMA synchronous = NORMAL;");
   sqlite.exec("PRAGMA foreign_keys = ON;");
 
   // Mutex to queue concurrent transactions on the SQLite connection
@@ -148,27 +154,37 @@ async function createSqliteClient(dbPath?: string): Promise<DatabaseClient> {
 }
 
 export async function getDb(): Promise<DatabaseClient> {
-  if (dbInstance) {
-    return dbInstance;
+  if (globalThis._letstyle_db) {
+    if (globalThis._letstyle_db_init_promise) {
+      await globalThis._letstyle_db_init_promise;
+    }
+    return globalThis._letstyle_db;
   }
 
   const { isPostgres, url } = getDatabaseConfig();
 
+  let client: DatabaseClient;
   if (isPostgres) {
     logger.info("Connecting to PostgreSQL database");
-    dbInstance = await createPostgresClient(url);
+    client = await createPostgresClient(url);
   } else {
     const sqlitePath = process.env.SQLITE_DB_PATH || path.resolve(process.cwd(), "letstyle.db");
     logger.info({ sqlitePath }, "Using persistent SQLite database");
-    dbInstance = await createSqliteClient(sqlitePath);
+    client = await createSqliteClient(sqlitePath);
   }
 
-  if (!initialized) {
-    await initializeSchema(dbInstance);
-    initialized = true;
+  globalThis._letstyle_db = client;
+
+  if (!globalThis._letstyle_db_init_promise) {
+    globalThis._letstyle_db_init_promise = initializeSchema(client).catch((err) => {
+      globalThis._letstyle_db_init_promise = undefined;
+      throw err;
+    });
   }
 
-  return dbInstance;
+  await globalThis._letstyle_db_init_promise;
+
+  return client;
 }
 
 async function initializeSchema(client: DatabaseClient): Promise<void> {

@@ -11,6 +11,7 @@ import {
   SESSION_COOKIE_NAME,
   checkRateLimit,
   recordFailedAttempt,
+  resetRateLimit,
   getClientIp,
 } from "@/lib/auth";
 import { grantInitialCredits, INITIAL_FREE_CREDITS } from "@/lib/credits";
@@ -84,8 +85,8 @@ export async function POST(req: Request) {
       passwordHash,
     });
 
-    // Record rate limit attempt
-    await recordFailedAttempt(rateLimitKey, 5, 60 * 60 * 1000, 60 * 60 * 1000);
+    // Reset rate limit on successful registration
+    await resetRateLimit(rateLimitKey);
 
     // Grant initial free credits exactly once in DB ledger
     const { balance } = await grantInitialCredits(user.id, INITIAL_FREE_CREDITS);
@@ -109,10 +110,39 @@ export async function POST(req: Request) {
     response.cookies.set(SESSION_COOKIE_NAME, sessionToken, getCookieOptions());
 
     return response;
-  } catch (err) {
+  } catch (err: any) {
     logger.error({ err }, "Registration error");
+
+    const message = err?.message || "";
+    if (message.includes("UNIQUE constraint") || message.includes("duplicate key")) {
+      return NextResponse.json(
+        { error: "An account with this email address already exists. Please log in instead." },
+        { status: 409 },
+      );
+    }
+
+    if (message.includes("database is locked") || message.includes("busy")) {
+      return NextResponse.json(
+        { error: "The server is currently busy. Please wait a moment and try again." },
+        { status: 503 },
+      );
+    }
+
+    // Record failed attempt for rate limiting on actual failures
+    try {
+      const clientIp = getClientIp(req);
+      await recordFailedAttempt(`signup:${clientIp}`, 5, 60 * 60 * 1000, 60 * 60 * 1000);
+    } catch {
+      // ignore
+    }
+
     return NextResponse.json(
-      { error: "Registration failed. Please check your information and try again." },
+      {
+        error:
+          process.env.NODE_ENV === "development" && err?.message
+            ? `Registration failed: ${err.message}`
+            : "Registration failed. Please check your information and try again.",
+      },
       { status: 500 },
     );
   }
