@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     async (data) => {
       const { look, profile, category, forceRefresh } = data;
       const result = await searchProductsForLook(look, profile, category, forceRefresh);
-      return ProductRecommendationsResponseSchema.parse(result);
+      return result;
     },
   );
 }

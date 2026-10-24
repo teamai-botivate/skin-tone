@@ -1,27 +1,30 @@
 import { z } from "zod";
 
 export const LetStyleProfileSchema = z.object({
-  name: z.string(),
-  pronouns: z.string(),
-  ageGroup: z.string(),
+  name: z.string().optional().default(''),
+  pronouns: z.string().optional().default(''),
+  ageGroup: z.string().optional().default(''),
   height: z.string().optional().default(''),
-  photoUrl: z.string().optional(),
-  bodyPhotoUrl: z.string().optional(),
-  appearance: z.object({
-    skinTone: z.string(),
-    undertone: z.string(),
-    confidence: z.number(),
-    contrast: z.string(),
-  }),
+  photoUrl: z.string().optional().default(''),
+  bodyPhotoUrl: z.string().optional().default(''),
+  appearance: z
+    .object({
+      skinTone: z.string().optional().default(''),
+      undertone: z.string().optional().default(''),
+      confidence: z.number().optional().default(0),
+      contrast: z.string().optional().default('Medium'),
+    })
+    .optional()
+    .default({ skinTone: '', undertone: '', confidence: 0, contrast: 'Medium' }),
   bodyBuild: z.string().optional().default(''),
   fit: z.string().optional().default(''),
-  style: z.array(z.string()),
-  colorsLove: z.array(z.string()),
-  colorsAvoid: z.array(z.string()),
-  restrictions: z.array(z.string()),
-  occasion: z.string(),
-  impression: z.array(z.string()),
-  budget: z.string(),
+  style: z.array(z.string()).optional().default([]),
+  colorsLove: z.array(z.string()).optional().default([]),
+  colorsAvoid: z.array(z.string()).optional().default([]),
+  restrictions: z.array(z.string()).optional().default([]),
+  occasion: z.string().optional().default(''),
+  impression: z.array(z.string()).optional().default([]),
+  budget: z.string().optional().default(''),
   customStyleNotes: z.string().optional().default(''),
 });
 export type LetStyleProfile = z.infer<typeof LetStyleProfileSchema>;
@@ -30,31 +33,31 @@ export const SkinTuneProfileSchema = LetStyleProfileSchema;
 export type SkinTuneProfile = LetStyleProfile;
 
 export const LookPieceSchema = z.object({
-  category: z.string(),
-  name: z.string(),
-  detail: z.string(),
+  category: z.string().optional().default('outfit'),
+  name: z.string().optional().default(''),
+  detail: z.string().optional().default(''),
 });
 
 export const LookRecommendationSchema = z.object({
   id: z.string(),
   title: z.string(),
-  note: z.string(),
-  category: z.string().optional(),
-  vibe: z.string().optional(),
-  personaEnergy: z.string().optional(),
-  palette: z.array(z.string()),
-  pieces: z.array(LookPieceSchema),
-  outfit: z.string(),
-  outfitColor: z.string(),
-  jewellery: z.string(),
-  hairstyle: z.string(),
-  makeup: z.string(),
-  accessories: z.string(),
-  footwear: z.string(),
-  reasoning: z.array(z.string()),
-  confidence: z.number(),
-  imageUrl: z.string(),
-  applicableCategories: z.array(z.string()).optional(),
+  note: z.string().optional().default(''),
+  category: z.string().optional().default(''),
+  vibe: z.string().optional().default(''),
+  personaEnergy: z.string().optional().default(''),
+  palette: z.array(z.string()).optional().default([]),
+  pieces: z.array(LookPieceSchema).optional().default([]),
+  outfit: z.string().optional().default(''),
+  outfitColor: z.string().optional().default(''),
+  jewellery: z.string().optional().default(''),
+  hairstyle: z.string().optional().default(''),
+  makeup: z.string().optional().default(''),
+  accessories: z.string().optional().default(''),
+  footwear: z.string().optional().default(''),
+  reasoning: z.array(z.string()).optional().default([]),
+  confidence: z.number().optional().default(90),
+  imageUrl: z.string().optional().default(''),
+  applicableCategories: z.array(z.string()).optional().default([]),
 });
 export type LookRecommendation = z.infer<typeof LookRecommendationSchema>;
 
