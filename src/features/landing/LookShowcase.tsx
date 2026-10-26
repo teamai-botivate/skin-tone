@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Sparkles, Check, ArrowRight, Heart, Gem, Scissors, Shirt, Palette } from 'lucide-react';
 
 interface LookShowcaseProps {
@@ -25,6 +25,23 @@ interface ShowcaseLook {
 
 export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
   const [activeOccasion, setActiveOccasion] = useState<string>('Casual');
+  const [mounted, setMounted] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || videoError) return;
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.play().catch(() => {});
+  }, [mounted, videoError, activeOccasion]);
 
   const looks: Record<string, ShowcaseLook> = {
     Casual: {
@@ -158,51 +175,60 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
         </div>
 
         {/* Detailed Look Feature Layout */}
-        <div className="mt-5 sm:mt-7 grid gap-5 sm:gap-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-          {/* Visual Showcase Card */}
-          <div className="group relative overflow-hidden rounded-xl sm:rounded-[2rem] border border-[#B08A70]/30 bg-white/80 p-1.5 sm:p-2 shadow-lg">
-            <div className="relative aspect-[4/3] sm:aspect-[3/4] w-full overflow-hidden rounded-lg sm:rounded-[1.6rem] bg-[#F0E5D5]">
-              {current.image ? (
+        <div className="mt-5 sm:mt-7 grid gap-5 sm:gap-7 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
+          {/* Visual Showcase Card with Horizontal Video */}
+          <div className="group relative overflow-hidden rounded-xl sm:rounded-[2rem] border border-[#B08A70]/30 bg-white/85 p-1.5 sm:p-2 shadow-lg">
+            <div className="relative aspect-video w-full overflow-hidden rounded-lg sm:rounded-[1.6rem] bg-[#F0E5D5]">
+              {mounted && !videoError ? (
+                <video
+                  ref={videoRef}
+                  poster={current.image || '/images/hero-model.jpg'}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                  onError={() => setVideoError(true)}
+                  className="size-full object-cover object-center transition duration-500 group-hover:scale-105"
+                >
+                  <source src="/model-video2.mp4" type="video/mp4" onError={() => setVideoError(true)} />
+                </video>
+              ) : (
                 <img
-                  src={current.image}
+                  src={current.image || '/images/hero-model.jpg'}
                   alt={`${current.title} visual demonstration`}
                   className="size-full object-cover object-center transition duration-500 group-hover:scale-105"
                 />
-              ) : (
-                <div className="flex size-full items-center justify-center bg-[#F0E5D5]">
-                  <Sparkles size={36} className="text-[#194A49]" />
-                </div>
               )}
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/80 via-black/10 to-transparent" />
+              {/* Ambient vignette overlay */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/10" />
 
               {/* Floating occasion pill */}
-              <div className="absolute top-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/50">
+              <div className="absolute top-2.5 left-2.5 sm:top-3.5 sm:left-3.5 rounded-full bg-white/90 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/50 shadow-sm">
                 {current.occasion} Look
               </div>
 
               {/* Confidence Match Badge */}
-              <div className="absolute top-3 right-3 rounded-full bg-[#194A49] px-2.5 py-0.5 text-[10px] sm:text-xs font-bold text-[#F0E5D5] backdrop-blur-md">
+              <div className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 rounded-full bg-[#194A49] px-2.5 py-0.5 text-[10px] sm:text-xs font-bold text-[#F0E5D5] backdrop-blur-md shadow-sm">
                 {current.confidence}% Confidence
               </div>
 
-              {/* Bottom Card Summary */}
-              <div className="absolute bottom-2.5 inset-x-2.5 sm:bottom-4 sm:inset-x-4 rounded-xl sm:rounded-2xl border border-[#B08A70]/40 bg-white/95 p-2.5 sm:p-3.5 backdrop-blur-md text-[#194A49] shadow-lg">
-                <p className="font-serif text-lg sm:text-xl font-bold text-[#194A49]">{current.title}</p>
-                <p className="text-[11px] sm:text-xs text-[#795548] mt-0.5 line-clamp-1">{current.tagline}</p>
-                <div className="mt-2 flex items-center justify-between border-t border-[#B08A70]/20 pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">Palette:</span>
-                    {current.palette.map((color, idx) => (
-                      <span
-                        key={`${color}-${idx}`}
-                        className="size-3.5 sm:size-4 rounded-full border border-black/15 shadow-sm"
-                        style={{ backgroundColor: color }}
-                        title={color}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[10px] sm:text-[11px] font-semibold text-[#194A49]">Harmonized Formula</span>
+              {/* Sleek bottom summary strip */}
+              <div className="absolute bottom-2 inset-x-2 sm:bottom-3 sm:inset-x-3 rounded-lg sm:rounded-xl border border-[#B08A70]/30 bg-white/90 px-3 py-1.5 sm:px-3.5 sm:py-2 backdrop-blur-md text-[#194A49] shadow-md flex items-center justify-between">
+                <div>
+                  <p className="font-serif text-xs sm:text-sm font-bold text-[#194A49]">{current.title}</p>
+                  <p className="text-[10px] text-[#795548] line-clamp-1">{current.tagline}</p>
+                </div>
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-2">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#795548] hidden sm:inline">Palette:</span>
+                  {current.palette.map((color, idx) => (
+                    <span
+                      key={`${color}-${idx}`}
+                      className="size-3 sm:size-3.5 rounded-full border border-black/15 shadow-sm"
+                      style={{ backgroundColor: color }}
+                      title={color}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
