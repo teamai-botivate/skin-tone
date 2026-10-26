@@ -80,13 +80,6 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
           >
             Beauty
           </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('color-palette')}
-            className="text-sm font-medium text-[#194A49]/80 transition-colors hover:text-[#194A49]"
-          >
-            Color Palette
-          </button>
         </nav>
 
         {/* Right CTA Area */}
@@ -167,13 +160,6 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
               className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
             >
               Beauty & Makeup
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('color-palette')}
-              className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
-            >
-              Color Palette
             </button>
             <div className="my-2 border-t border-[#B08A70]/30 pt-4 flex flex-col gap-3">
               <div className="flex items-center justify-between pb-2">

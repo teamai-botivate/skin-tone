@@ -81,23 +81,23 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
   const occasionList = ['Everyday', 'Work', 'Date Night', 'Wedding', 'Festive', 'Party'];
 
   return (
-    <section className="bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 border-b border-[#B08A70]/30">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+    <section className="bg-[#F0E5D5] text-[#194A49] py-7 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#795548]">
+        <div className="text-center max-w-2xl mx-auto">
+          <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#795548]">
             Jewellery & Occasion Intelligence
           </p>
-          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194A49]">
+          <h2 className="mt-1.5 font-serif text-[clamp(1.4rem,3vw,2.4rem)] leading-[1.1] tracking-tight text-[#194A49]">
             Complete the look.
           </h2>
-          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
+          <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-[#194A49]/75">
             True styling doesn’t end with clothes. LetStyle considers how your jewellery metals, scale, and neckline geometries orchestrate for every specific occasion.
           </p>
         </div>
 
         {/* Occasion Selection Chips */}
-        <div className="mt-12 flex flex-wrap justify-center gap-2.5">
+        <div className="mt-4 sm:mt-6 flex flex-wrap justify-center gap-1.5 sm:gap-2">
           {occasionList.map((occ) => {
             const active = selectedOccasion === occ;
             return (
@@ -105,9 +105,9 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
                 key={occ}
                 type="button"
                 onClick={() => setSelectedOccasion(occ)}
-                className={`focus-ring rounded-full px-6 py-2.5 text-sm font-bold transition-all duration-200 ${
+                className={`focus-ring rounded-full px-3 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
                   active
-                    ? 'bg-[#194A49] text-[#F0E5D5] shadow-md scale-105'
+                    ? 'bg-[#194A49] text-[#F0E5D5] shadow-sm scale-105'
                     : 'bg-white/80 text-[#194A49]/75 hover:bg-white hover:text-[#194A49] border border-[#B08A70]/30'
                 }`}
               >
@@ -118,66 +118,66 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
         </div>
 
         {/* Feature Showcase Grid */}
-        <div className="mt-12 grid gap-10 lg:grid-cols-2 items-center">
+        <div className="mt-6 sm:mt-8 grid gap-5 sm:gap-7 lg:grid-cols-2 items-center">
           {/* Left: Detail Information Card */}
-          <div className="rounded-3xl border border-[#B08A70]/30 bg-white/80 p-8 sm:p-10 shadow-lg">
-            <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-4">
+          <div className="rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/85 p-3.5 sm:p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-xl bg-[#194A49] text-[#D9BC96]">
-                  <Gem size={16} />
+                <span className="grid size-6 sm:size-7 place-items-center rounded-lg bg-[#194A49] text-[#D9BC96]">
+                  <Gem size={13} />
                 </span>
-                <span className="font-serif text-xl font-bold text-[#194A49]">
+                <span className="font-serif text-sm sm:text-base font-bold text-[#194A49]">
                   {current.name} Styling Protocol
                 </span>
               </div>
-              <span className="rounded-full bg-[#B08A70]/15 px-3 py-1 text-xs font-bold text-[#795548]">
+              <span className="rounded-full bg-[#B08A70]/15 px-2 py-0.5 text-[9px] sm:text-[10px] font-bold text-[#795548]">
                 Curated Harmony
               </span>
             </div>
 
-            <div className="mt-6 space-y-6">
+            <div className="mt-3 space-y-2.5 sm:space-y-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">
                   Recommended Metal
                 </p>
-                <p className="mt-1 text-lg font-serif font-semibold text-[#194A49]">
+                <p className="mt-0.5 text-sm sm:text-base font-serif font-semibold text-[#194A49]">
                   {current.metal}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">
                   Jewellery Strategy
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#194A49]/85 leading-relaxed">
+                <p className="mt-0.5 text-xs sm:text-sm font-medium text-[#194A49]/85 leading-relaxed">
                   {current.jewelleryFocus}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">
                   Neckline Compatibility
                 </p>
-                <p className="mt-1 text-sm font-medium text-[#194A49]/85 leading-relaxed">
+                <p className="mt-0.5 text-xs sm:text-sm font-medium text-[#194A49]/85 leading-relaxed">
                   {current.necklineMatch}
                 </p>
               </div>
 
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">
                   Occasion Atmosphere
                 </p>
-                <p className="mt-1 text-sm text-[#194A49]/75 leading-relaxed">
+                <p className="mt-0.5 text-[11px] sm:text-xs text-[#194A49]/75 leading-relaxed line-clamp-2">
                   {current.vibe}
                 </p>
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-[#B08A70]/20 flex flex-wrap gap-2">
+            <div className="mt-3.5 pt-2.5 border-t border-[#B08A70]/20 flex flex-wrap gap-1 sm:gap-1.5">
               {current.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-[#B08A70]/30 bg-[#B08A70]/10 px-3 py-1 text-xs font-semibold text-[#795548]"
+                  className="rounded-full border border-[#B08A70]/30 bg-[#B08A70]/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-[#795548]"
                 >
                   ✓ {tag}
                 </span>
@@ -193,16 +193,16 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
                   onStart();
                 }
               }}
-              className="mt-8 w-full flex items-center justify-center gap-2 rounded-full bg-[#D9BC96] py-3.5 text-sm font-bold text-[#194A49] transition hover:bg-[#cfaf86] shadow-sm"
+              className="mt-3.5 sm:mt-4 w-full flex items-center justify-center gap-2 rounded-full bg-[#D9BC96] py-2.5 text-xs sm:text-sm font-bold text-[#194A49] transition hover:bg-[#cfaf86] shadow-sm"
             >
               <span>Get Recommendations for {current.name}</span>
-              <ArrowRight size={15} />
+              <ArrowRight size={13} />
             </button>
           </div>
 
           {/* Right: Editorial Flatlay / Product Visual */}
-          <div className="relative overflow-hidden rounded-3xl border border-[#B08A70]/30 bg-white/80 p-2 shadow-xl">
-            <div className="relative aspect-[4/3] sm:aspect-square w-full overflow-hidden rounded-[1.6rem] bg-[#F0E5D5]">
+          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/80 p-1.5 sm:p-2 shadow-sm">
+            <div className="relative aspect-[16/10] sm:aspect-square w-full overflow-hidden rounded-lg sm:rounded-xl bg-[#F0E5D5]">
               <img
                 src={current.image}
                 alt={`${current.name} jewellery and accessories inspiration`}
@@ -210,14 +210,14 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/70 via-transparent to-transparent" />
 
-              <div className="absolute bottom-5 inset-x-5 rounded-2xl border border-[#B08A70]/40 bg-white/95 p-4 text-[#194A49] backdrop-blur-md shadow-lg">
-                <p className="text-[10px] uppercase font-bold tracking-widest text-[#795548]">
+              <div className="absolute bottom-2.5 inset-x-2.5 sm:bottom-4 sm:inset-x-4 rounded-lg sm:rounded-xl border border-[#B08A70]/40 bg-white/95 p-2.5 sm:p-3 text-[#194A49] backdrop-blur-md shadow-md">
+                <p className="text-[8px] sm:text-[9px] uppercase font-bold tracking-widest text-[#795548]">
                   Occasion-Synchronized
                 </p>
-                <p className="font-serif text-lg font-semibold mt-0.5 text-[#194A49]">
+                <p className="font-serif text-sm sm:text-base font-semibold mt-0.5 text-[#194A49]">
                   Complete {current.name} Ensemble
                 </p>
-                <p className="text-xs text-[#194A49]/75 mt-1">
+                <p className="text-[11px] sm:text-xs text-[#194A49]/75 mt-0.5 line-clamp-1">
                   Coordinated metals, bag proportions, and footwear heights.
                 </p>
               </div>

@@ -109,19 +109,19 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
   const occasionsList = ['Casual', 'Work', 'Date Night', 'Festive', 'Party'];
 
   return (
-    <section id="looks-showcase" className="bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 border-b border-[#B08A70]/30">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+    <section id="looks-showcase" className="bg-[#F0E5D5] text-[#194A49] py-7 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+        <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:items-end">
           <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#795548]">
+            <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#795548]">
               Personalized Looks & OOTDs
             </p>
-            <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194A49]">
+            <h2 className="mt-1.5 font-serif text-[clamp(1.4rem,3vw,2.4rem)] leading-[1.1] tracking-tight text-[#194A49]">
               One person. <br />
               Different possibilities.
             </h2>
-            <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
+            <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-[#194A49]/75">
               Notice how the outfit, jewellery metals, makeup intensity, and color balance seamlessly adapt across moments — while keeping your personal identity front and center.
             </p>
           </div>
@@ -130,14 +130,14 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
           <button
             type="button"
             onClick={onStart}
-            className="flex items-center gap-2 rounded-full bg-[#D9BC96] px-6 py-3 text-sm font-bold text-[#194A49] shadow-sm transition hover:bg-[#cfaf86]"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-[#D9BC96] px-4 py-2 sm:px-5 sm:py-2.5 text-xs sm:text-sm font-bold text-[#194A49] shadow-sm transition hover:bg-[#cfaf86] shrink-0"
           >
-            Create My 5 Looks <ArrowRight size={15} />
+            Create My 5 Looks <ArrowRight size={13} />
           </button>
         </div>
 
         {/* Occasion Filter Tabs */}
-        <div className="mt-12 flex flex-wrap gap-2.5 border-b border-[#B08A70]/20 pb-4">
+        <div className="mt-4 sm:mt-6 flex flex-wrap gap-1.5 sm:gap-2 border-b border-[#B08A70]/20 pb-2.5">
           {occasionsList.map((occ) => {
             const active = activeOccasion === occ;
             return (
@@ -145,9 +145,9 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
                 key={occ}
                 type="button"
                 onClick={() => setActiveOccasion(occ)}
-                className={`focus-ring rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200 ${
+                className={`focus-ring rounded-full px-3 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
                   active
-                    ? 'bg-[#194A49] text-[#F0E5D5] shadow-md scale-105'
+                    ? 'bg-[#194A49] text-[#F0E5D5] shadow-sm scale-105'
                     : 'bg-white/80 text-[#194A49]/70 hover:bg-white hover:text-[#194A49] border border-[#B08A70]/30'
                 }`}
               >
@@ -158,10 +158,10 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
         </div>
 
         {/* Detailed Look Feature Layout */}
-        <div className="mt-10 grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div className="mt-5 sm:mt-7 grid gap-5 sm:gap-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           {/* Visual Showcase Card */}
-          <div className="group relative overflow-hidden rounded-[2rem] border border-[#B08A70]/30 bg-white/80 p-2 shadow-xl">
-            <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[1.6rem] bg-[#F0E5D5]">
+          <div className="group relative overflow-hidden rounded-xl sm:rounded-[2rem] border border-[#B08A70]/30 bg-white/80 p-1.5 sm:p-2 shadow-lg">
+            <div className="relative aspect-[4/3] sm:aspect-[3/4] w-full overflow-hidden rounded-lg sm:rounded-[1.6rem] bg-[#F0E5D5]">
               {current.image ? (
                 <img
                   src={current.image}
@@ -170,39 +170,39 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
                 />
               ) : (
                 <div className="flex size-full items-center justify-center bg-[#F0E5D5]">
-                  <Sparkles size={40} className="text-[#194A49]" />
+                  <Sparkles size={36} className="text-[#194A49]" />
                 </div>
               )}
               {/* Gradient overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/80 via-black/10 to-transparent" />
 
               {/* Floating occasion pill */}
-              <div className="absolute top-4 left-4 rounded-full bg-white/90 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/50">
+              <div className="absolute top-3 left-3 rounded-full bg-white/90 px-3 py-1 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/50">
                 {current.occasion} Look
               </div>
 
               {/* Confidence Match Badge */}
-              <div className="absolute top-4 right-4 rounded-full bg-[#194A49] px-3 py-1 text-xs font-bold text-[#F0E5D5] backdrop-blur-md">
+              <div className="absolute top-3 right-3 rounded-full bg-[#194A49] px-2.5 py-0.5 text-[10px] sm:text-xs font-bold text-[#F0E5D5] backdrop-blur-md">
                 {current.confidence}% Confidence
               </div>
 
               {/* Bottom Card Summary */}
-              <div className="absolute bottom-4 inset-x-4 rounded-2xl border border-[#B08A70]/40 bg-white/95 p-4 backdrop-blur-md text-[#194A49] shadow-lg">
-                <p className="font-serif text-2xl font-bold text-[#194A49]">{current.title}</p>
-                <p className="text-xs text-[#795548] mt-1">{current.tagline}</p>
-                <div className="mt-3 flex items-center justify-between border-t border-[#B08A70]/20 pt-3">
+              <div className="absolute bottom-2.5 inset-x-2.5 sm:bottom-4 sm:inset-x-4 rounded-xl sm:rounded-2xl border border-[#B08A70]/40 bg-white/95 p-2.5 sm:p-3.5 backdrop-blur-md text-[#194A49] shadow-lg">
+                <p className="font-serif text-lg sm:text-xl font-bold text-[#194A49]">{current.title}</p>
+                <p className="text-[11px] sm:text-xs text-[#795548] mt-0.5 line-clamp-1">{current.tagline}</p>
+                <div className="mt-2 flex items-center justify-between border-t border-[#B08A70]/20 pt-2">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#795548]">Palette:</span>
+                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">Palette:</span>
                     {current.palette.map((color, idx) => (
                       <span
                         key={`${color}-${idx}`}
-                        className="size-4 rounded-full border border-black/15 shadow-sm"
+                        className="size-3.5 sm:size-4 rounded-full border border-black/15 shadow-sm"
                         style={{ backgroundColor: color }}
                         title={color}
                       />
                     ))}
                   </div>
-                  <span className="text-[11px] font-semibold text-[#194A49]">Harmonized Formula</span>
+                  <span className="text-[10px] sm:text-[11px] font-semibold text-[#194A49]">Harmonized Formula</span>
                 </div>
               </div>
             </div>
@@ -211,85 +211,85 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
           {/* Structured Look Details Grid */}
           <div className="flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#795548]">
-                <Sparkles size={14} className="text-[#795548]" />
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#795548]">
+                <Sparkles size={13} className="text-[#795548]" />
                 <span>Pillar Breakdown</span>
               </div>
-              <h3 className="mt-2 font-serif text-3xl font-bold tracking-tight text-[#194A49]">
+              <h3 className="mt-1 font-serif text-xl sm:text-2xl font-bold tracking-tight text-[#194A49]">
                 {current.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-[#194A49]/80">
+              <p className="mt-1 text-xs sm:text-sm leading-relaxed text-[#194A49]/80">
                 {current.tagline}
               </p>
 
               {/* 4 Category Spec Cards */}
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 sm:mt-5 grid gap-2.5 sm:grid-cols-2">
                 {/* Outfit */}
-                <div className="rounded-2xl border border-[#B08A70]/30 bg-white/80 p-4 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
-                      <Shirt size={14} />
+                <div className="rounded-xl border border-[#B08A70]/30 bg-white/85 p-2.5 sm:p-3 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid size-6 sm:size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
+                      <Shirt size={13} />
                     </span>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">Outfit & Fit</p>
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#795548]">Outfit & Fit</p>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[#194A49] leading-snug">
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-[#194A49] leading-snug">
                     {current.outfit}
                   </p>
                 </div>
 
                 {/* Jewellery */}
-                <div className="rounded-2xl border border-[#B08A70]/30 bg-white/80 p-4 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
-                      <Gem size={14} />
+                <div className="rounded-xl border border-[#B08A70]/30 bg-white/85 p-2.5 sm:p-3 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid size-6 sm:size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
+                      <Gem size={13} />
                     </span>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">Jewellery</p>
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#795548]">Jewellery</p>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[#194A49] leading-snug">
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-[#194A49] leading-snug">
                     {current.jewellery}
                   </p>
                 </div>
 
                 {/* Makeup */}
-                <div className="rounded-2xl border border-[#B08A70]/30 bg-white/80 p-4 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
-                      <Sparkles size={14} />
+                <div className="rounded-xl border border-[#B08A70]/30 bg-white/85 p-2.5 sm:p-3 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid size-6 sm:size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
+                      <Sparkles size={13} />
                     </span>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">Makeup Formula</p>
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#795548]">Makeup Formula</p>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[#194A49] leading-snug">
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-[#194A49] leading-snug">
                     {current.makeup}
                   </p>
                 </div>
 
                 {/* Hairstyle */}
-                <div className="rounded-2xl border border-[#B08A70]/30 bg-white/80 p-4 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
-                      <Scissors size={14} />
+                <div className="rounded-xl border border-[#B08A70]/30 bg-white/85 p-2.5 sm:p-3 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid size-6 sm:size-7 place-items-center rounded-lg bg-[#B08A70]/15 text-[#194A49]">
+                      <Scissors size={13} />
                     </span>
-                    <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">Hairstyle</p>
+                    <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-[#795548]">Hairstyle</p>
                   </div>
-                  <p className="mt-2 text-sm font-semibold text-[#194A49] leading-snug">
+                  <p className="mt-1 text-xs sm:text-sm font-semibold text-[#194A49] leading-snug">
                     {current.hair}
                   </p>
                 </div>
               </div>
 
               {/* Reasoning Box */}
-              <div className="mt-5 rounded-2xl border border-[#B08A70]/30 bg-[#B08A70]/10 p-4.5 text-[#194A49]">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#795548]">
+              <div className="mt-3 rounded-xl border border-[#B08A70]/30 bg-[#B08A70]/10 p-3 text-[#194A49]">
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#795548]">
                   Why LetStyle Chose This
                 </p>
-                <p className="mt-1.5 text-sm text-[#194A49]/85 leading-relaxed">
+                <p className="mt-0.5 text-[11px] sm:text-xs text-[#194A49]/85 leading-relaxed">
                   {current.reasoning}
                 </p>
               </div>
             </div>
 
             {/* Quick Action Button for this occasion */}
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3.5">
               <button
                 type="button"
                 onClick={() => {
@@ -299,12 +299,12 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
                     onStart();
                   }
                 }}
-                className="flex items-center gap-2 rounded-full bg-[#D9BC96] px-6 py-3 text-sm font-bold text-[#194A49] transition hover:bg-[#cfaf86] shadow-sm"
+                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-[#D9BC96] px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-[#194A49] transition hover:bg-[#cfaf86] shadow-sm"
               >
                 <span>Style Me for {current.occasion}</span>
-                <ArrowRight size={15} />
+                <ArrowRight size={13} />
               </button>
-              <span className="text-xs text-[#795548]">
+              <span className="text-[10px] sm:text-xs text-[#795548]">
                 Adapts instantly to your personal build & coloring
               </span>
             </div>

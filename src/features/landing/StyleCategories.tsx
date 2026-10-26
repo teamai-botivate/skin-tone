@@ -77,62 +77,62 @@ export function StyleCategories({ onSelectCategory, onStart }: StyleCategoriesPr
   ];
 
   return (
-    <section id="categories" className="bg-[#F0E5D5] text-[#194A49] py-20 lg:py-28 border-b border-[#B08A70]/30">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
+    <section id="categories" className="bg-[#F0E5D5] text-[#194A49] py-7 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#795548]">
+        <div className="text-center max-w-2xl mx-auto">
+          <p className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#795548]">
             Comprehensive Appearance Intelligence
           </p>
-          <h2 className="mt-3 font-serif text-[clamp(2.25rem,4.5vw,4rem)] leading-[1.05] tracking-tight text-[#194A49]">
+          <h2 className="mt-1.5 font-serif text-[clamp(1.4rem,3vw,2.4rem)] leading-[1.1] tracking-tight text-[#194A49]">
             Your complete personal <br className="hidden sm:inline" />
             styling guide.
           </h2>
-          <p className="mt-4 text-base sm:text-lg leading-relaxed text-[#194A49]/75">
-            LetStyle brings beauty and fashion intelligence together in one seamless experience.
-            Rather than generic trends, we harmonize what suits your specific coloring, build, and lifestyle.
+          <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-[#194A49]/75">
+            LetStyle brings beauty and fashion intelligence together in one seamless experience,
+            harmonizing what suits your specific coloring, build, and lifestyle.
           </p>
         </div>
 
         {/* 6 Grid Cards */}
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-5 sm:mt-7 grid gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((cat) => {
             const Icon = cat.icon;
             return (
               <div
                 key={cat.id}
-                className="group relative flex flex-col justify-between rounded-3xl border border-[#B08A70]/30 bg-white/80 p-7 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-[#B08A70]/60 hover:bg-white hover:shadow-xl"
+                className="group relative flex flex-col justify-between rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/85 p-3 sm:p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#B08A70]/60 hover:bg-white hover:shadow-md"
               >
                 <div>
                   {/* Card Top: Icon & Badge */}
                   <div className="flex items-center justify-between">
-                    <span className="grid size-12 place-items-center rounded-2xl bg-[#194A49] text-[#D9BC96] shadow-sm transition-transform duration-300 group-hover:scale-110">
-                      <Icon size={22} strokeWidth={2} />
+                    <span className="grid size-7 sm:size-8 place-items-center rounded-lg bg-[#194A49] text-[#D9BC96] shadow-sm transition-transform duration-300 group-hover:scale-105">
+                      <Icon size={14} strokeWidth={2} />
                     </span>
-                    <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${cat.badgeColor}`}>
+                    <span className={`rounded-full border px-2 py-0.5 text-[8px] sm:text-[9px] font-bold uppercase tracking-wider ${cat.badgeColor}`}>
                       {cat.tag}
                     </span>
                   </div>
 
                   {/* Card Title & Headline */}
-                  <h3 className="mt-6 font-serif text-2xl font-bold tracking-tight text-[#194A49]">
+                  <h3 className="mt-2 font-serif text-sm sm:text-base font-bold tracking-tight text-[#194A49]">
                     {cat.title}
                   </h3>
-                  <p className="mt-2 text-base font-semibold leading-snug text-[#795548]">
+                  <p className="mt-0.5 text-xs sm:text-sm font-medium leading-snug text-[#795548] line-clamp-2">
                     {cat.headline}
                   </p>
-                  <p className="mt-3 text-sm leading-relaxed text-[#194A49]/70">
+                  <p className="hidden sm:block mt-1 text-[11px] sm:text-xs leading-relaxed text-[#194A49]/70 line-clamp-2">
                     {cat.description}
                   </p>
                 </div>
 
                 {/* Highlights tags */}
-                <div className="mt-6 border-t border-[#B08A70]/20 pt-5">
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="mt-2.5 border-t border-[#B08A70]/20 pt-2">
+                  <div className="flex flex-wrap gap-1 sm:gap-1.5">
                     {cat.highlights.map((item) => (
                       <span
                         key={item}
-                        className="rounded-lg bg-[#194A49]/8 px-2.5 py-1 text-[11px] font-medium text-[#194A49]/80"
+                        className="rounded-md bg-[#194A49]/8 px-1.5 py-0.5 text-[8px] sm:text-[9px] font-medium text-[#194A49]/80"
                       >
                         {item}
                       </span>
@@ -148,10 +148,10 @@ export function StyleCategories({ onSelectCategory, onStart }: StyleCategoriesPr
                       }
                       onStart();
                     }}
-                    className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#194A49] transition-colors group-hover:text-[#795548]"
+                    className="mt-2 inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#194A49] transition-colors group-hover:text-[#795548]"
                   >
                     <span>Explore {cat.title}</span>
-                    <ArrowUpRight size={14} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                    <ArrowUpRight size={11} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   </button>
                 </div>
               </div>

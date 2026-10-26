@@ -15,9 +15,9 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
   };
 
   return (
-    <footer className="border-t border-[#B08A70]/30 bg-[#F0E5D5] text-[#194A49] py-16">
-      <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <div className="grid gap-10 md:grid-cols-4">
+    <footer className="border-t border-[#B08A70]/30 bg-[#F0E5D5] text-[#194A49] py-8 sm:py-12">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid gap-6 sm:gap-10 md:grid-cols-4">
           {/* Brand Col */}
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5">
@@ -78,15 +78,6 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
                   Beauty & Makeup
                 </button>
               </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => scrollTo('color-palette')}
-                  className="hover:text-[#194A49] hover:underline underline-offset-4 transition-colors"
-                >
-                  Color Palette System
-                </button>
-              </li>
             </ul>
           </div>
 
@@ -124,7 +115,7 @@ export function LandingFooter({ onStart, onPrivacy }: LandingFooterProps) {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-[#B08A70]/30 pt-8 text-xs text-[#795548] sm:flex-row">
+        <div className="mt-7 sm:mt-10 flex flex-col items-center justify-between gap-3 border-t border-[#B08A70]/30 pt-4 sm:pt-6 text-xs text-[#795548] sm:flex-row">
           <span>© 2025 LetStyle. All rights reserved.</span>
           <span>Teal · Mocha · Linen</span>
         </div>

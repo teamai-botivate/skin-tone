@@ -6,7 +6,6 @@ import { HowItWorks } from './HowItWorks';
 import { LookShowcase } from './LookShowcase';
 import { BeautySection } from './BeautySection';
 import { OccasionSection } from './OccasionSection';
-import { ColorPaletteSection } from './ColorPaletteSection';
 import { AiVisualizationSection } from './AiVisualizationSection';
 import { FinalCTA } from './FinalCTA';
 import { LandingFooter } from './LandingFooter';
@@ -76,12 +75,7 @@ export function LandingPage({
         onQuickStart={onQuickStart}
       />
 
-      {/* 8. Personal Color Palette */}
-      <ColorPaletteSection
-        onStart={onStart}
-      />
-
-      {/* 9. AI-Generated Looks / Visualizations */}
+      {/* 8. AI-Generated Looks / Visualizations */}
       <AiVisualizationSection
         onStart={onStart}
       />

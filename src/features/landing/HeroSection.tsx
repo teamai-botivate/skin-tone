@@ -27,32 +27,32 @@ export function HeroSection({ onStart, onExplore }: HeroSectionProps) {
   }, [mounted, videoError]);
 
   return (
-    <section className="relative overflow-hidden bg-[#F0E5D5] text-[#194A49] py-10 sm:py-12 lg:py-16 border-b border-[#B08A70]/30">
+    <section className="relative overflow-hidden bg-[#F0E5D5] text-[#194A49] py-6 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
       {/* Ambient background glow accents in warm champagne and soft mocha */}
       <div className="pointer-events-none absolute -left-32 top-0 size-96 rounded-full bg-[#D9BC96]/30 blur-[130px]" />
       <div className="pointer-events-none absolute right-0 top-1/4 size-[32rem] rounded-full bg-[#B08A70]/20 blur-[140px]" />
       <div className="pointer-events-none absolute bottom-0 left-1/3 size-80 rounded-full bg-[#D9BC96]/20 blur-[110px]" />
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-8 sm:gap-10 lg:grid-cols-[0.88fr_1.32fr] lg:gap-12 xl:gap-16">
+        <div className="grid items-center gap-6 sm:gap-10 lg:grid-cols-[0.88fr_1.32fr] lg:gap-12 xl:gap-16">
           {/* Left Column: Editorial Headline & Messaging */}
           <div className="animate-rise z-10">
             {/* Eyebrow badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-[#B08A70]/15 px-3 py-1 sm:px-3.5 sm:py-1.5 backdrop-blur-sm">
-              <Sparkles size={14} className="text-[#795548]" />
-              <span className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.2em] text-[#795548]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-[#B08A70]/15 px-2.5 py-0.5 sm:px-3 sm:py-1.5 backdrop-blur-sm">
+              <Sparkles size={13} className="text-[#795548]" />
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.2em] text-[#795548]">
                 AI Personal Styling & Beauty
               </span>
             </div>
 
             {/* Main Editorial Headline */}
-            <h1 className="mt-4 font-serif text-[clamp(2.1rem,4.2vw,3.75rem)] leading-[1.03] tracking-[-0.035em] text-[#194A49]">
+            <h1 className="mt-2.5 sm:mt-4 font-serif text-[clamp(1.85rem,3.8vw,3.75rem)] leading-[1.04] tracking-tight text-[#194A49]">
               Your Next Look? <br />
               <span className="italic text-[#194A49]">LetStyle</span> It.
             </h1>
 
             {/* Clear, immediate product explanation */}
-            <p className="mt-3.5 sm:mt-4 max-w-lg text-sm sm:text-base lg:text-lg leading-relaxed text-[#194A49]/85">
+            <p className="mt-2.5 sm:mt-4 max-w-lg text-xs sm:text-base lg:text-lg leading-relaxed text-[#194A49]/85">
               Personalized recommendations for your <strong className="font-semibold text-[#194A49]">makeup</strong>,{' '}
               <strong className="font-semibold text-[#194A49]">outfits</strong>,{' '}
               <strong className="font-semibold text-[#194A49]">jewellery</strong>,{' '}
@@ -61,54 +61,54 @@ export function HeroSection({ onStart, onExplore }: HeroSectionProps) {
             </p>
 
             {/* Pillar Chips for quick 5-second understanding */}
-            <div className="mt-4 sm:mt-5 flex flex-wrap gap-2 text-xs">
+            <div className="mt-3 sm:mt-5 flex flex-wrap gap-1.5 sm:gap-2 text-[11px] sm:text-xs">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B08A70]/40 bg-white/85 px-2.5 py-1 sm:px-3 sm:py-1.5 font-medium text-[#194A49] shadow-sm">
-                <Palette size={13} className="text-[#795548]" /> Color Undertones
+                <Palette size={12} className="text-[#795548]" /> Color Undertones
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B08A70]/40 bg-white/85 px-2.5 py-1 sm:px-3 sm:py-1.5 font-medium text-[#194A49] shadow-sm">
-                <Eye size={13} className="text-[#795548]" /> Personalized Makeup
+                <Eye size={12} className="text-[#795548]" /> Personalized Makeup
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B08A70]/40 bg-white/85 px-2.5 py-1 sm:px-3 sm:py-1.5 font-medium text-[#194A49] shadow-sm">
-                <Compass size={13} className="text-[#795548]" /> Complete OOTD
+                <Compass size={12} className="text-[#795548]" /> Complete OOTD
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-[#B08A70]/40 bg-white/85 px-2.5 py-1 sm:px-3 sm:py-1.5 font-medium text-[#194A49] shadow-sm">
-                <Sparkles size={13} className="text-[#795548]" /> Jewellery & Hair
+                <Sparkles size={12} className="text-[#795548]" /> Jewellery & Hair
               </span>
             </div>
 
             {/* Action Buttons */}
-            <div className="mt-6 sm:mt-7 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3.5">
+            <div className="mt-5 sm:mt-7 flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3.5">
               <button
                 type="button"
                 onClick={onStart}
                 data-testid="button-start"
-                className="group flex min-h-[50px] items-center justify-center gap-2.5 rounded-full bg-[#D9BC96] px-7 py-3 text-base font-bold text-[#194A49] shadow-[0_8px_24px_rgba(217,188,150,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#cfaf86] hover:shadow-[0_12px_30px_rgba(217,188,150,0.45)] focus:ring-2 focus:ring-[#D9BC96] focus:outline-none"
+                className="group flex min-h-[46px] sm:min-h-[50px] items-center justify-center gap-2 rounded-full bg-[#D9BC96] px-6 py-2.5 text-sm sm:text-base font-bold text-[#194A49] shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#cfaf86] hover:shadow-lg focus:ring-2 focus:ring-[#D9BC96] focus:outline-none"
               >
                 <span>Style Your Way</span>
-                <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
               </button>
 
               <button
                 type="button"
                 onClick={onExplore}
-                className="flex min-h-[50px] items-center justify-center gap-2 rounded-full border border-[#194A49]/30 bg-white/60 px-6 py-3 text-sm font-semibold text-[#194A49] backdrop-blur-sm transition-all duration-200 hover:border-[#194A49]/60 hover:bg-white"
+                className="flex min-h-[46px] sm:min-h-[50px] items-center justify-center gap-2 rounded-full border border-[#194A49]/30 bg-white/60 px-5 py-2.5 text-xs sm:text-sm font-semibold text-[#194A49] backdrop-blur-sm transition-all duration-200 hover:border-[#194A49]/60 hover:bg-white"
               >
                 Explore Styling
               </button>
             </div>
 
             {/* Reassurance & Trust Bar */}
-            <div className="mt-6 sm:mt-7 flex flex-wrap items-center gap-3.5 sm:gap-6 border-t border-[#B08A70]/30 pt-4 sm:pt-5 text-xs text-[#795548]">
+            <div className="mt-5 sm:mt-7 flex flex-wrap items-center gap-3 sm:gap-6 border-t border-[#B08A70]/30 pt-3.5 sm:pt-5 text-[11px] sm:text-xs text-[#795548]">
               <span className="flex items-center gap-1.5">
-                <Shield size={14} className="text-[#795548]" />
+                <Shield size={13} className="text-[#795548]" />
                 Private by design (in-browser)
               </span>
               <span className="flex items-center gap-1.5">
-                <Sparkles size={14} className="text-[#795548]" />
+                <Sparkles size={13} className="text-[#795548]" />
                 About 3 minutes
               </span>
               <span className="flex items-center gap-1.5">
-                <Heart size={14} className="text-[#795548]" />
+                <Heart size={13} className="text-[#795548]" />
                 Zero beauty scoring
               </span>
             </div>
