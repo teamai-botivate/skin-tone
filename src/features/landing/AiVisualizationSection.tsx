@@ -60,25 +60,6 @@ export function AiVisualizationSection({ onStart }: AiVisualizationSectionProps)
                 <div className="absolute top-2.5 left-2.5 sm:top-3.5 sm:left-3.5 rounded-full bg-[#FAF5EE]/95 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider text-[#194A49] backdrop-blur-md border border-[#B08A70]/40 shadow-sm">
                   Photorealistic Preview
                 </div>
-
-                {/* Interactive Refinement Demo Card */}
-                <div className="absolute bottom-2 inset-x-2 sm:bottom-3 sm:inset-x-3 rounded-lg sm:rounded-xl border border-[#B08A70]/40 bg-[#FAF5EE]/95 p-2 sm:p-3 text-[#194A49] backdrop-blur-md shadow-md">
-                  <div className="flex items-center gap-1.5">
-                    <span className="grid size-4 sm:size-5 place-items-center rounded-full bg-[#D9BC96]/40 text-[#194A49]">
-                      <Wand2 size={10} />
-                    </span>
-                    <p className="text-[8px] sm:text-[9px] uppercase font-bold tracking-wider text-[#795548]">
-                      Natural Language Refinement
-                    </p>
-                  </div>
-                  <p className="mt-0.5 text-[10px] sm:text-xs text-[#194A49] italic font-serif">
-                    “Make the sleeves a little longer and show an almond loafer instead.”
-                  </p>
-                  <div className="mt-1 flex items-center justify-between border-t border-[#B08A70]/30 pt-1 text-[8px] sm:text-[10px] text-[#795548]">
-                    <span>Preserves your identity</span>
-                    <span className="text-[#194A49] font-semibold">Regenerates in seconds</span>
-                  </div>
-                </div>
               </div>
             </div>
 

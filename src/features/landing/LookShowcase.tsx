@@ -212,25 +212,6 @@ export function LookShowcase({ onStart, onQuickStart }: LookShowcaseProps) {
               <div className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 rounded-full bg-[#194A49] px-2.5 py-0.5 text-[10px] sm:text-xs font-bold text-[#F0E5D5] backdrop-blur-md shadow-sm">
                 {current.confidence}% Confidence
               </div>
-
-              {/* Sleek bottom summary strip */}
-              <div className="absolute bottom-2 inset-x-2 sm:bottom-3 sm:inset-x-3 rounded-lg sm:rounded-xl border border-[#B08A70]/30 bg-white/90 px-3 py-1.5 sm:px-3.5 sm:py-2 backdrop-blur-md text-[#194A49] shadow-md flex items-center justify-between">
-                <div>
-                  <p className="font-serif text-xs sm:text-sm font-bold text-[#194A49]">{current.title}</p>
-                  <p className="text-[10px] text-[#795548] line-clamp-1">{current.tagline}</p>
-                </div>
-                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pl-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#795548] hidden sm:inline">Palette:</span>
-                  {current.palette.map((color, idx) => (
-                    <span
-                      key={`${color}-${idx}`}
-                      className="size-3 sm:size-3.5 rounded-full border border-black/15 shadow-sm"
-                      style={{ backgroundColor: color }}
-                      title={color}
-                    />
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
 
