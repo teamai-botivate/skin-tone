@@ -135,7 +135,6 @@ export function LetStyleApp() {
       const savedProfile = localStorage.getItem('letstyle-profile') || localStorage.getItem('skintune-profile');
       if (savedProfile) {
         setProfile({ ...initialProfile, ...JSON.parse(savedProfile) });
-        setScreen('home');
       }
       const saved = localStorage.getItem('letstyle-saved-looks') || localStorage.getItem('skintune-saved-looks');
       if (saved) setSavedLooks(JSON.parse(saved));
