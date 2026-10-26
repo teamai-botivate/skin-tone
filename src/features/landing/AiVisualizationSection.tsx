@@ -30,9 +30,9 @@ export function AiVisualizationSection({ onStart }: AiVisualizationSectionProps)
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid items-center gap-6 sm:gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
           {/* Left Column: Visual Mockup / Video Showcase (Top on mobile, left on desktop) */}
-          <div className="relative">
+          <div className="relative" suppressHydrationWarning>
             <div className="relative overflow-hidden rounded-xl sm:rounded-[2rem] border border-[#B08A70]/30 bg-white/90 p-1.5 sm:p-2 shadow-sm">
-              <div className="relative aspect-video w-full overflow-hidden rounded-lg sm:rounded-[1.6rem] bg-[#FAF5EE]">
+              <div className="relative aspect-video w-full overflow-hidden rounded-lg sm:rounded-[1.6rem] bg-[#FAF5EE]" suppressHydrationWarning>
                 {mounted && !videoError ? (
                   <video
                     ref={videoRef}
@@ -73,7 +73,7 @@ export function AiVisualizationSection({ onStart }: AiVisualizationSectionProps)
           </div>
 
           {/* Right Column: Editorial Feature Narrative (Below video on mobile, right on desktop) */}
-          <div>
+          <div className="relative" suppressHydrationWarning>
             <div className="inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-[#FAF5EE] px-2.5 py-0.5 sm:px-3 sm:py-1 shadow-sm">
               <Sparkles size={13} className="text-[#795548]" />
               <span className="text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.2em] text-[#795548]">
