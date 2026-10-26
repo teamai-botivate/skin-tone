@@ -119,7 +119,19 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
 
         {/* Feature Showcase Grid */}
         <div className="mt-6 sm:mt-8 grid gap-5 sm:gap-7 lg:grid-cols-2 items-center">
-          {/* Left: Detail Information Card */}
+          {/* Left: Editorial Flatlay / Product Visual */}
+          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/80 p-1.5 sm:p-2 shadow-sm">
+            <div className="relative aspect-[16/10] sm:aspect-square w-full overflow-hidden rounded-lg sm:rounded-xl bg-[#F0E5D5]">
+              <img
+                src={current.image}
+                alt={`${current.name} jewellery and accessories inspiration`}
+                className="size-full object-cover transition duration-700 hover:scale-105"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+            </div>
+          </div>
+
+          {/* Right: Detail Information Card */}
           <div className="rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/85 p-3.5 sm:p-5 shadow-sm">
             <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-2.5">
               <div className="flex items-center gap-2">
@@ -198,30 +210,6 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
               <span>Get Recommendations for {current.name}</span>
               <ArrowRight size={13} />
             </button>
-          </div>
-
-          {/* Right: Editorial Flatlay / Product Visual */}
-          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border border-[#B08A70]/30 bg-white/80 p-1.5 sm:p-2 shadow-sm">
-            <div className="relative aspect-[16/10] sm:aspect-square w-full overflow-hidden rounded-lg sm:rounded-xl bg-[#F0E5D5]">
-              <img
-                src={current.image}
-                alt={`${current.name} jewellery and accessories inspiration`}
-                className="size-full object-cover transition duration-700 hover:scale-105"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#194A49]/70 via-transparent to-transparent" />
-
-              <div className="absolute bottom-2.5 inset-x-2.5 sm:bottom-4 sm:inset-x-4 rounded-lg sm:rounded-xl border border-[#B08A70]/40 bg-white/95 p-2.5 sm:p-3 text-[#194A49] backdrop-blur-md shadow-md">
-                <p className="text-[8px] sm:text-[9px] uppercase font-bold tracking-widest text-[#795548]">
-                  Occasion-Synchronized
-                </p>
-                <p className="font-serif text-sm sm:text-base font-semibold mt-0.5 text-[#194A49]">
-                  Complete {current.name} Ensemble
-                </p>
-                <p className="text-[11px] sm:text-xs text-[#194A49]/75 mt-0.5 line-clamp-1">
-                  Coordinated metals, bag proportions, and footwear heights.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
