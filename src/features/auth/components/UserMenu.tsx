@@ -78,9 +78,9 @@ export function UserMenu() {
           {/* Logout */}
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               setDropdownOpen(false);
-              logout();
+              await logout();
             }}
             data-testid="button-logout"
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 transition-colors"

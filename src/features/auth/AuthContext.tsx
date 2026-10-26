@@ -153,6 +153,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setCredits(0);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('letstyle:logout'));
+      }
     }
   };
 

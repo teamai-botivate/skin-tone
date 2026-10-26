@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
-import { useAuth } from '@/features/auth';
+import { useAuth, type User } from '@/features/auth';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -98,6 +98,29 @@ export function LetStyleApp() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [deletedNotice, setDeletedNotice] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // Track previous user to immediately reset to the initial welcome landing screen upon signing out
+  const prevUserRef = useRef<User | null>(user);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      setScreen('welcome');
+      setGenerationError(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.addEventListener('letstyle:logout', handleLogout);
+    return () => window.removeEventListener('letstyle:logout', handleLogout);
+  }, []);
+
+  useEffect(() => {
+    if (prevUserRef.current && !user) {
+      setScreen('welcome');
+      setGenerationError(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    prevUserRef.current = user;
+  }, [user]);
 
   // Sync user's name to profile if not yet set
   useEffect(() => {
@@ -219,7 +242,7 @@ export function LetStyleApp() {
           update({ occasion });
           go(profile.name ? 'colors-occasion' : 'name');
         }}
-        hasExistingProfile={Boolean(profile.name)}
+        hasExistingProfile={Boolean(user && profile.name)}
         onGoHome={() => go('home')}
       />
     );
