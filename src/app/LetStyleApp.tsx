@@ -151,16 +151,34 @@ export function LetStyleApp() {
     if (screen !== 'generating') return;
     let active = true;
     setGenerationError(null);
-    getLookRecommendations(profile)
+
+    // Reuse existing recommendations if already generated (e.g. on retry), avoiding redundant AI model calls
+    const recsPromise =
+      generatedLooks.length === 5
+        ? Promise.resolve(generatedLooks)
+        : getLookRecommendations(profile);
+
+    recsPromise
       .then((recommendations) => {
+        if (!active) return;
         refreshUser();
-        return generateLookImages(recommendations, profile, {
-          occasion: profile.occasion,
-          details: profile.customStyleNotes || '',
-        });
+        setGeneratedLooks(recommendations);
+        return generateLookImages(
+          recommendations,
+          profile,
+          {
+            occasion: profile.occasion,
+            details: profile.customStyleNotes || '',
+          },
+          {
+            onProgress: (partial) => {
+              if (active) setGeneratedLooks(partial);
+            },
+          },
+        );
       })
       .then((result) => {
-        if (active) {
+        if (active && result) {
           refreshUser();
           setGeneratedLooks(result);
           go('results');
@@ -178,6 +196,7 @@ export function LetStyleApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
+
 
 
   useEffect(() => {

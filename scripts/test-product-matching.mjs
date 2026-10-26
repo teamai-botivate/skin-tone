@@ -14,14 +14,24 @@ import {
   getBenchmarkCandidatesForRequirement,
   searchProductsForLook,
   buildPersonalizedMakeupSpecs,
+  buildRetailerSearchUrl,
+  getSafeProductUrl,
 } from "../src/lib/product-search.ts";
 import {
   generateFallbackLooks,
+  mockLooks,
 } from "../src/features/recommendations/services/recommendation-engine.ts";
+import {
+  generateLookImages,
+} from "../src/features/recommendations/services/image-generation.ts";
+import {
+  hasRealImage,
+} from "../src/features/recommendations/components/LookVisual.tsx";
 
 console.log("======================================================================");
-console.log("LETSTYLE: FULL VERIFICATION SUITE — 15 CRITICAL RECOMMENDATION SCENARIOS");
+console.log("LETSTYLE: FULL VERIFICATION SUITE — 17 CRITICAL RECOMMENDATION SCENARIOS");
 console.log("======================================================================");
+
 
 // -----------------------------------------------------------------------------
 // Scenario 1: Pink + Garba Night + Traditional -> Relevant Garba/Festive Clothing
@@ -499,6 +509,252 @@ for (const p of fullGarbaResult.products) {
 
 console.log("✓ Scenario 15 Passed: All existing core features, color resolution, URL determination, and product recommendation pipelines operational.");
 
+// -----------------------------------------------------------------------------
+// Scenario 16: Women's Dress Never Links to Kids' Clothing & Safe Retailer Links
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 16] Testing Product URL Verification & Category Mismatch Prevention...");
+
+// 1. A coral women's dress card must NEVER link to kids' clothing or myntra.com/search
+const coralDressSafeUrl = getSafeProductUrl(
+  {
+    retailer: "Myntra",
+    brand: "Tokyo Talkies",
+    productName: "Pleated A-Line Coral Midi Dress",
+    category: "outfit",
+    subcategory: "Vibrant Coral Satin Slip Dress",
+    color: "Coral",
+  },
+  "woman",
+);
+
+assert.ok(
+  !coralDressSafeUrl.includes("myntra.com/search"),
+  "Myntra search URL must never use /search path (which routes to kids' clothing set)",
+);
+assert.ok(
+  coralDressSafeUrl.includes("women"),
+  "Myntra search URL must preserve the target demographic/gender 'women'",
+);
+assert.ok(
+  coralDressSafeUrl.includes("coral"),
+  "Myntra search URL must preserve the colour 'coral'",
+);
+assert.ok(
+  coralDressSafeUrl.includes("rawQuery="),
+  "Myntra search URL must use rawQuery parameter",
+);
+
+// 2. Reject kids' clothing items for adult female styling profiles
+const kidsClothingMismatch = checkProductConsistency(
+  "Superminis Girls Cotton Printed V-Neck Clothing Set",
+  "Superminis",
+  "outfit",
+  "https://www.myntra.com/girls-clothing-set/superminis/123/buy",
+  undefined,
+  "woman",
+  "dress",
+);
+assert.equal(
+  kidsClothingMismatch.isConsistent,
+  false,
+  "Must reject kids' clothing set for an adult woman's styling profile",
+);
+
+// 3. Test valid and invalid product URLs for Myntra, AJIO, and Nykaa
+// Myntra:
+assert.equal(
+  isValidProductUrl("https://www.myntra.com/dresses/tokyo-talkies/dress/29481023/buy"),
+  true,
+  "Valid Myntra buy URL must be accepted",
+);
+assert.equal(
+  isValidProductUrl("https://www.myntra.com/search"),
+  false,
+  "Bare Myntra /search URL must be rejected",
+);
+assert.equal(
+  isValidProductUrl("https://www.myntra.com/search?q=dress"),
+  false,
+  "Myntra /search?q= URL must be rejected (routes to kids category)",
+);
+assert.equal(
+  isValidProductUrl("https://www.myntra.com/women-coral-dress?rawQuery=women%20coral%20dress"),
+  true,
+  "Proper Myntra search slug URL must be accepted",
+);
+
+// AJIO:
+assert.equal(
+  isValidProductUrl("https://www.ajio.com/search/"),
+  false,
+  "AJIO bare search without text param must be rejected",
+);
+assert.equal(
+  isValidProductUrl("https://www.ajio.com/search/?text=women%20formal%20dress"),
+  true,
+  "AJIO search with text param must be accepted",
+);
+assert.equal(
+  isValidProductUrl("https://www.ajio.com/cutecumber-dress/p/123456_coral"),
+  false,
+  "AJIO URL with placeholder ID must be rejected",
+);
+const ajioSafeUrl = getSafeProductUrl(
+  {
+    retailer: "AJIO",
+    brand: "Marks & Spencer",
+    productName: "Tailored Belted Coral Formal Shirt Dress",
+    category: "outfit",
+    color: "Coral",
+    productUrl: "https://www.ajio.com/search/",
+  },
+  "woman",
+);
+assert.ok(
+  ajioSafeUrl.includes("text="),
+  "AJIO safe URL must guarantee a non-empty text parameter",
+);
+
+// Nykaa:
+assert.equal(
+  isValidProductUrl("https://www.nykaa.com/maybelline-fit-me-matte/p/1092837"),
+  true,
+  "Valid Nykaa product URL must be accepted",
+);
+assert.equal(
+  isValidProductUrl("https://www.nykaa.com/search/result/"),
+  false,
+  "Nykaa search URL without query must be rejected",
+);
+assert.equal(
+  isValidProductUrl("https://www.nykaa.com/search/result/?q=foundation"),
+  true,
+  "Nykaa search URL with query must be accepted",
+);
+const nykaaBeautyUrl = getSafeProductUrl(
+  {
+    retailer: "Nykaa",
+    brand: "Maybelline New York",
+    productName: "Fit Me Matte + Poreless Liquid Foundation SPF 22",
+    category: "makeup",
+  },
+  "woman",
+);
+assert.ok(
+  nykaaBeautyUrl.includes("nykaa.com") && !nykaaBeautyUrl.includes("nykaafashion.com"),
+  "Nykaa beauty/makeup search URL must route to nykaa.com, not nykaafashion.com",
+);
+const nykaaFashionUrl = getSafeProductUrl(
+  {
+    retailer: "Nykaa Fashion",
+    brand: "Libas",
+    productName: "Embroidered Flared Lehenga Choli",
+    category: "outfit",
+  },
+  "woman",
+);
+assert.ok(
+  nykaaFashionUrl.includes("nykaafashion.com"),
+  "Nykaa Fashion apparel search URL must route to nykaafashion.com",
+);
+
+console.log("✓ Scenario 16 Passed: Women's dress never links to kids' clothing; retailer links validated for Myntra, AJIO, and Nykaa.");
+
+// -----------------------------------------------------------------------------
+// Scenario 17: Five Requested Look Images with Simulated Partial Generation
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 17] Testing Five Requested Look Images with Bounded Retry...");
+
+const testLooks = [
+  { ...mockLooks[0], id: "sim-look-01", imageUrl: "/replace-with-generated/look-01.webp" },
+  { ...mockLooks[1], id: "sim-look-02", imageUrl: "/replace-with-generated/look-02.webp" },
+  { ...mockLooks[2], id: "sim-look-03", imageUrl: "/replace-with-generated/look-03.webp" },
+  { ...mockLooks[3], id: "sim-look-04", imageUrl: "/replace-with-generated/look-04.webp" },
+  { ...mockLooks[4], id: "sim-look-05", imageUrl: "/replace-with-generated/look-05.webp" },
+];
+
+const originalFetch = globalThis.fetch;
+const callCounts = {};
+
+// Simulate: looks 1, 2, 3 succeed on attempt 1. Looks 4 and 5 fail on attempt 1 with 429, then succeed on retry!
+globalThis.fetch = async (url, opts) => {
+  if (typeof url === "string" && url.includes("/api/generate-image")) {
+    const body = JSON.parse(opts.body);
+    const lookId = body.look.id;
+    callCounts[lookId] = (callCounts[lookId] || 0) + 1;
+
+    // Simulate partial failure on attempt 1 for looks 4 and 5
+    if ((lookId === "sim-look-04" || lookId === "sim-look-05") && callCounts[lookId] === 1) {
+      return {
+        ok: false,
+        status: 429,
+        json: async () => ({ error: "Rate limit reached. Please retry." }),
+      };
+    }
+
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        look: {
+          ...body.look,
+          imageUrl: `https://images.letstyle.ai/generated/${lookId}.webp`,
+        },
+      }),
+    };
+  }
+  return originalFetch(url, opts);
+};
+
+try {
+  const resultLooks = await generateLookImages(
+    testLooks,
+    garbaProfile,
+    { occasion: "Garba Night", details: "" },
+    { maxRetries: 2, concurrency: 2 },
+  );
+
+  assert.equal(resultLooks.length, 5, "Must return all 5 requested looks");
+  for (const look of resultLooks) {
+    assert.ok(
+      hasRealImage(look.imageUrl),
+      `Look ${look.id} must have a valid usable image, received: ${look.imageUrl}`,
+    );
+  }
+
+  // Verify that successful looks were NOT regenerated and only failed looks were retried
+  assert.equal(callCounts["sim-look-01"], 1, "Look 1 succeeded on attempt 1 and was not re-requested");
+  assert.equal(callCounts["sim-look-02"], 1, "Look 2 succeeded on attempt 1 and was not re-requested");
+  assert.equal(callCounts["sim-look-03"], 1, "Look 3 succeeded on attempt 1 and was not re-requested");
+  assert.equal(callCounts["sim-look-04"], 2, "Look 4 failed on attempt 1 and was retried on attempt 2");
+  assert.equal(callCounts["sim-look-05"], 2, "Look 5 failed on attempt 1 and was retried on attempt 2");
+
+  // Verify complete failure behavior (throws honest error rather than returning placeholders)
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 503,
+    json: async () => ({ error: "Image generation provider temporarily unavailable" }),
+  });
+
+  await assert.rejects(
+    async () => {
+      await generateLookImages(
+        testLooks,
+        garbaProfile,
+        { occasion: "Garba Night", details: "" },
+        { maxRetries: 1, concurrency: 2 },
+      );
+    },
+    /Could not generate style visualisations/,
+    "Must throw an error when visualisations cannot be generated, not present placeholders",
+  );
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
+console.log("✓ Scenario 17 Passed: All 5 look images verified; partial responses handled via bounded retry without regenerating successful images.");
+
 console.log("\n======================================================================");
-console.log("ALL 15 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 17 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
+

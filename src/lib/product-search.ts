@@ -88,161 +88,29 @@ export function getApplicableCategories(
 export const SHADE_MATCH_DISCLAIMER =
   "AI shade matching from a photograph is an estimate and may vary because of lighting, camera conditions, and screen display. We recommend patch-testing or swatch verification before purchase.";
 
-// Approved retailer domains in India
-export const APPROVED_RETAILERS = [
-  "myntra.com",
-  "nykaa.com",
-  "nykaafashion.com",
-  "ajio.com",
-  "amazon.in",
-  "tatacliq.com",
-  "hm.com",
-  "zara.com",
-  "fabindia.com",
-  "manyavar.com",
-  "sugarcosmetics.com",
-  "lakmeindia.com",
-  "maccosmetics.in",
-];
+import {
+  APPROVED_RETAILERS,
+  BANNED_PLACEHOLDER_PATTERNS,
+  cleanUrl,
+  getCanonicalProductUrl,
+  isValidProductUrl,
+  determineUrlType,
+  buildRetailerSearchUrl,
+  getSafeProductUrl,
+} from "./retailer-urls";
 
-// Placeholder IDs and patterns that must NEVER be accepted as real product URLs
-export const BANNED_PLACEHOLDER_PATTERNS = [
-  "12345678",
-  "1234567",
-  "123456",
-  "12345",
-  "000000",
-  "product-id",
-  "example-product",
-  "placeholder",
-  "dummy",
-  "fake",
-  "random-id",
-  "test-id",
-];
+export {
+  APPROVED_RETAILERS,
+  BANNED_PLACEHOLDER_PATTERNS,
+  cleanUrl,
+  getCanonicalProductUrl,
+  isValidProductUrl,
+  determineUrlType,
+  buildRetailerSearchUrl,
+  getSafeProductUrl,
+};
 
-/**
- * Cleans any trailing punctuation, markdown artifacts, or tracking parameters from URL strings.
- */
-export function cleanUrl(rawUrl: string): string {
-  if (!rawUrl) return "";
-  let cleaned = rawUrl.trim();
-  const match = cleaned.match(/https?:\/\/[^\s"'<>[\]()]+/);
-  if (match) {
-    cleaned = match[0];
-  }
-  cleaned = cleaned.replace(/[)\]">.,;]+$/, "");
 
-  try {
-    const u = new URL(cleaned);
-    // Remove search engine / marketing tracking tags while preserving canonical product path
-    u.searchParams.delete("utm_source");
-    u.searchParams.delete("utm_medium");
-    u.searchParams.delete("utm_campaign");
-    u.searchParams.delete("utm_term");
-    u.searchParams.delete("utm_content");
-    return u.toString();
-  } catch {
-    return cleaned;
-  }
-}
-
-/**
- * Normalizes a product URL to its canonical form, stripping tracking parameters,
- * session IDs, and product variant parameters that lead to the same product page.
- */
-export function getCanonicalProductUrl(rawUrl: string): string {
-  if (!rawUrl) return "";
-  const cleaned = cleanUrl(rawUrl);
-  try {
-    const u = new URL(cleaned);
-    const host = u.hostname.replace(/^www\./, "").toLowerCase();
-
-    // Nykaa: /p/<id> or /<slug>/p/<id> -> keep only path up to /p/<id>
-    if (host.includes("nykaa.com")) {
-      const pMatch = u.pathname.match(/(.*\/p\/\d+)/i);
-      if (pMatch) {
-        return `https://www.nykaa.com${pMatch[1]}`;
-      }
-      if (u.pathname.includes("/search")) {
-        const q = u.searchParams.get("q");
-        if (q && q.trim().length > 0 && q !== "undefined") {
-          return `https://www.nykaa.com/search/result/?q=${encodeURIComponent(q.trim())}`;
-        }
-      }
-      return `${u.origin}${u.pathname}`;
-    }
-
-    // Amazon: /dp/<ASIN> or /gp/product/<ASIN>
-    if (host.includes("amazon.in") || host.includes("amazon.com")) {
-      const asinMatch = u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
-      if (asinMatch) {
-        return `https://www.amazon.in/dp/${asinMatch[1]}`;
-      }
-      if (u.pathname === "/s" || u.pathname.startsWith("/s/")) {
-        const k = u.searchParams.get("k");
-        if (k && k.trim().length > 0 && k !== "undefined") {
-          return `https://www.amazon.in/s?k=${encodeURIComponent(k.trim())}`;
-        }
-      }
-      return `${u.origin}${u.pathname}`;
-    }
-
-    // Myntra: /<brand>/<name>/<id>/buy -> keep pathname
-    if (host.includes("myntra.com")) {
-      const buyMatch = u.pathname.match(/(.*\/buy)/i);
-      if (buyMatch) {
-        return `https://www.myntra.com${buyMatch[1]}`;
-      }
-      if (u.pathname.includes("/search")) {
-        const q = u.searchParams.get("q") || u.searchParams.get("rawQuery");
-        if (q && q.trim().length > 0 && q !== "undefined") {
-          return `https://www.myntra.com/search?q=${encodeURIComponent(q.trim())}`;
-        }
-      }
-      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
-    }
-
-    // AJIO: /p/<id>
-    if (host.includes("ajio.com")) {
-      const ajioMatch = u.pathname.match(/(.*\/p\/[a-zA-Z0-9_]+)/i);
-      if (ajioMatch) {
-        return `https://www.ajio.com${ajioMatch[1]}`;
-      }
-      if (u.pathname.includes("/search")) {
-        const text = u.searchParams.get("text");
-        if (text && text.trim().length > 0 && text !== "undefined") {
-          return `https://www.ajio.com/search/?text=${encodeURIComponent(text.trim())}`;
-        }
-      }
-      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
-    }
-
-    // Tata CLiQ: /p-<id>
-    if (host.includes("tatacliq.com")) {
-      const cliqMatch = u.pathname.match(/(.*\/p-[a-zA-Z0-9]+)/i);
-      if (cliqMatch) {
-        return `https://www.tatacliq.com${cliqMatch[1]}`;
-      }
-      if (u.pathname.includes("/search")) {
-        const text = u.searchParams.get("text") || u.searchParams.get("searchCategory");
-        if (text && text.trim().length > 0 && text !== "undefined") {
-          return `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(text.trim())}`;
-        }
-      }
-      return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
-    }
-
-    // Preserve search params for search or query-based URLs
-    if (u.search && (u.pathname.includes("/search") || u.pathname === "/s" || u.pathname.startsWith("/s/") || u.searchParams.has("q") || u.searchParams.has("text") || u.searchParams.has("k"))) {
-      return `${u.origin}${u.pathname}${u.search}`;
-    }
-
-    return `${u.origin}${u.pathname}`;
-  } catch {
-    return cleaned;
-  }
-}
 
 /**
  * Creates a normalized product identity string to deduplicate items by brand + title keywords.
@@ -271,82 +139,6 @@ export function getProductIdentityKey(productTitle: string, brand: string): stri
   return `${normBrand}:${significantTokens}`;
 }
 
-/**
- * Strict validator to ensure a URL is a REAL URL from an approved retailer,
- * has a valid product path, and contains NO placeholder IDs.
- * Strictly rejects empty or missing query parameter search endpoints.
- */
-export function isValidProductUrl(urlStr: string): boolean {
-  if (!urlStr || typeof urlStr !== "string") return false;
-  try {
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-
-    const host = parsed.hostname.toLowerCase();
-    const pathname = parsed.pathname.toLowerCase();
-
-    // 1. Must be from an approved retailer
-    const isApproved = APPROVED_RETAILERS.some(
-      (d) => host === d || host.endsWith("." + d),
-    );
-    if (!isApproved) {
-      return false;
-    }
-
-    // 2. Reject placeholder IDs
-    for (const pat of BANNED_PLACEHOLDER_PATTERNS) {
-      if (pat === "000000" && (host.includes("tatacliq.com") || pathname.includes("mp000000"))) {
-        continue;
-      }
-      if (pathname.includes(pat)) {
-        return false;
-      }
-    }
-
-    // 3. Must not be a generic homepage or bare domain
-    if (pathname === "/" || pathname === "" || pathname.length < 3) {
-      return false;
-    }
-
-    // 4. Reject search URLs missing their required query parameters (prevent bare /search/ pages)
-    if (pathname.includes("/search") || pathname === "/s" || pathname.startsWith("/s/")) {
-      const text = parsed.searchParams.get("text") || parsed.searchParams.get("q") || parsed.searchParams.get("k");
-      if (!text || text.trim().length < 2 || text === "undefined" || text === "null") {
-        return false;
-      }
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Determines whether a URL is an exact product page or a search/catalog page.
- */
-export function determineUrlType(urlStr: string): "exact_product" | "search_result" {
-  try {
-    const parsed = new URL(urlStr);
-    const host = parsed.hostname.toLowerCase();
-    const path = parsed.pathname.toLowerCase();
-
-    if (
-      (host.includes("myntra.com") && path.includes("/buy") && /\/\d+\/buy/.test(path)) ||
-      (host.includes("nykaa.com") && path.includes("/p/")) ||
-      (host.includes("ajio.com") && path.includes("/p/")) ||
-      (host.includes("amazon.in") && (path.includes("/dp/") || path.includes("/gp/product/"))) ||
-      (host.includes("tatacliq.com") && path.includes("/p-")) ||
-      (host.includes("hm.com") && path.includes(".productpage."))
-    ) {
-      return "exact_product";
-    }
-
-    return "search_result";
-  } catch {
-    return "search_result";
-  }
-}
 
 /**
  * Strips any footwear, shoe, heel, or handbag/bag mentions from an outfit garment title.
@@ -402,6 +194,14 @@ export function checkProductConsistency(
   const cleanName = (productName || "").toLowerCase();
   const subcat = (itemSubcategory || "").toLowerCase();
 
+  // 0. RETAILER URL SAFETY CHECK: Reject invalid or misleading retailer search endpoints
+  if (urlStr.includes("myntra.com/search")) {
+    return {
+      isConsistent: false,
+      reason: `Invalid retailer URL: Myntra /search routes to kids clothing set instead of product search (${urlStr})`,
+    };
+  }
+
   // 1. GENDER SANITY CHECK: Never recommend men's items for women, or women's items for men
   if (persona === "woman") {
     // Strip women terms first to prevent "women" from false-matching "men"
@@ -416,6 +216,15 @@ export function checkProductConsistency(
         reason: `Gender mismatch: Product '${productName}' contains men's apparel keywords for a female styling profile (${urlStr})`,
       };
     }
+
+    // Never link to kids' clothing or clothing sets for an adult female styling profile
+    const hasKidsToken = /\b(girls-clothing-set|boys-clothing-set|kids-clothing-set|clothing-set|baby\s*girl|baby\s*boy|infant|toddler|superminis|keenuu|s\.tajmina)\b/i.test(fullCheckText);
+    if (hasKidsToken) {
+      return {
+        isConsistent: false,
+        reason: `Category mismatch: Product '${productName}' matches kids' clothing set for an adult female styling profile (${urlStr})`,
+      };
+    }
   } else if (persona === "man") {
     const strippedOfMen = fullCheckText
       .replace(/\b(men|mens|men's|male|gents|gentlemen)\b/gi, "");
@@ -427,6 +236,14 @@ export function checkProductConsistency(
         reason: `Gender mismatch: Product '${productName}' contains women's apparel keywords for a male styling profile (${urlStr})`,
       };
     }
+
+    const hasKidsToken = /\b(girls-clothing-set|boys-clothing-set|kids-clothing-set|clothing-set|baby\s*girl|baby\s*boy|infant|toddler)\b/i.test(fullCheckText);
+    if (hasKidsToken) {
+      return {
+        isConsistent: false,
+        reason: `Category mismatch: Product '${productName}' matches kids' clothing set for an adult male styling profile (${urlStr})`,
+      };
+    }
   } else if (persona === "child") {
     const isAdultItem = /\b(stilettos?|high\s*heels|lingerie|deep\s*neck|plunge|corporate\s*suit|office\s*blazer|anti-aging|anti-wrinkle|retinol)\b/i.test(fullCheckText);
     if (isAdultItem) {
@@ -436,6 +253,7 @@ export function checkProductConsistency(
       };
     }
   }
+
 
   // 2. GARMENT SUBCATEGORY CHECK
   if (subcat === "blazer" || cleanName.includes("blazer")) {
@@ -3304,7 +3122,13 @@ export function getBenchmarkCandidatesForRequirement(
         retailer: "Myntra",
         price: 999,
         originalPrice: 2199,
-        url: `https://www.myntra.com/women-${encodeURIComponent(color.toLowerCase())}-dress`,
+        url: buildRetailerSearchUrl("Myntra", {
+          gender: "woman",
+          brand: "Tokyo Talkies",
+          productName: `Pleated A-Line ${color} Midi Dress`,
+          color,
+          category: "outfit",
+        }),
         material: "Georgette Crepe",
       },
       {
@@ -3314,7 +3138,13 @@ export function getBenchmarkCandidatesForRequirement(
         retailer: "AJIO",
         price: 2499,
         originalPrice: 3999,
-        url: `https://www.ajio.com/search/?text=${encodeURIComponent(`women ${color} formal dress`)}`,
+        url: buildRetailerSearchUrl("AJIO", {
+          gender: "woman",
+          brand: "Marks & Spencer",
+          productName: `Tailored Belted ${color} Formal Shirt Dress`,
+          color,
+          category: "outfit",
+        }),
         material: "Viscose Twill",
       },
       {
@@ -3323,7 +3153,13 @@ export function getBenchmarkCandidatesForRequirement(
         brand: "MANGO",
         retailer: "Tata CLiQ",
         price: 4990,
-        url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`women ${color} midi dress`)}`,
+        url: buildRetailerSearchUrl("Tata CLiQ", {
+          gender: "woman",
+          brand: "MANGO",
+          productName: `Structured Pleated ${color} Cocktail Midi Dress`,
+          color,
+          category: "outfit",
+        }),
         material: "Fluid Crepe",
       },
     ];
@@ -4001,14 +3837,33 @@ export function getBenchmarkCandidatesForRequirement(
  * into authentic, reliable retailer search URLs. Ensures users never land on 404s
  * or map to an unrelated garment (e.g. Lakshita Kurta instead of Libas Lehenga).
  */
-export function sanitizeBenchmarkUrl(retailer: string, brand: string, title: string, originalUrl: string): string {
-  // If original URL is already an authentic retailer search URL, keep it
+export function sanitizeBenchmarkUrl(
+  retailer: string,
+  brand: string,
+  title: string,
+  originalUrl: string,
+  persona?: PersonaType | string,
+  category?: ProductCategory | string,
+  color?: string,
+): string {
+  // If original URL is a broken Myntra /search URL, it MUST be converted to proper Myntra search URL
+  if (originalUrl.includes("myntra.com/search")) {
+    return buildRetailerSearchUrl("Myntra", {
+      gender: persona,
+      brand,
+      productName: title,
+      category,
+      color,
+    });
+  }
+
+  // If original URL is already an authentic live retailer search URL, keep it
   if (
-    originalUrl.includes("/search") ||
     originalUrl.includes("/s?") ||
     originalUrl.includes("?searchCategory=") ||
-    originalUrl.includes("?q=") ||
-    originalUrl.includes("?text=")
+    originalUrl.includes("?text=") ||
+    (originalUrl.includes("nykaa") && originalUrl.includes("?q=")) ||
+    (originalUrl.includes("myntra.com") && originalUrl.includes("?rawQuery="))
   ) {
     return originalUrl;
   }
@@ -4023,15 +3878,13 @@ export function sanitizeBenchmarkUrl(retailer: string, brand: string, title: str
     /https?:\/\/(?:www\.)?(?:myntra|ajio|tatacliq|nykaafashion|nykaa|amazon)\.(?:com|in)/i.test(originalUrl);
 
   if (hasGuessedId) {
-    const cleanQuery = `${brand} ${title}`.replace(/[^\w\s-]/g, " ").replace(/\s+/g, " ").trim();
-    const q = encodeURIComponent(cleanQuery);
-    const r = (retailer || "").toLowerCase();
-    if (r.includes("myntra")) return `https://www.myntra.com/search?q=${q}`;
-    if (r.includes("ajio")) return `https://www.ajio.com/search/?text=${q}`;
-    if (r.includes("tata") || r.includes("cliq")) return `https://www.tatacliq.com/search/?searchCategory=all&text=${q}`;
-    if (r.includes("nykaa")) return `https://www.nykaafashion.com/search/result/?q=${q}`;
-    if (r.includes("amazon")) return `https://www.amazon.in/s?k=${q}`;
-    return `https://www.myntra.com/search?q=${q}`;
+    return buildRetailerSearchUrl(retailer, {
+      gender: persona,
+      brand,
+      productName: title,
+      category,
+      color,
+    });
   }
   return originalUrl;
 }
@@ -4654,7 +4507,15 @@ Strictly adhere to:
     );
     for (const b of benchmarks) {
       if (verifiedProducts.length >= 3) break;
-      const cleanBenchUrl = sanitizeBenchmarkUrl(b.retailer, b.brand, b.productTitle, b.url);
+      const cleanBenchUrl = sanitizeBenchmarkUrl(
+        b.retailer,
+        b.brand,
+        b.productTitle,
+        b.url,
+        spec.targetGender === "child" ? "child" : "woman",
+        spec.category,
+        spec.dominantColor,
+      );
       const canonicalUrl = getCanonicalProductUrl(cleanBenchUrl);
       if (seenCanonicalUrls.has(canonicalUrl)) continue;
       seenCanonicalUrls.add(canonicalUrl);

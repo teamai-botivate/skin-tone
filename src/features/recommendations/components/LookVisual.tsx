@@ -6,7 +6,15 @@ import { Sparkles, RefreshCw, Clock3 } from 'lucide-react';
 
 export const hasRealImage = (url: string) => Boolean(url) && !url.startsWith('/replace-with-generated/');
 
-export function LookVisual({ look, large = false }: { look: LookRecommendation; large?: boolean }) {
+export function LookVisual({
+  look,
+  large = false,
+  onRetry,
+}: {
+  look: LookRecommendation;
+  large?: boolean;
+  onRetry?: () => void;
+}) {
   if (hasRealImage(look.imageUrl)) {
     return (
       <div className={`relative overflow-hidden rounded-[1.4rem] bg-[#e4d6c4] ${large ? 'min-h-[390px]' : 'h-56'}`}>
@@ -37,9 +45,24 @@ export function LookVisual({ look, large = false }: { look: LookRecommendation; 
       <div className="absolute bottom-[-8%] left-[23%] h-[82%] w-[55%] rounded-t-[48%] bg-card/70 mix-blend-screen" />
       <div className="absolute left-[39%] top-[16%] size-[22%] rounded-full bg-[#b7785c]" />
       <div className="absolute bottom-[15%] left-1/2 h-[42%] w-[20%] -translate-x-1/2 rounded-[45%] bg-card/55" />
-      <span className="absolute bottom-3 left-3 rounded-full bg-card/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-foreground backdrop-blur">
-        Style visualisation · image slot
-      </span>
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
+        <span className="rounded-full bg-card/90 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground backdrop-blur">
+          Visualisation unavailable
+        </span>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRetry();
+            }}
+            data-testid={`button-retry-visual-${look.id}`}
+            className="rounded-full bg-primary px-3 py-1 text-[10px] font-bold text-primary-foreground shadow transition hover:brightness-105"
+          >
+            Retry visual
+          </button>
+        )}
+      </div>
     </div>
   );
 }

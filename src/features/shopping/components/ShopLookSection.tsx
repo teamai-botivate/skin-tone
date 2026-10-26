@@ -26,56 +26,11 @@ import type {
   KeyDiagnostic,
 } from '@/types';
 
-/**
- * Sanitizes and repairs retailer URLs to ensure users never land on broken /search/ pages
- * or get redirected to incorrect departments (like AJIO defaulting to men's polo shirts).
- */
-export function getSafeProductUrl(product: ProductResult, persona: string): string {
-  const url = product.productUrl;
-  if (!url) return '#';
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase();
-    const genderPrefix = persona === 'man' ? 'men' : persona === 'child' ? 'kids' : 'women';
-    const cleanSearchQuery = `${genderPrefix} ${product.subcategory || product.productName}`.trim();
+import {
+  getSafeProductUrl,
+  isValidProductUrl,
+} from '@/lib/retailer-urls';
 
-    // Prevent AJIO empty search path bug (which defaults to men's polo shirts!)
-    if (host.includes('ajio.com') && u.pathname.includes('/search')) {
-      const text = u.searchParams.get('text');
-      if (!text || text === 'undefined' || text === 'null' || text.trim().length === 0) {
-        return `https://www.ajio.com/search/?text=${encodeURIComponent(cleanSearchQuery)}`;
-      }
-    }
-
-    // Prevent Tata CLiQ empty search path bug
-    if (host.includes('tatacliq.com') && u.pathname.includes('/search')) {
-      const text = u.searchParams.get('text') || u.searchParams.get('searchCategory');
-      if (!text || text === 'undefined' || text.trim().length === 0) {
-        return `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(cleanSearchQuery)}`;
-      }
-    }
-
-    // Prevent Nykaa empty search path bug
-    if (host.includes('nykaa') && u.pathname.includes('/search')) {
-      const q = u.searchParams.get('q');
-      if (!q || q === 'undefined' || q.trim().length === 0) {
-        return `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent(cleanSearchQuery)}`;
-      }
-    }
-
-    // Prevent Amazon empty search path bug
-    if (host.includes('amazon') && (u.pathname === '/s' || u.pathname.startsWith('/s/'))) {
-      const k = u.searchParams.get('k');
-      if (!k || k === 'undefined' || k.trim().length === 0) {
-        return `https://www.amazon.in/s?k=${encodeURIComponent(cleanSearchQuery)}`;
-      }
-    }
-
-    return url;
-  } catch {
-    return url;
-  }
-}
 
 interface ShopLookSectionProps {
   look: LookRecommendation;
@@ -210,7 +165,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
 
   // Render a single product card
   const renderProductCard = (product: ProductResult) => {
-    const isExactProduct = product.urlType === 'exact_product';
+    const isExactProduct = product.urlType === 'exact_product' && isValidProductUrl(product.productUrl || '');
     const safeUrl = getSafeProductUrl(product, persona);
 
     return (

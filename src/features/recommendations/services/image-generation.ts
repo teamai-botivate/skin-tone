@@ -59,38 +59,103 @@ export const generateOneLookImage = async (
   return data.look;
 };
 
+import { hasRealImage } from '../components/LookVisual';
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let currentIndex = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (currentIndex < items.length) {
+      const idx = currentIndex++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+export interface GenerateLookImagesOptions {
+  maxRetries?: number;
+  concurrency?: number;
+  onProgress?: (looks: LookRecommendation[]) => void;
+}
+
 /**
- * Generate visuals for a set of recommendations. Fires one request per look
- * (in parallel) rather than a single batched request. Each look falls back
- * independently to its existing placeholder imageUrl if its own request
- * fails, so one failure never blocks the other four.
- *
- * profile.photoUrl IS sent here (unlike recommendation-engine.ts, which
- * strips it) — the backend edits that photo so each look shows the same
- * person, not a generated stranger. If the user skipped the photo step,
- * the backend falls back to text-to-image generation.
+ * Generate visuals for a set of recommendations.
+ * - Only requests images for looks that do not yet have a valid, usable image.
+ * - Concurrency is controlled (default 2) to prevent provider rate-limit spikes (429).
+ * - Bounded retry count (default 2 retries) retrying ONLY failed requests.
+ * - Successfully generated images are preserved and never regenerated.
+ * - Ensures all requested looks have usable images before presenting completion.
  */
 export const generateLookImages = async (
   recommendations: LookRecommendation[],
   profile: SkinTuneProfile,
   context: OccasionContext,
+  options?: GenerateLookImagesOptions,
 ): Promise<LookRecommendation[]> => {
   const { photoUrl, ...profileForRequest } = profile;
-  return Promise.all(
-    recommendations.map(async (look) => {
-      const siblingVibes = recommendations
+  const maxRetries = options?.maxRetries ?? 2;
+  const concurrency = options?.concurrency ?? 2;
+  const currentLooks = [...recommendations];
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Find only the looks that still need a real image
+    const pendingIndices = currentLooks
+      .map((look, idx) => (!hasRealImage(look.imageUrl) ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    if (pendingIndices.length === 0) {
+      break;
+    }
+
+    if (attempt > 0) {
+      // Short bounded delay before retry (e.g. 800ms, 1600ms)
+      await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+    }
+
+    await runWithConcurrency(pendingIndices, concurrency, async (lookIdx) => {
+      const look = currentLooks[lookIdx];
+      const siblingVibes = currentLooks
         .filter((other) => other.id !== look.id)
         .map((other) => other.vibe)
         .filter((vibe): vibe is string => Boolean(vibe));
+
       try {
-        return await generateOneLookImage(look, profileForRequest, context, photoUrl, siblingVibes);
+        const updated = await generateOneLookImage(
+          look,
+          profileForRequest,
+          context,
+          photoUrl || '',
+          siblingVibes,
+        );
+        if (hasRealImage(updated.imageUrl)) {
+          currentLooks[lookIdx] = updated;
+          options?.onProgress?.([...currentLooks]);
+        }
       } catch (err) {
-        console.warn(`Falling back to placeholder visual for ${look.id}:`, err);
-        return look;
+        console.warn(`Image generation attempt ${attempt + 1} failed for ${look.id}:`, err);
       }
-    }),
-  );
+    });
+  }
+
+  // Ensure all looks have usable images before presenting result
+  const missing = currentLooks.filter((l) => !hasRealImage(l.imageUrl));
+  if (missing.length > 0) {
+    throw new Error(
+      `Could not generate style visualisations for ${missing.length} look${missing.length > 1 ? 's' : ''}. Please retry.`,
+    );
+  }
+
+  return currentLooks;
 };
+
 
 /**
  * Re-generate a single already-generated look using the user's own

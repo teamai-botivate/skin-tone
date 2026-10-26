@@ -125,7 +125,7 @@ export function LookDetail({
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-8 sm:py-14">
         <div className="grid gap-8 lg:grid-cols-[.9fr_1.1fr] lg:items-start">
           <div>
-            <LookVisual look={look} large />
+            <LookVisual look={look} large onRetry={!hasImage ? submitGenerateVisual : undefined} />
             {hasImage ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
