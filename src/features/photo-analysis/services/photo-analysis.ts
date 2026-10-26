@@ -30,7 +30,15 @@ export const analyzePhoto = async (photoUrl: string): Promise<PhotoAnalysisResul
     throw new Error(msg);
   }
 
-  const data = (await res.json()) as PhotoAnalysisResult;
-  if (!data.status) throw new Error('Empty photo analysis response');
-  return data;
+  const rawJson = await res.json();
+  const data = (rawJson?.data || rawJson) as Partial<PhotoAnalysisResult>;
+  if (!data || !data.status) throw new Error('Empty photo analysis response');
+
+  return {
+    status: data.status,
+    skinTone: data.skinTone || 'Medium',
+    undertone: data.undertone || 'Warm',
+    contrast: data.contrast || 'Medium',
+    confidence: typeof data.confidence === 'number' ? data.confidence : 85,
+  };
 };

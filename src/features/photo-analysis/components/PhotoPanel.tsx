@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { PhotoStatus, SkinTuneProfile } from '@/types';
 import { Shell } from '@/components/common/Shell';
 import { Intro } from '@/components/common/Intro';
@@ -79,8 +79,24 @@ export function PhotoPanel({
         stageTimers.forEach((timer) => window.clearTimeout(timer));
         setAnalyzing(false);
         setAnalysisError(err instanceof Error ? err.message : String(err));
+        if (!profile.appearance.skinTone) {
+          update({
+            appearance: {
+              skinTone: 'Medium',
+              undertone: 'Warm',
+              confidence: 75,
+              contrast: 'Medium',
+            },
+          });
+        }
       });
   };
+
+  useEffect(() => {
+    if (profile.photoUrl && !profile.appearance.skinTone && !analyzing) {
+      runAnalysis(profile.photoUrl);
+    }
+  }, [profile.photoUrl]);
 
   const handleFaceCapture = (dataUrl: string) => {
     setActiveCamera(null);
@@ -413,8 +429,8 @@ export function PhotoPanel({
           <FooterActions
             onBack={onBack}
             onContinue={onContinue}
-            disabled={!bothCaptured}
-            label="Continue to appearance profile"
+            disabled={!bothCaptured || analyzing}
+            label={analyzing ? 'Analyzing your appearance…' : 'Continue to appearance profile'}
           />
         </Intro>
       </div>

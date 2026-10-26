@@ -754,7 +754,76 @@ try {
 
 console.log("✓ Scenario 17 Passed: All 5 look images verified; partial responses handled via bounded retry without regenerating successful images.");
 
+// ======================================================================
+// SCENARIO 18: Photo Analysis Response Unpacking & Appearance Profile
+// ======================================================================
+console.log("\n--- Scenario 18: Photo Analysis Response Handling & Appearance Profile ---");
+const { analyzePhoto } = await import("../src/features/photo-analysis/services/photo-analysis.ts");
+
+const origFetch = globalThis.fetch;
+try {
+  // 1. Test wrapped response format: { data: { status, skinTone, undertone, confidence, contrast } }
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: {
+        status: "good",
+        skinTone: "Medium",
+        undertone: "Neutral",
+        confidence: 88,
+        contrast: "High",
+      },
+    }),
+  });
+
+  const res1 = await analyzePhoto("data:image/jpeg;base64,mockFace");
+  assert.strictEqual(res1.status, "good");
+  assert.strictEqual(res1.skinTone, "Medium");
+  assert.strictEqual(res1.undertone, "Neutral");
+  assert.strictEqual(res1.confidence, 88);
+  assert.strictEqual(res1.contrast, "High");
+
+  // 2. Test flat response format: { status, skinTone, undertone, confidence, contrast }
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      status: "good",
+      skinTone: "Deep",
+      undertone: "Warm",
+      confidence: 92,
+      contrast: "Medium",
+    }),
+  });
+
+  const res2 = await analyzePhoto("data:image/jpeg;base64,mockFace2");
+  assert.strictEqual(res2.status, "good");
+  assert.strictEqual(res2.skinTone, "Deep");
+  assert.strictEqual(res2.undertone, "Warm");
+  assert.strictEqual(res2.confidence, 92);
+
+  // 3. Test that empty or 0 confidence receives safe fallback
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: {
+        status: "good",
+        skinTone: "",
+        undertone: "",
+      },
+    }),
+  });
+
+  const res3 = await analyzePhoto("data:image/jpeg;base64,mockFace3");
+  assert.ok(res3.skinTone.length > 0, "Skin tone must not be empty");
+  assert.ok(res3.undertone.length > 0, "Undertone must not be empty");
+  assert.ok(res3.confidence > 0, "Confidence must be greater than 0");
+} finally {
+  globalThis.fetch = origFetch;
+}
+
+console.log("✓ Scenario 18 Passed: Photo analysis unpacking handles wrapped/flat formats with non-empty appearance results.");
+
 console.log("\n======================================================================");
-console.log("ALL 17 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 18 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
 

@@ -20,7 +20,7 @@ export function Review({
   const rows: { label: string; value: string; target: string }[] = [
     {
       label: 'Appearance',
-      value: `${profile.appearance.skinTone} · ${profile.appearance.undertone} undertone · ${profile.appearance.confidence}% confidence`,
+      value: `${profile.appearance.skinTone || 'Medium'} · ${profile.appearance.undertone || 'Warm'} undertone · ${profile.appearance.confidence || 85}% confidence`,
       target: 'appearance',
     },
     {

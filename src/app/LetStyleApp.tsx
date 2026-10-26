@@ -405,6 +405,7 @@ export function LetStyleApp() {
     appearance: (
       <AppearanceStep
         profile={profile}
+        update={update}
         onNext={() => go('body-style')}
         onPhoto={() => go('photo')}
         onBack={() => go('photo')}

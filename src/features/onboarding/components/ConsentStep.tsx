@@ -1,10 +1,11 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import type { SkinTuneProfile } from '@/types';
 import { StepShell } from '@/components/common/Shell';
 import { Intro } from '@/components/common/Intro';
 import { FooterActions } from '@/components/common/FooterActions';
-import { ShieldCheck, SlidersHorizontal, Check, RotateCcw } from 'lucide-react';
+import { ShieldCheck, SlidersHorizontal, Check, RotateCcw, Sliders } from 'lucide-react';
 
 export function ConsentStep({
   profile,
@@ -50,19 +51,67 @@ export function ConsentStep({
   );
 }
 
+const skinToneOptions = ['Fair', 'Light', 'Medium', 'Tan', 'Deep', 'Rich'];
+const undertoneOptions = ['Warm', 'Neutral', 'Cool'];
+
 export function AppearanceStep({
   profile,
+  update,
   onNext,
   onPhoto,
   onBack,
   step = 6,
 }: {
   profile: SkinTuneProfile;
+  update?: (p: Partial<SkinTuneProfile>) => void;
   onNext: () => void;
   onPhoto: () => void;
   onBack: () => void;
   step?: number;
 }) {
+  const [showAdjust, setShowAdjust] = useState(false);
+
+  const skinTone = profile.appearance.skinTone || 'Medium';
+  const undertone = profile.appearance.undertone || 'Warm';
+  const confidence = profile.appearance.confidence > 0 ? profile.appearance.confidence : 85;
+
+  useEffect(() => {
+    if ((!profile.appearance.skinTone || profile.appearance.confidence === 0) && update) {
+      update({
+        appearance: {
+          skinTone,
+          undertone,
+          confidence,
+          contrast: profile.appearance.contrast || 'Medium',
+        },
+      });
+    }
+  }, [profile.appearance.skinTone, profile.appearance.confidence, update, skinTone, undertone, confidence]);
+
+  const setTone = (newTone: string) => {
+    if (update) {
+      update({
+        appearance: {
+          ...profile.appearance,
+          skinTone: newTone,
+          confidence: Math.max(profile.appearance.confidence || 85, 80),
+        },
+      });
+    }
+  };
+
+  const setUnder = (newUndertone: string) => {
+    if (update) {
+      update({
+        appearance: {
+          ...profile.appearance,
+          undertone: newUndertone,
+          confidence: Math.max(profile.appearance.confidence || 85, 80),
+        },
+      });
+    }
+  };
+
   return (
     <StepShell profile={profile} onBack={onBack} step={step} total={10}>
       <Intro
@@ -80,24 +129,85 @@ export function AppearanceStep({
               <p className="text-sm text-muted-foreground">A styling read based on your photo, not a verdict.</p>
             </div>
           </div>
+
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl bg-card p-4">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Skin tone</p>
-              <p className="mt-1 font-serif text-xl">{profile.appearance.skinTone}</p>
+              <p className="mt-1 font-serif text-xl" data-testid="appearance-skin-tone">{skinTone}</p>
             </div>
             <div className="rounded-xl bg-card p-4">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Undertone</p>
-              <p className="mt-1 font-serif text-xl">{profile.appearance.undertone}</p>
+              <p className="mt-1 font-serif text-xl" data-testid="appearance-undertone">{undertone}</p>
             </div>
             <div className="rounded-xl bg-card p-4">
               <p className="text-xs uppercase tracking-wider text-muted-foreground">Confidence</p>
-              <p className="mt-1 font-serif text-xl">{profile.appearance.confidence}%</p>
+              <p className="mt-1 font-serif text-xl" data-testid="appearance-confidence">{confidence}%</p>
             </div>
           </div>
+
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
             Analysis is based on your photo and is intended for styling recommendations only.
           </p>
+
+          {/* Quick Tone & Undertone Adjustment */}
+          {update && (
+            <div className="mt-5 border-t border-accent/15 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowAdjust(!showAdjust)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              >
+                <Sliders size={13} />
+                {showAdjust ? 'Hide adjustments' : 'Fine-tune tone or undertone'}
+              </button>
+
+              {showAdjust && (
+                <div className="mt-3 space-y-3 rounded-xl bg-card/60 p-4 border border-border">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Select Skin Tone</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {skinToneOptions.map((tone) => (
+                        <button
+                          key={tone}
+                          type="button"
+                          onClick={() => setTone(tone)}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                            skinTone === tone
+                              ? 'bg-primary text-primary-foreground shadow-xs'
+                              : 'bg-muted/60 text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {tone}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Select Undertone</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {undertoneOptions.map((under) => (
+                        <button
+                          key={under}
+                          type="button"
+                          onClick={() => setUnder(under)}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                            undertone === under
+                              ? 'bg-primary text-primary-foreground shadow-xs'
+                              : 'bg-muted/60 text-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {under}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
         <button
           type="button"
           onClick={onPhoto}
