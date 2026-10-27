@@ -6,7 +6,7 @@ import { Shell } from '@/components/common/Shell';
 import { LookVisual } from './LookVisual';
 import { lookCategoryBadges } from '@/features/onboarding/data/options';
 import { getProductRecommendations } from '@/features/shopping/services/product-recommendations';
-import { SlidersHorizontal, ChevronRight, ShoppingBag, Check, Heart, Info } from 'lucide-react';
+import { SlidersHorizontal, ChevronRight, ShoppingBag, Check, Heart, Info, Pencil } from 'lucide-react';
 
 export function Results({
   profile,
@@ -15,6 +15,7 @@ export function Results({
   onSave,
   onLook,
   onFeedback,
+  onEdit,
   onBack,
 }: {
   profile: SkinTuneProfile;
@@ -23,6 +24,7 @@ export function Results({
   onSave: (id: string) => void;
   onLook: (id: string) => void;
   onFeedback: () => void;
+  onEdit?: () => void;
   onBack: () => void;
 }) {
   useEffect(() => {
@@ -49,14 +51,26 @@ export function Results({
               <em className="text-primary">possibilities.</em>
             </h1>
           </div>
-          <button
-            type="button"
-            onClick={onFeedback}
-            data-testid="button-request-changes"
-            className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-3 text-sm font-bold hover:border-primary/50"
-          >
-            <SlidersHorizontal size={16} /> Change the direction
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                data-testid="button-edit-styling"
+                className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-3 text-sm font-bold hover:border-primary/50"
+              >
+                <Pencil size={16} /> Edit
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onFeedback}
+              data-testid="button-request-changes"
+              className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-3 text-sm font-bold hover:border-primary/50"
+            >
+              <SlidersHorizontal size={16} /> Change the direction
+            </button>
+          </div>
         </div>
         <p className="mt-6 max-w-xl text-muted-foreground">
           Built for {profile.occasion.toLowerCase() || 'your moment'} with a{' '}

@@ -11,6 +11,7 @@
 // the same signature, so nothing in the UI needs to change.
 
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
+import { getStylingContext } from '@/lib/styling-context';
 
 export const mockLooks: LookRecommendation[] = [
   {
@@ -181,40 +182,182 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
   const isOffice = allContext.includes('office') || allContext.includes('formal') || allContext.includes('corporate') || allContext.includes('work');
   const isDateNight = allContext.includes('date') || allContext.includes('dinner');
   const isParty = allContext.includes('party') || allContext.includes('cocktail');
+  const isVacation =
+    occ.includes('vacation') ||
+    occ.includes('beach') ||
+    occ.includes('resort') ||
+    occ.includes('goa') ||
+    occ.includes('holiday') ||
+    occ.includes('summer');
 
-  const pronouns = (profile.pronouns || '').toLowerCase();
-  const age = (profile.ageGroup || '').toLowerCase();
-  const isChild =
-    age.includes('kids') ||
-    age.includes('0–12') ||
-    age.includes('0-12') ||
-    age.includes('0–13') ||
-    age.includes('0-13') ||
-    age.includes('13–18') ||
-    age.includes('13-18') ||
-    age.includes('0–5') ||
-    age.includes('0-5') ||
-    age.includes('6–10') ||
-    age.includes('6-10') ||
-    age.includes('11–15') ||
-    age.includes('11-15') ||
-    age.includes('15–19') ||
-    age.includes('15-19') ||
-    pronouns.includes('kids') ||
-    pronouns.includes('child');
-  const isWoman = !isChild && (pronouns.includes('women') || pronouns.includes('female') || pronouns.includes('she/her'));
-  const isMan = !isChild && !isWoman && (pronouns.includes('male') || pronouns.includes('he/him') || /\bmen\b/.test(pronouns));
+  const ctx = getStylingContext(profile);
+  const isBoy = ctx.isBoy;
+  const isGirl = ctx.isGirl;
+  const isChild = ctx.isKids;
+  const isMan = ctx.isMan;
+  const isWoman = ctx.isWoman;
 
   const lovedColors = Array.isArray(profile.colorsLove) && profile.colorsLove.length > 0 ? profile.colorsLove : ['Pink'];
   const primaryColor = lovedColors[0] || 'Pink';
   const undertone = profile.appearance?.undertone || 'Warm';
 
-  // 1. Garba / Navratri Festive Look Suite (e.g. Pink + Garba Night + Traditional)
-  if (isGarba) {
-    if (isChild) {
+  const isFestive =
+    !isVacation &&
+    (isGarba ||
+      isWedding ||
+      allContext.includes('diwali') ||
+      allContext.includes('festive') ||
+      allContext.includes('ethnic') ||
+      allContext.includes('puja'));
+
+  // 1. Festive / Cultural Look Suite (e.g. Diwali, Garba, Navratri, Traditional Celebration)
+  if (isGarba || isFestive) {
+    if (isBoy) {
       return [
         {
-          id: 'garba-child-01',
+          id: 'garba-boy-01',
+          title: 'Festive Prince Splendor',
+          note: `Vibrant ${primaryColor} embroidered kurta and dhoti set designed for comfortable high-energy Garba dancing.`,
+          vibe: 'Playful',
+          personaEnergy: 'Full of youthful excitement and confidence, ready to celebrate and dance with family.',
+          palette: ['#ec4899', '#f59e0b', '#18181b'],
+          imageUrl: '/replace-with-generated/garba-01.webp',
+          outfit: `Boys ${primaryColor} embroidered cotton-silk festive kurta with white dhoti pants and contrast Nehru jacket.`,
+          outfitColor: `${primaryColor} with rich gold embroidery and ivory contrasts.`,
+          jewellery: 'None (child-safe styling).',
+          hairstyle: 'Neat side part with clean, natural texture.',
+          makeup: 'None (child-friendly natural skin).',
+          footwear: 'Soft cushioned non-slip boys ethnic mojaris or ethnic sandals.',
+          accessories: 'Contrasting silk pocket square pinned neatly to the Nehru jacket.',
+          confidence: 96,
+          applicableCategories: ['outfit', 'footwear', 'accessories'],
+          reasoning: [
+            `Vibrant ${primaryColor} brings festive celebratory energy appropriate for young boys.`,
+            '100% breathable cotton-silk allows full freedom of movement for folk dancing.',
+            'Padded non-slip mojaris protect little feet during long celebrations.',
+          ],
+          pieces: [
+            { category: 'Outfit', name: `Boys ${primaryColor} Embroidered Festive Kurta Set`, detail: 'Mandarin collar kurta with soft lining and thread embroidery.' },
+            { category: 'Bottom', name: 'Elasticized Traditional White Dhoti Pants', detail: 'Pre-stitched pleats for easy running and dance movement.' },
+            { category: 'Layer', name: 'Festive Contrast Embroidered Nehru Jacket', detail: 'Lightweight sleeveless jacket with metallic buttons.' },
+            { category: 'Shoe', name: 'Cushioned Boys Ethnic Mojaris', detail: 'Soft inner lining and flexible non-slip sole.' },
+          ],
+        },
+        {
+          id: 'garba-boy-02',
+          title: 'Traditional Kedia Folk Charisma',
+          note: `Authentic Gujarati flared ${primaryColor} kedia top with tulip dhoti pants and tribal threadwork.`,
+          vibe: 'Festive',
+          personaEnergy: 'Spirited, smiling, and lively in authentic Gujarati folk dance posture.',
+          palette: ['#db2777', '#f59e0b', '#fdf2f8'],
+          imageUrl: '/replace-with-generated/garba-02.webp',
+          outfit: `Boys ${primaryColor} traditional flared kedia jacket top with colourful pom-pom latkans and tulip dhoti.`,
+          outfitColor: `Rich ${primaryColor} with sunny yellow and mirror-work accents.`,
+          jewellery: 'None (child-friendly natural styling).',
+          hairstyle: 'Playful textured crop.',
+          makeup: 'None (child-friendly natural skin).',
+          footwear: 'Cushioned ethnic kolhapuri sandals.',
+          accessories: 'Embroidered festive Rajasthani/Gujarati bandi belt.',
+          confidence: 94,
+          applicableCategories: ['outfit', 'footwear', 'accessories'],
+          reasoning: [
+            'Traditional kedia cut celebrates authentic Gujarati Garba heritage.',
+            'Elasticated tulip dhoti stays secure and comfortable all night.',
+          ],
+          pieces: [
+            { category: 'Outfit', name: `Boys ${primaryColor} Flared Kedia Jacket Top`, detail: 'Angrakha tie-up front with mirror-work accents.' },
+            { category: 'Bottom', name: 'Contrasting Tulip Dhoti Pants', detail: 'Lightweight breathable rayon-cotton.' },
+            { category: 'Shoe', name: 'Cushioned Kolhapuri Sandals', detail: 'Secure ankle strap for dancing.' },
+          ],
+        },
+        {
+          id: 'garba-boy-03',
+          title: 'Royal Bandhgala Elegance',
+          note: `Regal ${primaryColor} silk-blend bandhgala waistcoat paired with cream kurta and churidar.`,
+          vibe: 'Regal',
+          personaEnergy: 'Composed, charming, and poised with a proud little smile.',
+          palette: ['#be185d', '#d97706', '#fffbeb'],
+          imageUrl: '/replace-with-generated/garba-03.webp',
+          outfit: `Boys ${primaryColor} tailored silk-blend bandhgala waistcoat over a crisp cream kurta and churidar.`,
+          outfitColor: `Deep ${primaryColor} and antique gold brocade.`,
+          jewellery: 'None (child-friendly natural styling).',
+          hairstyle: 'Gentle combed side-sweep.',
+          makeup: 'None (child-friendly natural skin).',
+          footwear: 'Slip-on handcrafted boys ethnic loafers.',
+          accessories: 'Golden printed silk pocket square.',
+          confidence: 93,
+          applicableCategories: ['outfit', 'footwear', 'accessories'],
+          reasoning: [
+            'Bandhgala cut offers elevated polish for grand family gatherings.',
+            'Soft cotton inner lining ensures no itching or discomfort.',
+          ],
+          pieces: [
+            { category: 'Layer', name: `Boys ${primaryColor} Brocade Bandhgala Waistcoat`, detail: 'Structured mandarin collar with antique brass buttons.' },
+            { category: 'Outfit', name: 'Cream Cotton Silk Kurta Set', detail: 'Breathable base layer with soft elasticized churidar.' },
+            { category: 'Shoe', name: 'Handcrafted Boys Ethnic Loafers', detail: 'Flexible rubber sole with padded footbed.' },
+          ],
+        },
+        {
+          id: 'garba-boy-04',
+          title: 'Vibrant Angrakha Festive',
+          note: `Side-tie ${primaryColor} angrakha kurta with golden gota border and matching pyjama.`,
+          vibe: 'Radiant',
+          personaEnergy: 'Cheery and bright mid-twirl, full of laughter.',
+          palette: ['#e11d48', '#fbbf24', '#f8fafc'],
+          imageUrl: '/replace-with-generated/garba-04.webp',
+          outfit: `Boys ${primaryColor} angrakha cotton kurta with gota patti border and comfortable pyjama.`,
+          outfitColor: `${primaryColor} with golden gota work and pearl white.`,
+          jewellery: 'None.',
+          hairstyle: 'Natural clean styling.',
+          makeup: 'None (child-friendly natural skin).',
+          footwear: 'Soft cushioned ethnic juttis.',
+          accessories: 'Mini matching brooch.',
+          confidence: 92,
+          applicableCategories: ['outfit', 'footwear', 'accessories'],
+          reasoning: [
+            'Angrakha overlap neckline creates authentic royal charm.',
+            'Lightweight cotton keeps active boys cool and sweat-free.',
+          ],
+          pieces: [
+            { category: 'Outfit', name: `Boys ${primaryColor} Angrakha Kurta Set`, detail: 'Asymmetrical overlap with soft cloth ties.' },
+            { category: 'Bottom', name: 'White Cotton Pyjama', detail: 'Gentle elastic waistband.' },
+            { category: 'Shoe', name: 'Padded Ethnic Juttis', detail: 'Genuine leather cushioned sole.' },
+          ],
+        },
+        {
+          id: 'garba-boy-05',
+          title: 'Modern Indo-Western Fusion',
+          note: `Stylishly modern ${primaryColor} asymmetrical festive kurta with dark tailored stretch pants.`,
+          vibe: 'Daring',
+          personaEnergy: 'Modern, confident, ready for festive photos and celebrations.',
+          palette: ['#9d174d', '#1e1b4b', '#f1f5f9'],
+          imageUrl: '/replace-with-generated/garba-05.webp',
+          outfit: `Boys ${primaryColor} modern asymmetrical high-low festive kurta with tailored stretch pants.`,
+          outfitColor: `${primaryColor} with midnight navy contrasts.`,
+          jewellery: 'None.',
+          hairstyle: 'Sleek brushed-up modern quiff.',
+          makeup: 'None (child-friendly natural skin).',
+          footwear: 'Clean leather low-top sneakers or loafers.',
+          accessories: 'Sporty child-friendly wrist watch.',
+          confidence: 91,
+          applicableCategories: ['outfit', 'footwear', 'accessories'],
+          reasoning: [
+            'Indo-western cut blends traditional colour with modern boys streetwear comfort.',
+            'Pairs effortlessly with sneakers for non-stop play.',
+          ],
+          pieces: [
+            { category: 'Outfit', name: `Boys ${primaryColor} Asymmetrical Festive Kurta`, detail: 'Diagonal button placket with contrast piping.' },
+            { category: 'Bottom', name: 'Navy Stretch Chino Trousers', detail: 'Comfort stretch for active kids.' },
+            { category: 'Shoe', name: 'White Leather Low-Top Sneakers', detail: 'All-day cushioning.' },
+          ],
+        },
+      ];
+    }
+
+    if (isChild && !isBoy) {
+      return [
+        {
+          id: 'garba-girl-01',
           title: 'Festive Twirl Magic',
           note: `Joyful ${primaryColor} flared chaniya choli designed for comfortable festive dancing.`,
           vibe: 'Playful',
@@ -464,7 +607,294 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
     ];
   }
 
-  // Fallback to static mock looks for general/unspecified queries
+  if (isBoy && isVacation) {
+    return [
+      {
+        id: 'boy-vacation-01',
+        title: 'Breezy Linen Resort Co-ord',
+        note: `Breathable ${primaryColor} or off-white relaxed linen button-down shirt paired with matching lightweight linen drawstring shorts.`,
+        vibe: 'Breezy',
+        personaEnergy: 'Relaxed and happy along the sunny coast with an easy, sunlit smile.',
+        palette: ['#f8fafc', '#38bdf8', '#f59e0b'],
+        imageUrl: '/replace-with-generated/look-01.webp',
+        outfit: `Boys breathable ${primaryColor} relaxed-fit linen button-down shirt with wide-leg breathable linen shorts.`,
+        outfitColor: `${primaryColor} with coastal sky blue and sandy beige accents.`,
+        jewellery: 'None (child-safe styling).',
+        hairstyle: 'Natural wind-swept crop.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Slip-on canvas boat shoes or cushioned woven sandals.',
+        accessories: 'Woven child-friendly straw sun hat or UV sunglasses.',
+        confidence: 97,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          '100% breathable pure linen ensures maximum cooling in tropical weather.',
+          'Elasticated drawstring waistband provides non-restrictive comfort for beachside play.',
+          'Cushioned non-slip resort footwear protects little feet on boardwalks and sand.',
+        ],
+        pieces: [
+          { category: 'Top', name: `Boys ${primaryColor} Linen Resort Shirt`, detail: 'Relaxed camp collar with coconut shell buttons.' },
+          { category: 'Bottom', name: 'Matching Breathable Linen Drawstring Shorts', detail: 'Soft elastic waistband with functional drawcord.' },
+          { category: 'Shoe', name: 'Slip-On Canvas Boat Shoes', detail: 'Flexible rubber non-slip outsole.' },
+          { category: 'Accessories', name: 'Woven Straw Sun Hat', detail: 'Lightweight sun protection with chin strap.' },
+        ],
+      },
+      {
+        id: 'boy-vacation-02',
+        title: 'Sunlit Tropical Camp-Collar Set',
+        note: `Playful tropical print cotton camp-collar shirt with khaki stretch chino shorts.`,
+        vibe: 'Playful',
+        personaEnergy: 'Full of excitement and sunny energy, mid-laugh on a coastal getaway.',
+        palette: ['#0284c7', '#84cc16', '#fef08a'],
+        imageUrl: '/replace-with-generated/look-02.webp',
+        outfit: `Boys lightweight tropical print camp-collar cotton shirt with beige relaxed stretch chino shorts.`,
+        outfitColor: 'Tropical ocean blue and palm green with sandy beige.',
+        jewellery: 'None.',
+        hairstyle: 'Textured playful crop.',
+        makeup: 'None.',
+        footwear: 'Water-friendly cushioned velcro sandals.',
+        accessories: 'Polarized kids sunglasses.',
+        confidence: 95,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Airy cotton poplin resists humidity and keeps kids cool.',
+          'Casual stretch chino shorts transition effortlessly from beach to resort dining.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Tropical Camp-Collar Shirt', detail: 'Airy poplin cotton with tropical botanical print.' },
+          { category: 'Bottom', name: 'Beige Stretch Chino Shorts', detail: 'Comfort stretch cotton with deep pockets.' },
+          { category: 'Shoe', name: 'Cushioned Velcro Sandals', detail: 'Quick-drying waterproof straps.' },
+        ],
+      },
+      {
+        id: 'boy-vacation-03',
+        title: 'Coastal Striped Cotton Classic',
+        note: `Lightweight nautical stripe organic tee with relaxed navy drawstring shorts.`,
+        vibe: 'Grounded',
+        personaEnergy: 'Easy-going, comfortable, and content exploring seaside markets.',
+        palette: ['#1e3a8a', '#f8fafc', '#fbbf24'],
+        imageUrl: '/replace-with-generated/look-03.webp',
+        outfit: `Boys navy and white striped lightweight cotton jersey tee with relaxed navy drawstring shorts.`,
+        outfitColor: 'Navy blue and ocean white with sunny accents.',
+        jewellery: 'None.',
+        hairstyle: 'Clean natural short cut.',
+        makeup: 'None.',
+        footwear: 'Breathable slip-on canvas espadrille sneakers.',
+        accessories: 'Navy cotton twill bucket hat.',
+        confidence: 94,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Organic combed cotton is ultra-soft on sensitive skin during warm days.',
+          'Relaxed navy shorts offer complete freedom of movement.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Striped Cotton Tee', detail: 'Breathable combed cotton crewneck.' },
+          { category: 'Bottom', name: 'Navy Drawstring Cotton Shorts', detail: 'Relaxed leg opening for active mobility.' },
+          { category: 'Shoe', name: 'Canvas Slip-On Sneakers', detail: 'Padded insole.' },
+        ],
+      },
+      {
+        id: 'boy-vacation-04',
+        title: 'Seaside Chambray & Linen',
+        note: `Short-sleeve featherweight chambray shirt with sage linen-blend shorts.`,
+        vibe: 'Fresh',
+        personaEnergy: 'Bright, smiling, standing poised for golden-hour family vacation photos.',
+        palette: ['#0284c7', '#10b981', '#f1f5f9'],
+        imageUrl: '/replace-with-generated/look-04.webp',
+        outfit: `Boys featherlight short-sleeve sky blue chambray shirt with sage green linen-blend shorts.`,
+        outfitColor: 'Sky blue chambray with earthy sage green.',
+        jewellery: 'None.',
+        hairstyle: 'Tidy side sweep.',
+        makeup: 'None.',
+        footwear: 'Perforated leather boat loafers.',
+        accessories: 'Braided casual stretch belt.',
+        confidence: 93,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Featherweight chambray adds a handsome, polished touch for vacation dinners.',
+          'Linen-cotton blend dries quickly and stays soft.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Short-Sleeve Chambray Shirt', detail: 'Button-down collar with contrast buttons.' },
+          { category: 'Bottom', name: 'Sage Linen-Blend Shorts', detail: 'Adjustable inner elastic.' },
+          { category: 'Shoe', name: 'Perforated Boat Loafers', detail: 'Breathable footbed.' },
+        ],
+      },
+      {
+        id: 'boy-vacation-05',
+        title: 'Sunset Boardwalk Waffle Co-ord',
+        note: `Textured waffle cotton resort tee with terracotta breathable linen-cotton shorts.`,
+        vibe: 'Radiant',
+        personaEnergy: 'Warm, luminous smile watching the ocean sunset.',
+        palette: ['#ea580c', '#fef3c7', '#334155'],
+        imageUrl: '/replace-with-generated/look-05.webp',
+        outfit: `Boys cream textured waffle-knit cotton resort tee with terracotta drawstring cotton-linen shorts.`,
+        outfitColor: 'Warm terracotta and cream neutral with slate accents.',
+        jewellery: 'None.',
+        hairstyle: 'Natural tousled crop.',
+        makeup: 'None.',
+        footwear: 'Cushioned ergonomic slide sandals.',
+        accessories: 'Woven friendship wristband.',
+        confidence: 92,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Waffle knit provides tactile dimension without heavy layering.',
+          'Warm terracotta tones flatter golden-hour vacation photography.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Cream Waffle Cotton Tee', detail: 'Open knit texture for airflow.' },
+          { category: 'Bottom', name: 'Terracotta Linen-Cotton Shorts', detail: 'Soft pre-washed fabric.' },
+          { category: 'Shoe', name: 'Ergonomic Slide Sandals', detail: 'Molded arch support.' },
+        ],
+      },
+    ];
+  }
+
+  if (isBoy) {
+    return [
+      {
+        id: 'boy-look-01',
+        title: 'Casual Chore Polish',
+        note: `Sage green chore jacket over an oat cotton tee and straight-leg denim.`,
+        vibe: 'Grounded',
+        personaEnergy: 'Relaxed, curious, easy shoulders and a cheerful natural smile.',
+        palette: ['#283d3b', '#d8b27c', '#f2e6d4'],
+        imageUrl: '/replace-with-generated/look-01.webp',
+        outfit: 'Boys sage cotton chore jacket with an oat crewneck tee and ink straight-leg denim jeans.',
+        outfitColor: 'Sage green with warm oat and ink denim accents.',
+        jewellery: 'None (child-safe styling).',
+        hairstyle: 'Natural clean crop.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Clean leather low-top boys sneakers.',
+        accessories: 'Structured boys canvas crossbody or backpack.',
+        confidence: 95,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Durable cotton chore jacket provides stylish, comfortable layering for active boys.',
+          'Relaxed straight-leg denim offers durability and easy playground movement.',
+          'Neutral palette highlights natural warm undertones comfortably.',
+        ],
+        pieces: [
+          { category: 'Outer', name: 'Boys Sage Chore Jacket', detail: 'Relaxed utility fit with durable metal buttons.' },
+          { category: 'Base', name: 'Oatmeal Cotton Crewneck Tee', detail: '100% breathable combed cotton.' },
+          { category: 'Bottom', name: 'Ink Straight-Leg Denim Jeans', detail: 'Adjustable inner elastic waistband for comfort.' },
+          { category: 'Shoe', name: 'Clean White Low-Top Sneakers', detail: 'Non-marking rubber sole.' },
+        ],
+      },
+      {
+        id: 'boy-look-02',
+        title: 'Smart Weekend Polo',
+        note: `Brick knit polo, charcoal overshirt, and tailored chino trousers.`,
+        vibe: 'Confident',
+        personaEnergy: 'Sharp and enthusiastic with a bright, charming expression.',
+        palette: ['#a94f3c', '#c88c68', '#302f35'],
+        imageUrl: '/replace-with-generated/look-02.webp',
+        outfit: 'Boys brick red knit polo with an open charcoal overshirt and khaki stretch chinos.',
+        outfitColor: 'Brick red with charcoal and khaki accents.',
+        jewellery: 'None.',
+        hairstyle: 'Neat side part with natural wave.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Boys slip-on penny loafers or casual boat shoes.',
+        accessories: 'Sporty digital wrist watch.',
+        confidence: 93,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Knit polo offers structured elegance without restricting playtime flexibility.',
+          'Khaki stretch chinos transition effortlessly from family lunch to gatherings.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Brick Red Knit Polo', detail: 'Ribbed collar with two-button placket.' },
+          { category: 'Layer', name: 'Charcoal Cotton Twill Overshirt', detail: 'Wear open as a lightweight layer.' },
+          { category: 'Bottom', name: 'Khaki Stretch Chino Trousers', detail: 'Reinforced knee construction.' },
+          { category: 'Shoe', name: 'Boys Casual Penny Loafers', detail: 'Padded insole.' },
+        ],
+      },
+      {
+        id: 'boy-look-03',
+        title: 'Maritime Sport Classic',
+        note: `Nautical striped cotton pullover with navy cargo joggers and sneakers.`,
+        vibe: 'Playful',
+        personaEnergy: 'Full of dynamic energy, mid-laugh, ready for an adventure.',
+        palette: ['#1e3a8a', '#f8fafc', '#d97706'],
+        imageUrl: '/replace-with-generated/look-03.webp',
+        outfit: 'Boys navy and white striped cotton knit pullover with navy relaxed cargo joggers.',
+        outfitColor: 'Navy blue and crisp white with warm tan highlights.',
+        jewellery: 'None.',
+        hairstyle: 'Sporty tousled hair.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Cushioned athletic running sneakers.',
+        accessories: 'Navy cotton baseball cap.',
+        confidence: 92,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Timeless striped pullover brings playful seaside charm.',
+          'Cargo joggers offer convenient pockets and elasticated cuffs.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Striped Cotton Pullover', detail: 'Soft loopback French terry cotton.' },
+          { category: 'Bottom', name: 'Navy Relaxed Cargo Joggers', detail: 'Drawstring waist and cargo flap pockets.' },
+          { category: 'Shoe', name: 'Cushioned Athletic Running Sneakers', detail: 'Breathable mesh upper.' },
+          { category: 'Accessories', name: 'Cotton Twill Baseball Cap', detail: 'Adjustable snapback closure.' },
+        ],
+      },
+      {
+        id: 'boy-look-04',
+        title: 'Modern Chambray Button-Down',
+        note: `Crisp blue chambray button-down shirt with olive cotton shorts or chinos.`,
+        vibe: 'Fresh',
+        personaEnergy: 'Crisp, bright, and smiling with confident poise.',
+        palette: ['#0284c7', '#65a30d', '#f8fafc'],
+        imageUrl: '/replace-with-generated/look-04.webp',
+        outfit: 'Boys light-wash chambray button-down shirt paired with olive twill chino pants.',
+        outfitColor: 'Sky blue chambray with earthy olive green.',
+        jewellery: 'None.',
+        hairstyle: 'Textured taper cut.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Tan leather boat shoes or slip-on canvas shoes.',
+        accessories: 'Woven brown stretch belt.',
+        confidence: 91,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Chambray delivers a handsome, polished silhouette suitable for all occasions.',
+          'Breathable cotton twill keeps kids comfortable throughout warm days.',
+        ],
+        pieces: [
+          { category: 'Top', name: 'Boys Chambray Button-Down Shirt', detail: 'Patch chest pocket and roll-up sleeve tabs.' },
+          { category: 'Bottom', name: 'Olive Green Chino Trousers', detail: 'Durable stretch cotton twill.' },
+          { category: 'Shoe', name: 'Tan Slip-On Canvas Shoes', detail: 'Flexible rubber outsole.' },
+        ],
+      },
+      {
+        id: 'boy-look-05',
+        title: 'Celebration Tailored Blazer',
+        note: `Tailored navy cotton-linen blazer with crisp white shirt and beige trousers.`,
+        vibe: 'Poised',
+        personaEnergy: 'Handsome, charming, standing tall with a bright smile.',
+        palette: ['#1e293b', '#f8fafc', '#e2e8f0'],
+        imageUrl: '/replace-with-generated/look-05.webp',
+        outfit: 'Boys tailored navy cotton-linen blazer over a white poplin dress shirt and beige trousers.',
+        outfitColor: 'Navy suiting with crisp white and beige.',
+        jewellery: 'None.',
+        hairstyle: 'Sleek side-part styling.',
+        makeup: 'None (child-friendly natural skin).',
+        footwear: 'Polished brown oxford shoes or loafers.',
+        accessories: 'Matching striped silk bow tie or necktie.',
+        confidence: 94,
+        applicableCategories: ['outfit', 'footwear', 'accessories'],
+        reasoning: [
+          'Unlined cotton-linen blazer keeps young boys sharp without overheating.',
+          'Classic color pairing makes any family event or ceremony memorable.',
+        ],
+        pieces: [
+          { category: 'Outer', name: 'Boys Navy Cotton-Linen Blazer', detail: 'Notch lapel with two-button closure.' },
+          { category: 'Base', name: 'White Cotton Poplin Dress Shirt', detail: 'Soft button-down collar.' },
+          { category: 'Bottom', name: 'Beige Flat-Front Chino Trousers', detail: 'Clean front with elastic back waistband.' },
+          { category: 'Shoe', name: 'Polished Brown Oxford Loafers', detail: 'Cushioned footbed.' },
+        ],
+      },
+    ];
+  }
+
+  // Fallback to static mock looks for general/unspecified adult queries
   return mockLooks;
 }
 
@@ -482,27 +912,29 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
 export const getLookRecommendations = async (
   profile: SkinTuneProfile,
 ): Promise<LookRecommendation[]> => {
-  const { photoUrl: _photoUrl, ...profileForRequest } = profile;
-  const res = await fetch('/api/recommendations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ profile: profileForRequest }),
-  });
+  try {
+    const { photoUrl: _photoUrl, ...profileForRequest } = profile;
+    const res = await fetch('/api/recommendations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: profileForRequest }),
+    });
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => null);
-    const msg =
-      errData?.message ||
-      errData?.error ||
-      `Styling recommendations service returned HTTP ${res.status}. Please check backend logs or verify server configuration.`;
-    throw new Error(msg);
+    if (res.ok) {
+      const data = (await res.json()) as { recommendations: LookRecommendation[] };
+      if (data.recommendations?.length) {
+        return data.recommendations;
+      }
+    } else {
+      const errData = await res.json().catch(() => null);
+      console.warn(
+        `Backend recommendations returned HTTP ${res.status}: ${errData?.message || errData?.error || 'falling back to curated looks'}`,
+      );
+    }
+  } catch (err) {
+    console.warn('Backend recommendations call failed, falling back to dynamic look generation:', err);
   }
 
-  const data = (await res.json()) as { recommendations: LookRecommendation[] };
-  if (!data.recommendations?.length) {
-    throw new Error('Recommendations engine returned empty recommendations. Please retry.');
-  }
-
-  return data.recommendations;
+  return generateFallbackLooks(profile);
 };
 

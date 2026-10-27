@@ -2,6 +2,54 @@ import { NextResponse } from "next/server";
 import { logger } from "./logger";
 
 /**
+ * Safely extracts a readable string from any error, event, rejection reason, or unknown object.
+ * Guarantees that "[object Event]" or "[object Object]" is never returned.
+ */
+export function extractErrorMessage(
+  err: unknown,
+  fallback = "An unexpected error occurred. Please try again.",
+): string {
+  if (!err) return fallback;
+  if (err instanceof Error) {
+    const msg = err.message?.trim();
+    if (msg && msg !== "[object Event]" && msg !== "[object Object]") return msg;
+    return fallback;
+  }
+  if (typeof err === "string") {
+    const trimmed = err.trim();
+    if (trimmed && trimmed !== "[object Event]" && trimmed !== "[object Object]") return trimmed;
+    return fallback;
+  }
+  if (typeof err === "object" && err !== null) {
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message && obj.message !== "[object Event]") {
+      return obj.message;
+    }
+    if (typeof obj.error === "string" && obj.error && obj.error !== "[object Event]") {
+      return obj.error;
+    }
+    // Check if it's a DOM Event / ErrorEvent / ProgressEvent
+    if ("type" in obj || "target" in obj || "isTrusted" in obj) {
+      const type = typeof obj.type === "string" ? obj.type : "";
+      return type
+        ? `Browser network or asset event error (${type}). Please refresh the page.`
+        : "Network connection or resource loading error. Please refresh the page.";
+    }
+    try {
+      const json = JSON.stringify(err);
+      if (json && json !== "{}") return json;
+    } catch {
+      // ignore
+    }
+  }
+  const str = String(err);
+  if (str === "[object Event]" || str === "[object Object]" || str === "[object ProgressEvent]") {
+    return fallback;
+  }
+  return str || fallback;
+}
+
+/**
  * Sanitizes an error message so that internal tokens, API keys, provider
  * traces, or file system paths are never leaked to the client browser.
  */
@@ -10,7 +58,7 @@ export function sanitizeErrorMessage(
   defaultMessage: string = "An error occurred while processing your request.",
 ): string {
   if (!err) return defaultMessage;
-  const rawMsg = err instanceof Error ? err.message : String(err);
+  const rawMsg = extractErrorMessage(err, defaultMessage);
 
   // If the message contains sensitive keywords or key patterns, sanitize completely
   const sensitivePatterns = [
@@ -51,7 +99,7 @@ export function sanitizeErrorMessage(
   const cleanMsg = rawMsg.replace(/([A-Z]:\\[^\s:]+)|(\/[a-zA-Z0-9_.-]+\/[^\s:]+)/g, "[internal path]");
 
   // If it's a reasonably sized message without secrets, return it for user clarity
-  if (cleanMsg.length < 250) {
+  if (cleanMsg.length < 250 && cleanMsg !== "[object Event]" && cleanMsg !== "[object Object]") {
     return cleanMsg;
   }
 

@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState, useRef, useCallback, type ReactNode } fro
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
 import { useAuth, type User } from '@/features/auth';
 import { clearPersonalizationStorage } from '@/lib/personalization-storage';
+import { getStylingContext, getGenerationFingerprint } from '@/lib/styling-context';
+import { extractErrorMessage } from '@/lib/safe-error';
+import { clearClientProductCache } from '@/features/shopping';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -33,6 +36,7 @@ import {
   Feedback,
   getLookRecommendations,
   generateLookImages,
+  hasRealImage,
 } from '@/features/recommendations';
 
 type Screen =
@@ -57,6 +61,7 @@ type Screen =
 const initialProfile: SkinTuneProfile = {
   name: '',
   pronouns: '',
+  gender: '',
   ageGroup: '',
   height: '',
   photoUrl: '',
@@ -97,14 +102,21 @@ export function LetStyleApp() {
   const [changeAreas, setChangeAreas] = useState<string[]>([]);
   const [changeRequest, setChangeRequest] = useState('');
   const [generatedLooks, setGeneratedLooks] = useState<LookRecommendation[]>([]);
+  const [looksFingerprint, setLooksFingerprint] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [deletedNotice, setDeletedNotice] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [generationTrigger, setGenerationTrigger] = useState(0);
+  const generationRequestIdRef = useRef(0);
+
   // Centralized reset for all personalization state and browser caches
   const resetPersonalization = useCallback(() => {
+    generationRequestIdRef.current += 1;
     setProfile(initialProfile);
     setGeneratedLooks([]);
+    setLooksFingerprint(null);
+    clearClientProductCache();
     setSavedLooks([]);
     setFeeling('');
     setChangeAreas([]);
@@ -168,11 +180,65 @@ export function LetStyleApp() {
   };
   const back = () => {
     if (screen === 'detail' || screen === 'feedback') go('results');
+    else if (
+      screen === 'review' &&
+      generatedLooks.length === 5 &&
+      getGenerationFingerprint(profile) === looksFingerprint
+    ) {
+      go('results');
+    }
     else if (index > 0) go(wizardScreens[index - 1]);
     else go(user && profile.name ? 'home' : 'welcome');
   };
   const saveProfile = () => {
-    localStorage.setItem('letstyle-profile', JSON.stringify(profile));
+    // When the user changes to a casual / vacation / resort occasion, reconcile conflicting residual traditional style tags
+    // unless the user explicitly requested traditional/ethnic styling in their customStyleNotes
+    const occLower = (profile.occasion || '').toLowerCase();
+    const isCasualOrVacation =
+      occLower.includes('vacation') ||
+      occLower.includes('beach') ||
+      occLower.includes('resort') ||
+      occLower.includes('goa') ||
+      occLower.includes('casual') ||
+      occLower.includes('everyday');
+
+    const notesLower = (profile.customStyleNotes || '').toLowerCase();
+    const explicitlyRequestsEthnic =
+      notesLower.includes('ethnic') ||
+      notesLower.includes('traditional') ||
+      notesLower.includes('kurta') ||
+      notesLower.includes('sherwani') ||
+      notesLower.includes('saree') ||
+      notesLower.includes('lehenga');
+
+    let effectiveProfile = profile;
+    if (isCasualOrVacation && !explicitlyRequestsEthnic) {
+      const filteredStyles = profile.style.filter(
+        (s) => !['traditional', 'royal & regal', 'ethnic', 'festive'].includes(s.toLowerCase()),
+      );
+      if (filteredStyles.length !== profile.style.length) {
+        effectiveProfile = { ...profile, style: filteredStyles };
+        setProfile(effectiveProfile);
+      }
+    }
+
+    localStorage.setItem('letstyle-profile', JSON.stringify(effectiveProfile));
+    const currentFingerprint = getGenerationFingerprint(effectiveProfile);
+    const inputsChanged =
+      looksFingerprint !== null &&
+      currentFingerprint !== looksFingerprint;
+
+    // Immediately increment request ID to invalidate any in-flight asynchronous generation responses
+    generationRequestIdRef.current += 1;
+
+    if (inputsChanged) {
+      setGeneratedLooks([]);
+      setLooksFingerprint(null);
+      clearClientProductCache();
+    }
+
+    setGenerationTrigger((prev) => prev + 1);
+
     if (!user) {
       openAuthModal('signup', () => {
         go('generating');
@@ -190,15 +256,23 @@ export function LetStyleApp() {
     let active = true;
     setGenerationError(null);
 
-    // Reuse existing recommendations if already generated (e.g. on retry), avoiding redundant AI model calls
-    const recsPromise =
-      generatedLooks.length === 5
-        ? Promise.resolve(generatedLooks)
-        : getLookRecommendations(profile);
+    const requestId = ++generationRequestIdRef.current;
+    const currentFingerprint = getGenerationFingerprint(profile);
+    const inputsUnchanged =
+      looksFingerprint !== null &&
+      looksFingerprint === currentFingerprint;
+    const canReuseLooks =
+      inputsUnchanged &&
+      generatedLooks.length === 5 &&
+      generatedLooks.every((look) => hasRealImage(look.imageUrl));
+
+    const recsPromise = canReuseLooks
+      ? Promise.resolve(generatedLooks)
+      : getLookRecommendations(profile);
 
     recsPromise
       .then((recommendations) => {
-        if (!active) return;
+        if (!active || generationRequestIdRef.current !== requestId) return;
         refreshUser();
         setGeneratedLooks(recommendations);
         return generateLookImages(
@@ -210,30 +284,34 @@ export function LetStyleApp() {
           },
           {
             onProgress: (partial) => {
-              if (active) setGeneratedLooks(partial);
+              if (active && generationRequestIdRef.current === requestId) {
+                setGeneratedLooks(partial);
+              }
             },
           },
         );
       })
       .then((result) => {
-        if (active && result) {
+        if (active && result && generationRequestIdRef.current === requestId) {
           refreshUser();
           setGeneratedLooks(result);
+          setLooksFingerprint(currentFingerprint);
+          clearClientProductCache();
           go('results');
         }
       })
       .catch((err) => {
-        if (active) {
+        if (active && generationRequestIdRef.current === requestId) {
           refreshUser();
           console.error('Styling recommendation failed:', err);
-          setGenerationError(err instanceof Error ? err.message : String(err));
+          setGenerationError(extractErrorMessage(err));
         }
       });
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
+  }, [screen, generationTrigger]);
 
 
 
@@ -283,8 +361,7 @@ export function LetStyleApp() {
         savedLooks={savedLooks}
         generatedLooks={generatedLooks}
         onNew={() => {
-          update({ photoUrl: '' });
-          go('name');
+          go(profile.name ? 'review' : 'name');
         }}
         onResults={() => go(generatedLooks.length ? 'results' : 'generating')}
         onSettings={openSettings}
@@ -317,7 +394,7 @@ export function LetStyleApp() {
   }
 
   if (screen === 'photo') {
-    return <PhotoPanel profile={profile} update={update} onContinue={() => go('appearance')} onBack={back} />;
+    return <PhotoPanel profile={profile} update={update} onContinue={() => go(profile.occasion ? 'review' : 'appearance')} onBack={back} />;
   }
 
   if (screen === 'results') {
@@ -334,6 +411,7 @@ export function LetStyleApp() {
           go('detail');
         }}
         onFeedback={() => go('feedback')}
+        onEdit={() => go('review')}
         onBack={() => go('home')}
       />
     );
@@ -375,9 +453,19 @@ export function LetStyleApp() {
             JSON.stringify({ feeling, changeAreas, changeRequest }),
           );
           if (feeling === 'Not my style') {
+            if (changeRequest.trim()) {
+              const currentNotes = profile.customStyleNotes || '';
+              const updatedNotes = currentNotes ? `${currentNotes}; ${changeRequest.trim()}` : changeRequest.trim();
+              update({ customStyleNotes: updatedNotes });
+            }
+            generationRequestIdRef.current += 1;
+            setGeneratedLooks([]);
+            setLooksFingerprint(null);
+            clearClientProductCache();
             setFeeling('');
             setChangeAreas([]);
             setChangeRequest('');
+            setGenerationTrigger((prev) => prev + 1);
             go('generating');
           } else {
             go('results');
@@ -393,6 +481,8 @@ export function LetStyleApp() {
         error={generationError}
         onRetry={() => {
           setGenerationError(null);
+          generationRequestIdRef.current += 1;
+          setGenerationTrigger((prev) => prev + 1);
           setScreen('review');
           setTimeout(() => setScreen('generating'), 20);
         }}
@@ -411,15 +501,25 @@ export function LetStyleApp() {
       <SingleChoiceStep
         profile={profile}
         update={(p) => {
+          let derivedGender = profile.gender;
+          if (p.pronouns !== undefined) {
+            const lower = p.pronouns.toLowerCase();
+            if (lower.includes('boy')) derivedGender = 'boy';
+            else if (lower.includes('girl')) derivedGender = 'girl';
+            else if (lower.includes('kid') || lower.includes('child')) derivedGender = 'unspecified';
+            else if (lower.includes('men') && !lower.includes('women')) derivedGender = 'men';
+            else if (lower.includes('women')) derivedGender = 'women';
+          }
+
           if (p.pronouns !== undefined && p.pronouns !== profile.pronouns) {
-            const wasKids = profile.pronouns.toLowerCase().includes('kids') || profile.pronouns.toLowerCase().includes('child');
-            const isNowKids = (p.pronouns || '').toLowerCase().includes('kids') || (p.pronouns || '').toLowerCase().includes('child');
+            const wasKids = getStylingContext(profile).isKids;
+            const isNowKids = getStylingContext({ ...profile, ...p, gender: derivedGender }).isKids;
             if (wasKids !== isNowKids) {
-              update({ ...p, ageGroup: '' });
+              update({ ...p, gender: derivedGender, ageGroup: '' });
               return;
             }
           }
-          update(p);
+          update({ ...p, gender: derivedGender });
         }}
         field="pronouns"
         step={2}
@@ -434,9 +534,7 @@ export function LetStyleApp() {
       />
     ),
     age: (() => {
-      const isKids =
-        profile.pronouns?.toLowerCase().includes('kids') ||
-        profile.pronouns?.toLowerCase().includes('child');
+      const isKids = getStylingContext(profile).isKids;
       const currentAgeOptions = isKids ? kidsAgeGroupOptions : ageGroupOptions;
 
       return (
@@ -446,12 +544,12 @@ export function LetStyleApp() {
           field="ageGroup"
           step={3}
           eyebrow="03 / a little context"
-          title="Which age range feels right?"
-          body="This helps us tune proportions and references. There's no wrong answer."
+          title={isKids ? "Which age range is your child in?" : "Which age range feels right?"}
+          body={isKids ? "This helps us tune proportions, sizing, and age-appropriate kidswear." : "This helps us tune proportions and references. There's no wrong answer."}
           options={currentAgeOptions}
           allowOther={!isKids}
           otherPlaceholder="Type your age preference..."
-          onNext={() => go('consent')}
+          onNext={() => go(profile.occasion ? 'review' : 'consent')}
           onBack={back}
         />
       );
@@ -468,7 +566,7 @@ export function LetStyleApp() {
       <AppearanceStep
         profile={profile}
         update={update}
-        onNext={() => go('body-style')}
+        onNext={() => go(profile.occasion ? 'review' : 'body-style')}
         onPhoto={() => go('photo')}
         onBack={() => go('photo')}
         step={6}
@@ -494,7 +592,8 @@ export function LetStyleApp() {
             compact: true,
           },
         ]}
-        onNext={() => go('custom-style')}
+        continueLabel={profile.occasion ? "Review my edit" : "Continue"}
+        onNext={() => go(profile.occasion ? 'review' : 'custom-style')}
         onBack={back}
       />
     ),
@@ -504,7 +603,8 @@ export function LetStyleApp() {
         update={update}
         step={8}
         total={10}
-        onNext={() => go('colors-occasion')}
+        continueLabel={profile.occasion ? "Review my edit" : "Continue"}
+        onNext={() => go(profile.occasion ? 'review' : 'colors-occasion')}
         onBack={back}
       />
     ),

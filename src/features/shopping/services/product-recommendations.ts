@@ -8,6 +8,10 @@ import type {
 // Client-side cache to instantly return recommendations on look switch or tab navigation
 const clientProductCache = new Map<string, ProductRecommendationsResponse>();
 
+export function clearClientProductCache(): void {
+  clientProductCache.clear();
+}
+
 /**
  * Fetch real shoppable product recommendations matching a styling look and user profile.
  * Calls backend route `POST /api/product-recommendations`.
@@ -21,7 +25,7 @@ export async function getProductRecommendations(
   category?: ProductCategory | 'all',
   forceRefresh?: boolean,
 ): Promise<ProductRecommendationsResponse> {
-  const cacheKey = `v8:${look.id}:${category || 'all'}`;
+  const cacheKey = `v8:${look.id}:${look.title || ''}:${profile.occasion || ''}:${category || 'all'}`;
 
   // Return from client cache immediately if available and refresh was not forced
   if (!forceRefresh) {

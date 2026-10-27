@@ -114,7 +114,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
   useEffect(() => {
     fetchProducts('all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [look.id]);
+  }, [look.id, look.title, look.outfit, profile.occasion]);
 
   // Filter products by selected tab
   const filteredProducts =
@@ -373,7 +373,9 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
           const count =
             tab.id === 'all'
               ? products.length
-              : products.filter((p) => p.category === tab.id).length;
+              : tab.id === 'footwear-accessories'
+                ? products.filter((p) => p.category === 'footwear' || p.category === 'accessories' || p.category === 'jewellery').length
+                : products.filter((p) => p.category === tab.id).length;
 
           return (
             <button
@@ -449,7 +451,18 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.products.map(renderProductCard)}
+                {group.products.length > 0 ? (
+                  group.products.map(renderProductCard)
+                ) : (
+                  <div className="col-span-full rounded-2xl border border-dashed border-border/80 bg-secondary/20 p-6 text-center">
+                    <p className="text-sm font-medium text-foreground">
+                      No verified match found on supported stores for &ldquo;{group.recommendedItemTitle}&rdquo;
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      We ensure only genuine, age-appropriate, and style-relevant pieces are shown. You can refresh products or search directly on supported stores.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

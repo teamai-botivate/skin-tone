@@ -23,6 +23,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth';
+import { extractErrorMessage } from '@/lib/safe-error';
 
 export function PhotoPanel({
   profile,
@@ -122,7 +123,7 @@ export function PhotoPanel({
         refreshUser();
         stageTimers.forEach((timer) => window.clearTimeout(timer));
         setAnalyzing(false);
-        setAnalysisError(err instanceof Error ? err.message : String(err));
+        setAnalysisError(extractErrorMessage(err));
         if (!profile.appearance.skinTone) {
           update({
             appearance: {

@@ -20,6 +20,7 @@ export type AppearanceProfile = {
 export type LetStyleProfile = {
   name: string;
   pronouns: string;
+  gender?: 'boy' | 'girl' | 'women' | 'men' | 'unspecified' | string;
   ageGroup: string;
   height: string;
   photoUrl: string;
@@ -102,7 +103,7 @@ export type ProductResult = {
   shade?: string;
   color?: string;
   itemType?: string;
-  targetGender?: 'women' | 'men' | 'child' | 'unisex';
+  targetGender?: 'women' | 'men' | 'child' | 'boys' | 'girls' | 'unisex';
   style?: string;
   occasion?: string;
   material?: string;

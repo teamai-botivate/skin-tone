@@ -1,2 +1,2 @@
 export { ShopLookSection } from './components/ShopLookSection';
-export { getProductRecommendations } from './services/product-recommendations';
+export { getProductRecommendations, clearClientProductCache } from './services/product-recommendations';

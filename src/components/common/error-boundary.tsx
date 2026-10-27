@@ -24,42 +24,86 @@ interface ErrorBoundaryState {
 
 function toError(value: unknown): Error {
   if (value instanceof Error) {
+    if (value.message === '[object Event]' || value.message === '[object Object]') {
+      return new Error('A browser network or resource event failed to load. A page refresh usually resolves this.');
+    }
     return value;
   }
   if (typeof value === 'string') {
+    if (value === '[object Event]' || value === '[object Object]') {
+      return new Error('A browser network or resource event failed to load. Please refresh the page.');
+    }
     return new Error(value);
   }
-  try {
-    return new Error(JSON.stringify(value));
-  } catch {
-    return new Error(String(value));
+  if (typeof value === 'object' && value !== null) {
+    const obj = value as Record<string, unknown>;
+    // Native DOM Event, ProgressEvent, or ErrorEvent
+    if ('type' in obj || 'target' in obj || 'isTrusted' in obj) {
+      const type = typeof obj.type === 'string' ? obj.type : 'error';
+      return new Error(
+        `Browser event error (${type}). This commonly happens during hot-reloading or when assets update in the background. A quick page refresh will reload the newest assets.`
+      );
+    }
+    try {
+      const json = JSON.stringify(value);
+      if (json && json !== '{}') {
+        return new Error(json);
+      }
+    } catch {
+      // ignore
+    }
   }
+  const str = String(value);
+  if (str === '[object Event]' || str === '[object Object]') {
+    return new Error('A browser network or resource event failed to load. A page refresh will restore the latest state.');
+  }
+  return new Error(str);
 }
 
 function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
-  const isDev = process.env.NODE_ENV !== 'production';
+  const isChunkOrEventError =
+    error.message.includes('ChunkLoadError') ||
+    error.message.includes('Browser event error') ||
+    error.message.includes('failed to load');
+
+  const handleReload = () => {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    } else {
+      resetError();
+    }
+  };
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 p-6">
       <div className="max-w-lg w-full text-center">
         <h1 className="text-xl font-semibold text-gray-900">
-          Something went wrong
+          {isChunkOrEventError ? 'App Update or Network Event' : 'Something went wrong'}
         </h1>
         <p className="mt-2 text-sm text-gray-600">
-          This part of the app hit an error. The rest of the app is still
-          running.
+          {isChunkOrEventError
+            ? 'A background update or resource connection was interrupted. Refreshing the page restores the newest version.'
+            : 'This part of the app hit an error. The rest of the app is still running.'}
         </p>
-        {isDev ? (
-          <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
-            {error.message || String(error)}
-          </pre>
-        ) : null}
-        <button
-          type="button"
-          onClick={resetError}
-          className="mt-4 rounded bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-700"
-        >
-          Try again
-        </button>
+        <pre className="mt-4 overflow-x-auto rounded bg-gray-100 p-3 text-left text-xs text-gray-800">
+          {error.message || 'An unexpected runtime error occurred.'}
+        </pre>
+        <div className="mt-4 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={handleReload}
+            className="rounded bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700"
+          >
+            Reload Page
+          </button>
+          <button
+            type="button"
+            onClick={resetError}
+            className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -88,9 +88,11 @@ export function buildRetailerSearchUrl(
   const rawTerms: string[] = [];
 
   const gender = (params.gender || "").toLowerCase();
-  const isMan = gender === "man" || gender === "men";
-  const isChild = gender === "child" || gender === "kids";
-  const isWoman = gender === "woman" || gender === "women" || (!isMan && !isChild);
+  const isBoy = gender === "boy" || gender === "boys" || gender === "child_boy";
+  const isGirl = gender === "girl" || gender === "girls" || gender === "child_girl";
+  const isChild = isBoy || isGirl || gender === "child" || gender === "kids" || gender === "children";
+  const isMan = !isChild && (gender === "man" || gender === "men" || gender === "male");
+  const isWoman = !isChild && (gender === "woman" || gender === "women" || gender === "female");
 
   const isMakeup =
     params.category === "makeup" ||
@@ -101,7 +103,9 @@ export function buildRetailerSearchUrl(
 
   // Include gender prefix for apparel/shoes/accessories (skip for beauty/makeup)
   if (!isMakeup) {
-    if (isChild) rawTerms.push("kids");
+    if (isBoy) rawTerms.push("boys");
+    else if (isGirl) rawTerms.push("girls");
+    else if (isChild) rawTerms.push("kids");
     else if (isMan) rawTerms.push("men");
     else if (isWoman) rawTerms.push("women");
   }

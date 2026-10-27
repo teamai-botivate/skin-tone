@@ -5,6 +5,8 @@
  * (profile, appearance, preferences, outfits, feedback, avatars).
  */
 
+import { clearClientProductCache } from '@/features/shopping/services/product-recommendations';
+
 export const PERSONALIZATION_STORAGE_KEYS = [
   'letstyle-profile',
   'letstyle-saved-looks',
@@ -30,4 +32,5 @@ export function clearPersonalizationStorage(): void {
       // Storage access might be restricted in some environments
     }
   }
+  clearClientProductCache();
 }

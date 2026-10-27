@@ -7,7 +7,7 @@ import {
   isValidProductUrl,
   getCanonicalProductUrl,
 } from "../src/lib/product-search.ts";
-import { getSafeProductUrl } from "../src/features/shopping/components/ShopLookSection.tsx";
+import { getSafeProductUrl } from "../src/lib/retailer-urls.ts";
 
 console.log("======================================================================");
 console.log("LETSTYLE TEST: DYNAMIC ACCESSORY MATCHING & RETAILER LINK VERIFICATION");
@@ -166,7 +166,7 @@ assert.equal(determineUrlType(tataRealUrl), "exact_product", "Tata CLiQ PDP with
 assert.ok(isValidProductUrl(tataRealUrl), "Tata CLiQ PDP must be a valid product URL");
 
 // Scenario D: Search URL preserves query and is classified as search_result
-const myntraSearch = "https://www.myntra.com/search?q=emerald%20green%20lehenga";
+const myntraSearch = "https://www.myntra.com/emerald-green-lehenga?rawQuery=emerald%20green%20lehenga";
 assert.equal(determineUrlType(myntraSearch), "search_result", "Search URL must be classified as search_result");
 assert.ok(isValidProductUrl(myntraSearch), "Search URL with query must be valid");
 

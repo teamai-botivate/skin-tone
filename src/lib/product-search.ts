@@ -1,6 +1,7 @@
 import { getOpenAIClient, RECOMMENDATION_MODEL, getOpenAIKeyDiagnostics } from "./openai-client";
 import { tavilySearch, getTavilyKeyDiagnostics } from "./tavily-client";
 import { logger } from "./logger";
+import { getStylingContext } from "./styling-context";
 import type {
   LookRecommendation,
   SkinTuneProfile,
@@ -16,46 +17,19 @@ export type PersonaType = "woman" | "man" | "child" | "neutral";
 
 /**
  * Detects the user's styling persona (Woman, Man, Child, or Neutral)
- * based on their age group and pronouns/styling selection.
+ * based on their age group, styling demographic, and pronouns/styling selection.
  */
 export function detectPersona(profile: SkinTuneProfile): PersonaType {
-  const age = (profile.ageGroup || "").toLowerCase();
-  const pronouns = (profile.pronouns || "").toLowerCase();
-
-  // Child detection: age groups for kids (0-5, 6-10, 11-15, 15-19) or pronouns indicating children
-  if (
-    age.includes("kids") ||
-    age.includes("0–12") ||
-    age.includes("0-12") ||
-    age.includes("0–13") ||
-    age.includes("0-13") ||
-    age.includes("13–18") ||
-    age.includes("13-18") ||
-    age.includes("0–5") ||
-    age.includes("0-5") ||
-    age.includes("6–10") ||
-    age.includes("6-10") ||
-    age.includes("11–15") ||
-    age.includes("11-15") ||
-    age.includes("15–19") ||
-    age.includes("15-19") ||
-    age.includes("child") ||
-    pronouns.includes("kids") ||
-    pronouns.includes("children")
-  ) {
+  const ctx = getStylingContext(profile);
+  if (ctx.audience === "kids" || ctx.isKids) {
     return "child";
   }
-
-  // Women's styling (must check before "men" since "women" contains "men")
-  if (pronouns.includes("women")) {
-    return "woman";
-  }
-
-  // Men's styling
-  if (pronouns.includes("men")) {
+  if (ctx.audience === "men") {
     return "man";
   }
-
+  if (ctx.audience === "women") {
+    return "woman";
+  }
   return "neutral";
 }
 
@@ -156,8 +130,8 @@ export function getProductIdentityKey(productTitle: string, brand: string): stri
  * Strips any footwear, shoe, heel, or handbag/bag mentions from an outfit garment title.
  * Prevents contaminated LLM output like "Dress and heeled shoes" from turning the outfit search into a shoe/bag search.
  */
-export function cleanOutfitGarmentTitle(title: string): string {
-  if (!title) return "Dress";
+export function cleanOutfitGarmentTitle(title: string, targetGender?: string): string {
+  if (!title) return targetGender === "boys" ? "Boys Outfit" : targetGender === "men" ? "Men's Outfit" : "Dress";
   let cleaned = title
     // Remove "and/with heeled shoes/heels/sandals/shoes/bag/clutch/purse/etc."
     .replace(
@@ -173,7 +147,7 @@ export function cleanOutfitGarmentTitle(title: string): string {
     .trim();
 
   if (!cleaned || cleaned.length < 3) {
-    return "Dress";
+    return targetGender === "boys" ? "Boys Outfit" : targetGender === "men" ? "Men's Outfit" : "Dress";
   }
   return cleaned;
 }
@@ -181,7 +155,7 @@ export function cleanOutfitGarmentTitle(title: string): string {
 /**
  * Strict consistency check between DISPLAYED PRODUCT and TARGET PRODUCT URL.
  * Prevents:
- * 1. Gender mismatches (e.g. men's clothing showing for women's styling profiles).
+ * 1. Gender mismatches (e.g. men's clothing showing for women's styling profiles, women's/girls' clothes showing for boys).
  * 2. Garment subcategory mismatches (e.g. dresses showing for blazers, tops showing for trousers).
  * 3. Color clashes (e.g. pink pants showing for a chocolate brown suit).
  * 4. Accessory mismatches (e.g. traditional jhumkas showing for minimal studs).
@@ -201,10 +175,12 @@ export function checkProductConsistency(
   price?: number,
   expectedOccasion?: string,
   expectedShade?: string,
+  targetGender?: string,
 ): { isConsistent: boolean; reason?: string } {
   const fullCheckText = `${productName || ""} ${urlStr || ""} ${citationTitle || ""}`.toLowerCase();
   const cleanName = (productName || "").toLowerCase();
   const subcat = (itemSubcategory || "").toLowerCase();
+  const genderLower = (targetGender || "").toLowerCase();
 
   // 0. RETAILER URL SAFETY CHECK: Reject invalid or misleading retailer search endpoints
   if (urlStr.includes("myntra.com/search")) {
@@ -214,8 +190,62 @@ export function checkProductConsistency(
     };
   }
 
-  // 1. GENDER SANITY CHECK: Never recommend men's items for women, or women's items for men
-  if (persona === "woman") {
+  // 1. GENDER & DEMOGRAPHIC SANITY CHECK
+  const isBoy = genderLower === "boy" || genderLower === "boys" || (persona === "child" && genderLower !== "girls" && genderLower !== "girl" && (fullCheckText.includes("boy") || !genderLower));
+  const isGirl = genderLower === "girl" || genderLower === "girls";
+
+  if (genderLower === "boys" || isBoy) {
+    // For a boy child / boys styling:
+    // Strip "boy" / "boys" tokens first to avoid self-filtering
+    const strippedOfBoy = fullCheckText.replace(/\b(boy|boys|boy's)\b/gi, "");
+    const hasFemaleToken = /\b(women|womens|women's|female|ladies|woman|girls|girl|girl's|kurti|kurtis|saree|sari|lehenga|choli|chaniya|ghagra|blouse|anarkali|dupatta|heels?|stiletto|stilettos|skirt|gown|bra|lingerie|suit\s*set\s*with\s*dupatta)\b/i.test(strippedOfBoy);
+    if (hasFemaleToken) {
+      return {
+        isConsistent: false,
+        reason: `Gender mismatch: Product '${productName}' contains female apparel keywords for boys styling (${urlStr})`,
+      };
+    }
+
+    // Never recommend mature adult men's specific items without child/boy qualifiers
+    const isAdultMenOnly = /\b(men-formal|mens-formal|men-clothing|mens-clothing|men-suits|mens-suit|gentlemen)\b/i.test(fullCheckText);
+    if (isAdultMenOnly && !/\b(boy|boys|kids|junior|children)\b/i.test(fullCheckText)) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Product '${productName}' points to adult men's department instead of boys kidswear (${urlStr})`,
+      };
+    }
+  }
+
+  if (genderLower === "girls" || isGirl) {
+    // For girls styling:
+    const strippedOfGirl = fullCheckText.replace(/\b(girl|girls|girl's)\b/gi, "");
+    const hasMaleToken = /\b(men|mens|men's|boys|boy|boy's|gents|gentleman|gentlemen|male)\b/i.test(strippedOfGirl);
+    if (hasMaleToken) {
+      return {
+        isConsistent: false,
+        reason: `Gender mismatch: Product '${productName}' contains male apparel keywords for girls styling (${urlStr})`,
+      };
+    }
+  }
+
+  if (persona === "child" || genderLower === "child" || isBoy || isGirl) {
+    // Never recommend mature adult items or adult cosmetics/lingerie for any child
+    const isAdultItem = /\b(stilettos?|high\s*heels|lingerie|deep\s*neck|plunge|corporate\s*suit|office\s*blazer|anti-aging|anti-wrinkle|retinol|nighty|nightwear\s*gown|sexy)\b/i.test(fullCheckText);
+    if (isAdultItem) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Item '${productName}' is mature adult styling not suitable for children (${urlStr})`,
+      };
+    }
+
+    // Never return adult women's kurtis, sarees, or adult lehengas for children
+    if (/\b(kurti|kurtis|saree|sari)\b/i.test(fullCheckText) && !/\b(kids|girls|children|junior)\b/i.test(fullCheckText)) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Product '${productName}' is adult women's ethnic wear not suitable for children (${urlStr})`,
+      };
+    }
+  } else if (persona === "woman") {
     // Strip women terms first to prevent "women" from false-matching "men"
     const strippedOfWomen = fullCheckText
       .replace(/\b(women|womens|women's|female|ladies|woman)\b/gi, "")
@@ -256,19 +286,11 @@ export function checkProductConsistency(
         reason: `Category mismatch: Product '${productName}' matches kids' clothing set for an adult male styling profile (${urlStr})`,
       };
     }
-  } else if (persona === "child") {
-    const isAdultItem = /\b(stilettos?|high\s*heels|lingerie|deep\s*neck|plunge|corporate\s*suit|office\s*blazer|anti-aging|anti-wrinkle|retinol)\b/i.test(fullCheckText);
-    if (isAdultItem) {
-      return {
-        isConsistent: false,
-        reason: `Demographic mismatch: Item '${productName}' is mature adult styling not suitable for children (${urlStr})`,
-      };
-    }
   }
 
 
   // 2. GARMENT SUBCATEGORY CHECK
-  if (subcat === "blazer" || cleanName.includes("blazer")) {
+  if (subcat ? subcat === "blazer" : cleanName.includes("blazer")) {
     const isBlazer = /\b(blazer|suit|tuxedo|tailored jacket|formal jacket)\b/i.test(fullCheckText);
     const isWrongType = /\b(trouser|trousers|pant|pants|skirt|dress|gown|saree|jeans|t-shirt|tshirt|top|camisole|shoe|heel|bag)\b/i.test(cleanName) && !isBlazer;
     if (!isBlazer || isWrongType) {
@@ -277,25 +299,52 @@ export function checkProductConsistency(
         reason: `Subcategory is Blazer, but item does not match blazer type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "trousers" || cleanName.includes("trouser") || cleanName.includes("pant")) {
-    const isTrouser = /\b(trouser|trousers|pant|pants|slacks|chinos|culottes|wide-leg|palazzo)\b/i.test(fullCheckText);
-    const isWrongType = /\b(blazer|jacket|dress|gown|saree|skirt|t-shirt|top|camisole|shoe|heel|bag)\b/i.test(cleanName) && !isTrouser;
+  } else if (subcat ? subcat === "trousers" : (cleanName.includes("trouser") || cleanName.includes("pant"))) {
+    const isTrouser = /\b(trouser|trousers|pant|pants|slacks|chinos|culottes|wide-leg|palazzo|jeans|denim)\b/i.test(cleanName);
+    const isUpperGarment = /(?<![tT]-)\b(shirt|shirts|t-?shirts?|tees?|kurta|kurti|blouse|camisole|blazer|jacket)\b/i.test(cleanName);
+    const isWrongType = isUpperGarment || (/\b(shorts?|bermudas?|dress|gown|saree|skirt|shoe|heel|bag)\b/i.test(cleanName) && !isTrouser);
     if (!isTrouser || isWrongType) {
       return {
         isConsistent: false,
         reason: `Subcategory is Trousers, but item does not match trousers type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "inner_top" || subcat === "top" || cleanName.includes("camisole") || cleanName.includes("inner top")) {
-    const isTop = /\b(top|tops|camisole|camisoles|blouse|blouses|shirt|shirts|tank|tee|t-shirt|corset|waistcoat|shell)\b/i.test(fullCheckText);
-    const isWrongType = /\b(blazer|jacket|trouser|pant|jeans|skirt|dress|shoe|bag)\b/i.test(cleanName) && !isTop;
+  } else if (subcat ? subcat === "shorts" : cleanName.includes("shorts")) {
+    const isShorts = /\b(shorts?|bermudas?|trunks?)\b/i.test(cleanName);
+    const isUpperGarment = /(?<![tT]-)\b(shirt|shirts|t-?shirts?|tees?|kurta|kurti|blouse|camisole|blazer|jacket)\b/i.test(cleanName);
+    const isWrongType = isUpperGarment || (/\b(trouser|pants?|slacks?|jeans|dress|gown|saree|skirt|shoe|heel|bag)\b/i.test(cleanName) && !isShorts);
+    if (!isShorts || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Shorts, but item does not match shorts type: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (subcat ? subcat === "shirt" : (cleanName.includes("shirt") && !cleanName.includes("t-shirt") && !cleanName.includes("tshirt"))) {
+    const hasPoloBrand = /polo\s*assn|us-polo|polo\s*club/i.test(fullCheckText);
+    const isShirt =
+      (/(?<![tT]-)\b(shirt|shirts|button-down|camp-collar|resort\s*shirt)\b/i.test(cleanName) ||
+        /\bpolo\s*(?:shirt|tee|collar)\b/i.test(cleanName) ||
+        (/\bpolo\b/i.test(cleanName) && !hasPoloBrand)) &&
+      !/\b(t-?shirts?|tees?)\b/i.test(cleanName);
+    const isBottomGarment = /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt)\b/i.test(cleanName);
+    const isWrongType = isBottomGarment || (/\b(blazer|jacket|dress|gown|saree|shoe|bag)\b/i.test(cleanName) && !isShirt);
+    if (!isShirt || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Shirt, but item does not match shirt type: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (subcat ? (subcat === "inner_top" || subcat === "top") : (cleanName.includes("camisole") || cleanName.includes("inner top"))) {
+    const isTop = /\b(top|tops|camisole|camisoles|blouse|blouses|shirt|shirts|tank|tee|t-shirt|corset|waistcoat|shell)\b/i.test(cleanName);
+    const isBottomGarment = /\b(trouser|pant|pants|slacks|chinos|jeans|shorts?|skirt)\b/i.test(cleanName);
+    const isWrongType = isBottomGarment || (/\b(blazer|jacket|dress|shoe|bag)\b/i.test(cleanName) && !isTop);
     if (!isTop || isWrongType) {
       return {
         isConsistent: false,
         reason: `Subcategory is Inner Top, but item does not match top/camisole type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "skirt" || cleanName.includes("skirt")) {
+  } else if (subcat ? subcat === "skirt" : cleanName.includes("skirt")) {
     const isSkirt = /\b(skirt|pencil skirt|a-line skirt|midi skirt|maxi skirt)\b/i.test(fullCheckText);
     if (!isSkirt) {
       return {
@@ -304,12 +353,9 @@ export function checkProductConsistency(
       };
     }
   } else if (
-    subcat === "lehenga" ||
-    subcat === "chaniya_choli" ||
-    subcat === "garba" ||
-    cleanName.includes("lehenga") ||
-    cleanName.includes("chaniya choli") ||
-    cleanName.includes("ghagra")
+    subcat
+      ? subcat === "lehenga" || subcat === "chaniya_choli" || subcat === "garba"
+      : cleanName.includes("lehenga") || cleanName.includes("chaniya choli") || cleanName.includes("ghagra")
   ) {
     const isLehenga = /\b(lehenga|chaniya\s*choli|ghagra|flared\s*skirt\s*set|festive\s*skirt\s*set|fusion\s*lehenga|festive\s*co-ord)\b/i.test(fullCheckText);
     const isWrongType =
@@ -320,7 +366,7 @@ export function checkProductConsistency(
         reason: `Subcategory is Lehenga / Chaniya Choli, but item does not match festive lehenga/chaniya choli type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "saree" || cleanName.includes("saree") || cleanName.includes("sari")) {
+  } else if (subcat ? subcat === "saree" : (cleanName.includes("saree") || cleanName.includes("sari"))) {
     const isSaree = /\b(saree|sari|saris|sarees)\b/i.test(fullCheckText);
     const isWrongType = /\b(blazer|trouser|pant|pants|jeans|skirt|dress|shoe|bag)\b/i.test(cleanName) && !isSaree;
     if (!isSaree || isWrongType) {
@@ -329,7 +375,7 @@ export function checkProductConsistency(
         reason: `Subcategory is Saree, but item does not match saree type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "kurta" || cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani")) {
+  } else if (subcat ? subcat === "kurta" : (cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani"))) {
     const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|kurta\s*set|anarkali|angrakha|bandhgala)\b/i.test(fullCheckText);
     const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag)\b/i.test(cleanName) && !isKurta;
     if (!isKurta || isWrongType) {
@@ -462,6 +508,54 @@ export function checkProductConsistency(
         isConsistent: false,
         reason: `Category is Footwear, but item is clothing, bag, or cosmetics: ${productName} (${urlStr})`,
       };
+    }
+
+    // Footwear subcategory consistency check
+    if (subcat ? (subcat === "sandals" || subcat === "slides") : (cleanName.includes("sandal") || cleanName.includes("slide"))) {
+      const isSandal = /\b(sandal|sandals|slides?|sliders?|flip-flop[s]?|slippers?|espadrilles?|open-toe)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|boots?|running\s*shoes?|canvas\s*shoes?|oxfords?|stilettos?)\b/i.test(cleanName) && !isSandal;
+      if (!isSandal || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Sandals / Slides, but item does not match sandal type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "sneakers" : cleanName.includes("sneaker")) {
+      const isSneaker = /\b(sneakers?|canvas\s*shoes?|trainers?|running\s*shoes?|skate\s*shoes?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(heels?|sandals?|slides?|boots?|oxfords?|mojaris?|juttis?)\b/i.test(cleanName) && !isSneaker;
+      if (!isSneaker || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Sneakers, but item does not match sneaker type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "loafers" : cleanName.includes("loafer")) {
+      const isLoafer = /\b(loafers?|moccasins?|boat\s*shoes?|driving\s*shoes?|slip-ons?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|heels?|boots?|sandals?|slides?)\b/i.test(cleanName) && !isLoafer;
+      if (!isLoafer || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Loafers, but item does not match loafer type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "heels" : cleanName.includes("heel")) {
+      const isHeel = /\b(heels?|pumps?|stilettos?|kitten\s*heels?|block\s*heels?|wedges?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|boots?|loafers?|oxfords?|mojaris?|slides?)\b/i.test(cleanName) && !isHeel;
+      if (!isHeel || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Heels, but item does not match heels type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? (subcat === "mojaris" || subcat === "juttis") : (cleanName.includes("mojari") || cleanName.includes("jutti"))) {
+      const isMojari = /\b(mojaris?|juttis?|kolhapuris?|ethnic\s*shoes?|traditional\s*footwear)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|running\s*shoes?|heels?|boots?|oxfords?|slides?)\b/i.test(cleanName) && !isMojari;
+      if (!isMojari || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Ethnic Mojaris / Juttis, but item does not match ethnic footwear type: ${productName} (${urlStr})`,
+        };
+      }
     }
   }
 
@@ -1389,14 +1483,22 @@ export function buildPersonalizedMakeupSpecs(
     allContext.includes("shaadi") ||
     allContext.includes("bridal");
 
+  const isVacation =
+    allContext.includes("vacation") ||
+    allContext.includes("beach") ||
+    allContext.includes("resort") ||
+    allContext.includes("goa") ||
+    allContext.includes("holiday");
+
   const isTraditional =
-    isGarba ||
-    isWedding ||
-    allContext.includes("traditional") ||
-    allContext.includes("festive") ||
-    allContext.includes("ethnic") ||
-    allContext.includes("diwali") ||
-    allContext.includes("puja");
+    !isVacation &&
+    (isGarba ||
+      isWedding ||
+      allContext.includes("traditional") ||
+      allContext.includes("festive") ||
+      allContext.includes("ethnic") ||
+      allContext.includes("diwali") ||
+      allContext.includes("puja"));
 
   const isOffice =
     allContext.includes("office") ||
@@ -1943,7 +2045,7 @@ export interface RequirementSpec {
   materialHint?: string;
   matchContext: string;
   itemSubcategory?: string;
-  targetGender?: "women" | "men" | "child" | "unisex";
+  targetGender?: "women" | "men" | "child" | "unisex" | "boys" | "girls";
   dominantColor?: string;
   shadeCandidateShortlist?: string[];
   disclaimer?: string;
@@ -2064,6 +2166,455 @@ export function extractDynamicLookAccessories(
 }
 
 /**
+ * Dynamically identifies and decomposes all distinct clothing components from
+ * a recommended look (pieces array and/or outfit description text).
+ * Ensures that multi-piece separates (e.g. shirt + shorts/pants, blazer + shirt + trousers,
+ * saree + blouse, lehenga + choli) are each decomposed into their own requirement spec,
+ * while one-piece garments (dresses, jumpsuits) remain unified.
+ */
+export function decomposeOutfitGarments(
+  look: LookRecommendation,
+  profile: SkinTuneProfile,
+  targetGender: "women" | "men" | "child" | "boys" | "girls",
+  dominantHumanColor: string,
+  ctx: ReturnType<typeof getStylingContext>,
+): RequirementSpec[] {
+  const specs: RequirementSpec[] = [];
+  const pieces = Array.isArray(look.pieces) ? look.pieces : [];
+  const outfitText = `${look.outfit || ""} ${look.title || ""}`.trim();
+  const lowerText = outfitText.toLowerCase();
+
+  const preferredRetailers = ctx.isKids
+    ? ["Myntra", "AJIO", "Amazon India", "FirstCry", "Tata CLiQ"]
+    : targetGender === "women"
+      ? ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
+      : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
+
+  // Filter out non-clothing pieces (footwear, jewellery, accessories, etc.)
+  const apparelPieces = pieces.filter((p) => {
+    const c = (p?.category || "").toLowerCase();
+    const n = (p?.name || "").toLowerCase();
+    if (!n) return false;
+    if (
+      c.includes("foot") ||
+      c.includes("shoe") ||
+      c.includes("heel") ||
+      c.includes("jewel") ||
+      c.includes("acc") ||
+      c.includes("finish") ||
+      c.includes("bag") ||
+      c.includes("watch") ||
+      c.includes("belt") ||
+      c.includes("sunglass")
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  interface RawGarment {
+    type: "layer" | "top" | "bottom" | "one_piece";
+    subcat: string;
+    rawTitle: string;
+    color?: string;
+  }
+  const detectedGarments: RawGarment[] = [];
+
+  const isLayer = (t: string) =>
+    /\b(blazer|jacket|coat|shrug|cardigan|vest|waistcoat|nehru\s*jacket|overcoat|trench|bomber)\b/i.test(t);
+  const isBottom = (t: string) =>
+    /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|joggers?|culottes?)\b/i.test(t);
+  const isTop = (t: string) =>
+    /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie)\b/i.test(t);
+  const isOnePiece = (t: string) =>
+    /\b(dress|dresses|saree|sari|saris|sarees|jumpsuit|jumpsuits|romper|rompers|playsuit|gown|gowns|anarkali)\b/i.test(t);
+
+  // 1. If structured pieces exist in look.pieces with distinct components
+  if (apparelPieces.length >= 2) {
+    for (const p of apparelPieces) {
+      const c = (p.category || "").toLowerCase();
+      const n = (p.name || "").trim();
+      let type: "layer" | "top" | "bottom" | "one_piece" = "top";
+      let subcat = "top";
+
+      if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
+        type = "top";
+        subcat = "inner_top";
+      } else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) {
+        type = "bottom";
+        subcat = "lehenga";
+      } else if (c.includes("layer") || c.includes("outer") || isLayer(n)) {
+        type = "layer";
+        subcat = n.toLowerCase().includes("blazer") ? "blazer" : "jacket";
+      } else if (c.includes("bottom") || isBottom(n)) {
+        type = "bottom";
+        if (/\b(shorts?|bermudas?)\b/i.test(n)) subcat = "shorts";
+        else if (/\bskirt\b/i.test(n)) subcat = "skirt";
+        else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) subcat = "lehenga";
+        else subcat = "trousers";
+      } else if (c.includes("outfit") || isOnePiece(n)) {
+        type = "one_piece";
+        if (/\b(saree|sari)\b/i.test(n)) subcat = "saree";
+        else if (/\b(jumpsuit|romper)\b/i.test(n)) subcat = "jumpsuit";
+        else subcat = "dress";
+      } else {
+        type = "top";
+        if (/\b(t-?shirts?|tees?)\b/i.test(n)) subcat = "top";
+        else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(n)) subcat = "shirt";
+        else if (/\b(kurta|kurti)\b/i.test(n)) subcat = "kurta";
+        else if (/\b(choli|blouse)\b/i.test(n)) subcat = "inner_top";
+        else subcat = "top";
+      }
+
+      detectedGarments.push({
+        type,
+        subcat,
+        rawTitle: n,
+        color: (p as { color?: string }).color,
+      });
+    }
+  } else {
+    // 2. Parse text dynamically from outfitText
+    const isLehengaOrChaniya =
+      !ctx.isBoy &&
+      targetGender !== "boys" &&
+      targetGender !== "men" &&
+      (/\b(lehenga|chaniya|ghagra)\b/i.test(lowerText) ||
+        (lowerText.includes("garba") && (ctx.isGirl || targetGender === "women")));
+
+    const isSaree =
+      !ctx.isBoy &&
+      targetGender !== "boys" &&
+      targetGender !== "men" &&
+      !ctx.isKids &&
+      /\b(saree|sari)\b/i.test(lowerText);
+
+    if (isLehengaOrChaniya) {
+      detectedGarments.push({
+        type: "bottom",
+        subcat: "lehenga",
+        rawTitle: `${dominantHumanColor} Flared Mirror-Work Chaniya Choli Lehenga Skirt`,
+      });
+      detectedGarments.push({
+        type: "top",
+        subcat: "inner_top",
+        rawTitle: `Matching ${dominantHumanColor} Embroidered Choli Blouse`,
+      });
+    } else if (isSaree) {
+      detectedGarments.push({
+        type: "one_piece",
+        subcat: "saree",
+        rawTitle: `${dominantHumanColor} Silk Saree`,
+      });
+      detectedGarments.push({
+        type: "top",
+        subcat: "inner_top",
+        rawTitle: `Matching ${dominantHumanColor} Embroidered Saree Blouse`,
+      });
+    } else {
+      // Split by clause connectors: "with", "paired with", "styled with", "and", "over", "worn with"
+      const rawClauses = outfitText
+        .split(/\b(?:with|paired\s+with|styled\s+with|teamed\s+with|complemented\s+by|worn\s+with|over\s+a?|over|and\s+a?|along\s+with)\b/i)
+        .map((s) => s.trim().replace(/^[,.\s]+|[,.\s]+$/g, ""))
+        .filter((s) => s.length > 2);
+
+      const foundTypes = new Set<string>();
+
+      for (const clause of rawClauses) {
+        const cleanClause = cleanOutfitGarmentTitle(clause, targetGender);
+        if (!cleanClause || cleanClause.length < 3) continue;
+
+        if (isLayer(cleanClause) && !foundTypes.has("layer")) {
+          foundTypes.add("layer");
+          detectedGarments.push({
+            type: "layer",
+            subcat: /\bblazer\b/i.test(cleanClause) ? "blazer" : "jacket",
+            rawTitle: cleanClause,
+          });
+        } else if (isBottom(cleanClause) && !foundTypes.has("bottom")) {
+          foundTypes.add("bottom");
+          let subcat = "trousers";
+          if (/\b(shorts?|bermudas?)\b/i.test(cleanClause)) subcat = "shorts";
+          else if (/\bskirt\b/i.test(cleanClause)) subcat = "skirt";
+          else if (/\b(lehenga|chaniya|ghagra)\b/i.test(cleanClause)) subcat = "lehenga";
+          detectedGarments.push({
+            type: "bottom",
+            subcat,
+            rawTitle: cleanClause,
+          });
+        } else if (isTop(cleanClause) && !foundTypes.has("top")) {
+          foundTypes.add("top");
+          let subcat = "top";
+          if (/\b(t-?shirts?|tees?)\b/i.test(cleanClause)) subcat = "top";
+          else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(cleanClause)) subcat = "shirt";
+          else if (/\b(kurta|kurti)\b/i.test(cleanClause)) subcat = "kurta";
+          else if (/\b(choli|blouse)\b/i.test(cleanClause)) subcat = "inner_top";
+          detectedGarments.push({
+            type: "top",
+            subcat,
+            rawTitle: cleanClause,
+          });
+        } else if (isOnePiece(cleanClause) && !foundTypes.has("one_piece")) {
+          foundTypes.add("one_piece");
+          let subcat = "dress";
+          if (/\b(jumpsuit|romper|playsuit)\b/i.test(cleanClause)) subcat = "jumpsuit";
+          detectedGarments.push({
+            type: "one_piece",
+            subcat,
+            rawTitle: cleanClause,
+          });
+        }
+      }
+
+      // If text contains separates that were not captured by clause splitting
+      if (detectedGarments.length === 0) {
+        if (isOnePiece(lowerText)) {
+          detectedGarments.push({
+            type: "one_piece",
+            subcat: /\b(jumpsuit|romper)\b/i.test(lowerText) ? "jumpsuit" : "dress",
+            rawTitle: outfitText,
+          });
+        } else {
+          const hasTop = isTop(lowerText);
+          const hasBottom = isBottom(lowerText);
+          const hasLayer = isLayer(lowerText);
+
+          if (hasLayer) {
+            detectedGarments.push({
+              type: "layer",
+              subcat: /\bblazer\b/i.test(lowerText) ? "blazer" : "jacket",
+              rawTitle: `${dominantHumanColor} Tailored Blazer`,
+            });
+          }
+          if (hasTop) {
+            detectedGarments.push({
+              type: "top",
+              subcat: /\b(t-?shirts?|tees?)\b/i.test(lowerText)
+                ? "top"
+                : /(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(lowerText)
+                  ? "shirt"
+                  : "top",
+              rawTitle: `${dominantHumanColor} Casual Shirt / Top`,
+            });
+          }
+          if (hasBottom) {
+            detectedGarments.push({
+              type: "bottom",
+              subcat: /\b(shorts?|bermudas?)\b/i.test(lowerText) ? "shorts" : /\bskirt\b/i.test(lowerText) ? "skirt" : "trousers",
+              rawTitle: /\b(shorts?|bermudas?)\b/i.test(lowerText)
+                ? `${dominantHumanColor} Breathable Shorts`
+                : `${dominantHumanColor} Tailored Trousers`,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback if still nothing detected: single outfit piece
+  if (detectedGarments.length === 0) {
+    const defaultTitle = ctx.isBoy
+      ? `Boys ${dominantHumanColor} Smart Casual Outfit Set`
+      : ctx.isGirl
+        ? `Girls ${dominantHumanColor} Casual Dress / Co-ord Set`
+        : targetGender === "men"
+          ? `Men's ${dominantHumanColor} Curated Outfit`
+          : `Women's ${dominantHumanColor} Curated Dress / Outfit`;
+
+    detectedGarments.push({
+      type: "one_piece",
+      subcat: ctx.isBoy ? "boys_outfit" : ctx.isGirl ? "girls_outfit" : targetGender === "men" ? "men_outfit" : "dress",
+      rawTitle: outfitText || defaultTitle,
+    });
+  }
+
+  // Convert each detected garment into a fully realized RequirementSpec
+  for (const g of detectedGarments) {
+    const rawClean = cleanOutfitGarmentTitle(g.rawTitle, targetGender);
+    const color = g.color || resolveHumanColor(rawClean, dominantHumanColor);
+
+    // Format human-friendly title with proper demographic prefix
+    let title = rawClean;
+    if (ctx.isBoy && !/\bboys?\b/i.test(title)) {
+      title = `Boys ${title}`;
+    } else if (ctx.isGirl && !/\bgirls?\b/i.test(title)) {
+      title = `Girls ${title}`;
+    } else if (targetGender === "men" && !/\b(men|men's)\b/i.test(title)) {
+      title = `Men's ${title}`;
+    }
+
+    // Material hint extraction
+    let materialHint = "";
+    if (/linen/i.test(rawClean) || /linen/i.test(outfitText)) materialHint = "100% Breathable European Linen";
+    else if (/cotton/i.test(rawClean) || /cotton/i.test(outfitText)) materialHint = "100% Crisp Breathable Cotton";
+    else if (/silk|satin/i.test(rawClean) || /silk|satin/i.test(outfitText)) materialHint = "Lustrous Silk / Satin Finish";
+    else if (/denim/i.test(rawClean) || /denim/i.test(outfitText)) materialHint = "Comfort Stretch Premium Denim";
+    else if (/wool|crepe/i.test(rawClean) || /wool|crepe/i.test(outfitText)) materialHint = "Tailored Suiting Crepe / Wool Blend";
+
+    // Build dynamic search query
+    let itemQueryKeyword = g.subcat;
+    if (g.subcat === "shorts") itemQueryKeyword = "shorts";
+    else if (g.subcat === "shirt") itemQueryKeyword = "shirt";
+    else if (g.subcat === "top") itemQueryKeyword = rawClean.toLowerCase().includes("tee") || rawClean.toLowerCase().includes("t-shirt") ? "t-shirt tee" : "top";
+    else if (g.subcat === "trousers") itemQueryKeyword = "tailored trousers pants";
+    else if (g.subcat === "blazer") itemQueryKeyword = "tailored formal blazer";
+    else if (g.subcat === "saree") itemQueryKeyword = rawClean.toLowerCase().includes("silk") || outfitText.toLowerCase().includes("silk") ? "silk saree" : "saree";
+    else if (g.subcat === "lehenga") itemQueryKeyword = "chaniya choli lehenga set";
+    else if (g.subcat === "inner_top") itemQueryKeyword = rawClean.toLowerCase().includes("choli") || rawClean.toLowerCase().includes("blouse") ? "embroidered choli blouse" : "formal inner top camisole";
+    else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
+    else if (g.subcat === "dress") itemQueryKeyword = "dress";
+
+    const searchTerms = [
+      targetGender,
+      color,
+      itemQueryKeyword,
+      ...preferredRetailers.slice(0, 3),
+    ].join(" ");
+
+    specs.push({
+      category: "outfit",
+      itemTitle: title,
+      itemSubcategory: g.subcat,
+      targetGender,
+      dominantColor: color,
+      stylingRequirement: `${title} (${color}) suited for ${profile.occasion || "this look"}`,
+      searchQuery: searchTerms,
+      preferredRetailers,
+      materialHint: materialHint || undefined,
+      matchContext: `Selected in ${color} to harmonize with your recommended look and occasion silhouette.`,
+    });
+  }
+
+  return specs;
+}
+
+/**
+ * Dynamically detects and formulates the footwear requirement spec from
+ * the look's footwear specification, pieces, and demographic occasion context.
+ */
+export function detectFootwearSpec(
+  look: LookRecommendation,
+  profile: SkinTuneProfile,
+  targetGender: "women" | "men" | "child" | "boys" | "girls",
+  dominantHumanColor: string,
+  ctx: ReturnType<typeof getStylingContext>,
+  persona: PersonaType,
+): RequirementSpec {
+  const pieces = Array.isArray(look.pieces) ? look.pieces : [];
+  const footPiece = pieces.find(
+    (p) =>
+      (p?.category || "").toLowerCase().includes("foot") ||
+      (p?.category || "").toLowerCase().includes("shoe") ||
+      (p?.category || "").toLowerCase().includes("heel"),
+  );
+
+  const rawFootText = (footPiece?.name || (look.footwear || "").split(",")[0] || "").trim();
+  const lowerFoot = rawFootText.toLowerCase();
+  const occ = (profile.occasion || "").toLowerCase();
+  const allContext = `${lowerFoot} ${occ} ${(profile.style || []).join(" ")}`.toLowerCase();
+
+  const isGarbaOrNavratri = allContext.includes("garba") || allContext.includes("navratri");
+  const isTraditionalOrFestive =
+    !allContext.includes("vacation") &&
+    !allContext.includes("beach") &&
+    (isGarbaOrNavratri ||
+      allContext.includes("wedding") ||
+      allContext.includes("festive") ||
+      allContext.includes("ethnic") ||
+      allContext.includes("diwali") ||
+      allContext.includes("eid") ||
+      allContext.includes("puja"));
+
+  const isOfficeOrFormal =
+    allContext.includes("office") ||
+    allContext.includes("formal") ||
+    allContext.includes("corporate") ||
+    allContext.includes("meeting");
+
+  const isDateNight = allContext.includes("date") || allContext.includes("dinner");
+  const isVacation =
+    allContext.includes("vacation") ||
+    allContext.includes("beach") ||
+    allContext.includes("resort") ||
+    allContext.includes("goa") ||
+    allContext.includes("holiday");
+
+  // Detect footwear subcategory dynamically
+  let subcat = "sneakers";
+  let label = "Casual Sneakers";
+
+  if (
+    /\b(sandals?|slides?|sliders?|flip-flop[s]?|espadrilles?|slippers?)\b/i.test(lowerFoot) ||
+    (isVacation && !/\b(sneaker|boot|oxford)\b/i.test(lowerFoot))
+  ) {
+    subcat = "sandals";
+    label = /\bslides?\b/i.test(lowerFoot) ? "Slide Sandals" : "Comfort Sandals";
+  } else if (/\b(loafers?|moccasins?|boat\s*shoes?)\b/i.test(lowerFoot)) {
+    subcat = "loafers";
+    label = "Smart Loafers";
+  } else if (/\b(oxfords?|derby|brogues?|formal\s*shoes?)\b/i.test(lowerFoot) || (isOfficeOrFormal && (persona === "man" || ctx.isBoy))) {
+    subcat = "formal_shoes";
+    label = "Formal Derby / Oxford Shoes";
+  } else if (/\b(heels?|pumps?|stilettos?|wedges?|kitten\s*heels?|block\s*heels?)\b/i.test(lowerFoot) || (persona === "woman" && (isDateNight || isOfficeOrFormal))) {
+    subcat = "heels";
+    label = /\bblock\b/i.test(lowerFoot) ? "Block Heels" : "Heeled Pumps / Sandals";
+  } else if (/\b(flats?|ballerinas?|ballet\s*flats?|mules?)\b/i.test(lowerFoot)) {
+    subcat = "flats";
+    label = "Ballet Flats";
+  } else if (
+    /\b(mojaris?|juttis?|kolhapuris?)\b/i.test(lowerFoot) ||
+    isGarbaOrNavratri ||
+    isTraditionalOrFestive
+  ) {
+    subcat = "mojaris";
+    label = "Handcrafted Ethnic Mojaris / Juttis";
+  } else if (/\b(boots?|chelsea)\b/i.test(lowerFoot)) {
+    subcat = "boots";
+    label = "Chelsea Boots";
+  } else {
+    subcat = "sneakers";
+    label = "Minimalist Sneakers / Shoes";
+  }
+
+  const footColor = resolveHumanColor(rawFootText, dominantHumanColor);
+
+  let title = rawFootText;
+  if (!title || title.length < 4 || title.toLowerCase() === "shoes" || title.toLowerCase() === "footwear") {
+    if (ctx.isBoy) title = `Boys ${footColor} ${label}`;
+    else if (ctx.isGirl) title = `Girls ${footColor} ${label}`;
+    else if (persona === "man") title = `Men's ${footColor} ${label}`;
+    else title = `${footColor} ${label}`;
+  } else {
+    if (ctx.isBoy && !/\bboys?\b/i.test(title)) title = `Boys ${title}`;
+    else if (ctx.isGirl && !/\bgirls?\b/i.test(title)) title = `Girls ${title}`;
+  }
+
+  const preferredRetailers = ctx.isKids
+    ? ["Myntra", "AJIO", "Amazon India", "Bata", "Tata CLiQ"]
+    : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
+
+  const footQuery = [
+    targetGender,
+    footColor,
+    subcat === "sandals" ? "sandals slides" : subcat === "mojaris" ? "ethnic mojaris juttis" : subcat,
+    preferredRetailers[0],
+    preferredRetailers[1],
+  ].join(" ");
+
+  return {
+    category: "footwear",
+    itemTitle: title,
+    itemSubcategory: subcat,
+    targetGender,
+    dominantColor: footColor,
+    stylingRequirement: `${title} (${profile.occasion || "event"} appropriate)`,
+    searchQuery: footQuery.trim(),
+    preferredRetailers,
+    matchContext: `Coordinates proportions and balance with your ${dominantHumanColor} outfit.`,
+  };
+}
+
+/**
  * Formulate specific styling requirements based on the recommended look and profile.
  * Intelligently deconstructs complete looks into distinct visible fashion and accessory items:
  * - Outer Blazer / Jacket
@@ -2095,8 +2646,10 @@ export function planRequirementSpecs(
     allContext.includes("interview") ||
     allContext.includes("minimalist");
 
+  const ctx = getStylingContext(profile);
   const dominantHumanColor = resolveHumanColor(look.outfitColor || look.palette?.[0], `${look.outfit} ${look.title}`);
-  const targetGender = persona === "man" ? "men" : persona === "child" ? "child" : "women";
+  const targetGender: "women" | "men" | "child" | "boys" | "girls" =
+    ctx.isBoy ? "boys" : ctx.isGirl ? "girls" : ctx.isKids ? "child" : persona === "man" ? "men" : "women";
 
   const isGarbaOrNavratri =
     allContext.includes("garba") ||
@@ -2117,304 +2670,34 @@ export function planRequirementSpecs(
     allContext.includes("cocktail") ||
     allContext.includes("club") ||
     allContext.includes("celebration");
+  const isVacation =
+    allContext.includes("vacation") ||
+    allContext.includes("beach") ||
+    allContext.includes("resort") ||
+    allContext.includes("goa") ||
+    allContext.includes("holiday");
+
   const isTraditionalOrFestive =
-    isGarbaOrNavratri ||
-    isWedding ||
-    allContext.includes("traditional") ||
-    allContext.includes("festive") ||
-    allContext.includes("ethnic") ||
-    allContext.includes("diwali") ||
-    allContext.includes("eid") ||
-    allContext.includes("puja");
+    !isVacation &&
+    (isGarbaOrNavratri ||
+      isWedding ||
+      allContext.includes("traditional") ||
+      allContext.includes("festive") ||
+      allContext.includes("ethnic") ||
+      allContext.includes("diwali") ||
+      allContext.includes("eid") ||
+      allContext.includes("puja"));
 
-  // 1. OUTFIT DECONSTRUCTION (Multi-Piece Layered Breakdown)
+  // 1. OUTFIT DECONSTRUCTION (Dynamic Multi-Piece Breakdown)
   if (applicableCategories.includes("outfit")) {
-    const outfitText = `${look.outfit || ""} ${look.title || ""}`.toLowerCase();
-
-    // Check if look.pieces has distinct broken-down items
-    const outerPiece = pieces.find((p) => {
-      const c = (p?.category || "").toLowerCase();
-      const n = (p?.name || "").toLowerCase();
-      return (
-        c.includes("outer") ||
-        c.includes("layer") ||
-        c.includes("jacket") ||
-        n.includes("blazer") ||
-        n.includes("jacket") ||
-        n.includes("coat") ||
-        n.includes("cardigan") ||
-        n.includes("vest") ||
-        n.includes("waistcoat")
-      );
-    });
-
-    const bottomPiece = pieces.find((p) => {
-      const c = (p?.category || "").toLowerCase();
-      const n = (p?.name || "").toLowerCase();
-      return (
-        c.includes("bottom") ||
-        c.includes("trouser") ||
-        c.includes("pant") ||
-        c.includes("skirt") ||
-        c.includes("lehenga") ||
-        c.includes("chaniya") ||
-        n.includes("trouser") ||
-        n.includes("pant") ||
-        n.includes("denim") ||
-        n.includes("jeans") ||
-        n.includes("skirt") ||
-        n.includes("lehenga") ||
-        n.includes("chaniya") ||
-        n.includes("culotte")
-      );
-    });
-
-    const basePiece = pieces.find((p) => {
-      const c = (p?.category || "").toLowerCase();
-      const n = (p?.name || "").toLowerCase();
-      return (
-        c.includes("base") ||
-        c.includes("top") ||
-        c.includes("inner") ||
-        c.includes("choli") ||
-        c.includes("blouse") ||
-        n.includes("tee") ||
-        n.includes("shirt") ||
-        n.includes("top") ||
-        n.includes("camisole") ||
-        n.includes("blouse") ||
-        n.includes("choli") ||
-        n.includes("corset")
-      );
-    });
-
-    const onePiece = pieces.find((p) => {
-      const c = (p?.category || "").toLowerCase();
-      const n = (p?.name || "").toLowerCase();
-      return (
-        c.includes("dress") ||
-        n.includes("dress") ||
-        n.includes("saree") ||
-        n.includes("sari") ||
-        n.includes("kurta") ||
-        n.includes("jumpsuit") ||
-        n.includes("lehenga") ||
-        n.includes("chaniya")
-      );
-    });
-
-    const isChaniyaOrLehenga =
-      outfitText.includes("lehenga") ||
-      outfitText.includes("chaniya") ||
-      outfitText.includes("ghagra") ||
-      (isGarbaOrNavratri && persona !== "man") ||
-      Boolean(
-        onePiece &&
-        (onePiece.name.toLowerCase().includes("lehenga") ||
-          onePiece.name.toLowerCase().includes("chaniya") ||
-          onePiece.name.toLowerCase().includes("ghagra")),
-      );
-
-    // Check if outfit description indicates a layered suit/blazer + trouser + top
-    const mentionsBlazer =
-      !isTraditionalOrFestive &&
-      (outfitText.includes("blazer") ||
-        outfitText.includes("suit") ||
-        Boolean(outerPiece && outerPiece.name.toLowerCase().includes("blazer")));
-
-    const mentionsTrouser =
-      outfitText.includes("trouser") ||
-      outfitText.includes("pant") ||
-      outfitText.includes("slacks") ||
-      Boolean(bottomPiece && !bottomPiece.name.toLowerCase().includes("skirt"));
-
-    const mentionsSkirt =
-      outfitText.includes("skirt") ||
-      Boolean(bottomPiece && bottomPiece.name.toLowerCase().includes("skirt"));
-
-    const mentionsSaree =
-      outfitText.includes("saree") ||
-      outfitText.includes("sari") ||
-      Boolean(onePiece && onePiece.name.toLowerCase().includes("saree"));
-
-    const mentionsKurta =
-      outfitText.includes("kurta") ||
-      outfitText.includes("kurti") ||
-      outfitText.includes("kedia") ||
-      outfitText.includes("sherwani") ||
-      (isTraditionalOrFestive && persona === "man") ||
-      Boolean(onePiece && onePiece.name.toLowerCase().includes("kurta"));
-
-    if (isChaniyaOrLehenga) {
-      // 1a. Lehenga / Chaniya Choli Skirt
-      const rawLehengaName =
-        onePiece?.name || bottomPiece?.name || `${dominantHumanColor} Flared Mirror-Work Chaniya Choli Lehenga`;
-      const lehengaColor = resolveHumanColor(rawLehengaName, dominantHumanColor);
-      const cleanLehengaTitle = cleanOutfitGarmentTitle(rawLehengaName);
-      specs.push({
-        category: "outfit",
-        itemTitle:
-          cleanLehengaTitle.includes("Lehenga") || cleanLehengaTitle.includes("Chaniya")
-            ? cleanLehengaTitle
-            : `${lehengaColor} Flared Mirror-Work Chaniya Choli Lehenga`,
-        itemSubcategory: "lehenga",
-        targetGender,
-        dominantColor: lehengaColor,
-        stylingRequirement: `${lehengaColor} flared festive lehenga skirt with authentic mirror-work and embroidery border`,
-        searchQuery: `${targetGender} ${lehengaColor} chaniya choli lehenga set Myntra Nykaa Fashion AJIO`,
-        preferredRetailers: ["Myntra", "Nykaa Fashion", "AJIO", "Tata CLiQ"],
-        materialHint: "Georgette, raw silk, or cotton with mirror embroidery and broad flare",
-        matchContext: `Flared festive silhouette in vibrant ${lehengaColor} tailored for Garba dance movement and celebration.`,
-      });
-
-      // 1b. Matching Embroidered Choli Blouse
-      const rawCholiName =
-        basePiece?.name || outerPiece?.name || `Matching ${lehengaColor} Embroidered Choli Blouse`;
-      specs.push({
-        category: "outfit",
-        itemTitle: cleanOutfitGarmentTitle(rawCholiName),
-        itemSubcategory: "inner_top",
-        targetGender,
-        dominantColor: lehengaColor,
-        stylingRequirement: `Matching ${lehengaColor} embroidered festive choli blouse with mirror work or tassel detailing`,
-        searchQuery: `${targetGender} ${lehengaColor} embroidered choli blouse Myntra Nykaa Fashion`,
-        preferredRetailers: ["Myntra", "Nykaa Fashion"],
-        materialHint: "Art silk or cotton with mirror-work accents and back tie detailing",
-        matchContext: `Coordinates seamlessly with your flared festive lehenga skirt.`,
-      });
-    } else if (mentionsBlazer || (outerPiece && bottomPiece && !isTraditionalOrFestive)) {
-      // 1a. Outer Blazer / Jacket Group
-      const rawBlazerName = outerPiece?.name || `${dominantHumanColor} Formal Blazer`;
-      const blazerColor = resolveHumanColor(rawBlazerName, dominantHumanColor);
-      const cleanBlazerTitle = cleanOutfitGarmentTitle(rawBlazerName);
-      specs.push({
-        category: "outfit",
-        itemTitle:
-          cleanBlazerTitle.includes("Blazer") || cleanBlazerTitle.includes("Jacket")
-            ? cleanBlazerTitle
-            : `${blazerColor} Formal Blazer`,
-        itemSubcategory: "blazer",
-        targetGender,
-        dominantColor: blazerColor,
-        stylingRequirement: `Tailored structured ${blazerColor} formal blazer with clean lapels`,
-        searchQuery: `${targetGender} ${blazerColor} tailored formal blazer Myntra AJIO Tata CLiQ`,
-        preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion"],
-        materialHint: "Structured crepe / wool-blend / tailored suiting fabric",
-        matchContext: `Matching ${blazerColor} blazer that defines your shoulders and formal silhouette.`,
-      });
-
-      // 1b. Trousers or Skirt Group
-      if (mentionsSkirt) {
-        const rawSkirtName = bottomPiece?.name || `${dominantHumanColor} Formal Skirt`;
-        const skirtColor = resolveHumanColor(rawSkirtName, dominantHumanColor);
-        specs.push({
-          category: "outfit",
-          itemTitle: cleanOutfitGarmentTitle(rawSkirtName),
-          itemSubcategory: "skirt",
-          targetGender,
-          dominantColor: skirtColor,
-          stylingRequirement: `Matching ${skirtColor} pencil or A-line formal skirt`,
-          searchQuery: `${targetGender} ${skirtColor} formal pencil skirt Myntra AJIO Tata CLiQ`,
-          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
-          matchContext: `Coordinates perfectly with your formal ${blazerColor} blazer.`,
-        });
-      } else {
-        const rawTrouserName = bottomPiece?.name || `Matching ${dominantHumanColor} Tailored Trousers`;
-        const trouserColor = resolveHumanColor(rawTrouserName, dominantHumanColor);
-        specs.push({
-          category: "outfit",
-          itemTitle: cleanOutfitGarmentTitle(rawTrouserName),
-          itemSubcategory: "trousers",
-          targetGender,
-          dominantColor: trouserColor,
-          stylingRequirement: `Matching ${trouserColor} high-rise tailored trousers / slacks`,
-          searchQuery: `${targetGender} ${trouserColor} tailored formal trousers pants Myntra AJIO Tata CLiQ`,
-          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
-          materialHint: "Pleated or straight-cut suiting trousers with comfortable stretch",
-          matchContext: `High-rise trousers designed to elongate your leg line and complete the power suit.`,
-        });
-      }
-
-      // 1c. Inner Top / Camisole / Blouse Group
-      const rawInnerName =
-        basePiece?.name ||
-        (outfitText.includes("corset")
-          ? "Structured Satin Corset Top"
-          : "White / Cream Silk Inner Camisole Top");
-      const innerColor = rawInnerName.toLowerCase().includes("white")
-        ? "White"
-        : rawInnerName.toLowerCase().includes("cream")
-          ? "Cream"
-          : "Ivory";
-      specs.push({
-        category: "outfit",
-        itemTitle: cleanOutfitGarmentTitle(rawInnerName),
-        itemSubcategory: outfitText.includes("corset") ? "corset" : "inner_top",
-        targetGender,
-        dominantColor: innerColor,
-        stylingRequirement: `Minimalist ${innerColor} breathable silk camisole or formal inner top`,
-        searchQuery: `${targetGender} ${innerColor} formal inner top camisole blouse Myntra AJIO Nykaa`,
-        preferredRetailers: ["Myntra", "AJIO", "Nykaa Fashion"],
-        materialHint: "Silk, satin, or breathable modal with clean neckline",
-        matchContext: `Understated inner base that provides clean contrast against your ${blazerColor} blazer.`,
-      });
-    } else if (mentionsSaree) {
-      const sareeName = cleanOutfitGarmentTitle(
-        onePiece?.name || look.outfit || `${dominantHumanColor} Silk Saree`,
-      );
-      specs.push({
-        category: "outfit",
-        itemTitle: sareeName,
-        itemSubcategory: "saree",
-        targetGender: "women",
-        dominantColor: dominantHumanColor,
-        stylingRequirement: `${sareeName} with elegant border`,
-        searchQuery: `women ${dominantHumanColor} silk saree Myntra Nykaa Fashion Tata CLiQ`,
-        preferredRetailers: ["Myntra", "Nykaa Fashion", "Tata CLiQ"],
-        matchContext: `Lustrous ${dominantHumanColor} drape harmonizing with your warm undertone.`,
-      });
-      specs.push({
-        category: "outfit",
-        itemTitle: "Matching Embroidered Blouse",
-        itemSubcategory: "inner_top",
-        targetGender: "women",
-        dominantColor: dominantHumanColor,
-        stylingRequirement: `Tailored silk blouse with complementary embroidery`,
-        searchQuery: `women ${dominantHumanColor} embroidered silk saree blouse Myntra Nykaa`,
-        preferredRetailers: ["Myntra", "Nykaa Fashion"],
-        matchContext: `Seamlessly complements the saree drape and festive lighting.`,
-      });
-    } else if (mentionsKurta) {
-      const kurtaName = cleanOutfitGarmentTitle(
-        onePiece?.name || look.outfit || `${dominantHumanColor} Kurta Set`,
-      );
-      specs.push({
-        category: "outfit",
-        itemTitle: kurtaName,
-        itemSubcategory: "kurta",
-        targetGender: persona === "man" ? "men" : "women",
-        dominantColor: dominantHumanColor,
-        stylingRequirement: `${kurtaName} with matching bottom`,
-        searchQuery: `${targetGender} ${dominantHumanColor} kurta set Myntra AJIO Fabindia`,
-        preferredRetailers: ["Myntra", "AJIO", "Fabindia"],
-        matchContext: `Flattering silhouette in ${dominantHumanColor} appropriate for traditional celebrations.`,
-      });
-    } else {
-      // Default single piece (Dress / Jumpsuit / Co-ord)
-      const rawOutfitName = onePiece?.name || pieces[0]?.name || look.outfit || "Outfit";
-      const cleanName = cleanOutfitGarmentTitle(rawOutfitName);
-      specs.push({
-        category: "outfit",
-        itemTitle: cleanName,
-        itemSubcategory: "dress",
-        targetGender,
-        dominantColor: dominantHumanColor,
-        stylingRequirement: `${cleanName} (Color: ${dominantHumanColor})`,
-        searchQuery: `${targetGender} ${dominantHumanColor} ${cleanName} Myntra AJIO Nykaa`,
-        preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion"],
-        matchContext: `Matches your recommended ${dominantHumanColor} palette and ${profile.occasion || "event"} dress code.`,
-      });
-    }
+    const outfitSpecs = decomposeOutfitGarments(
+      look,
+      profile,
+      targetGender,
+      dominantHumanColor,
+      ctx,
+    );
+    specs.push(...outfitSpecs);
   }
 
   // Extract all dynamic accessories specified, visible, or recommended for this specific look
@@ -2555,50 +2838,19 @@ export function planRequirementSpecs(
   }
 
   // 3. Footwear Requirement
-  if (applicableCategories.includes("footwear")) {
-    const footPiece = pieces.find(
-      (p) =>
-        (p?.category || "").toLowerCase().includes("foot") ||
-        (p?.category || "").toLowerCase().includes("shoe") ||
-        (p?.category || "").toLowerCase().includes("heel"),
-    );
-    let footTitle = footPiece?.name || (look.footwear || "").split(",")[0];
-    let footStyle = "";
-    let footQuery = "";
-
-    if (isGarbaOrNavratri || isTraditionalOrFestive) {
-      footTitle = footTitle || (persona === "man" ? "Handcrafted Ethnic Mojaris" : "Handcrafted Embroidered Ethnic Punjabi Juttis");
-      footStyle = `Cushioned ethnic juttis / mojaris with thread or mirror embroidery designed for festive dancing`;
-      footQuery = `${targetGender} embroidered ethnic juttis mojaris Myntra AJIO Tata CLiQ`;
-    } else if (isOfficeOrFormal) {
-      footTitle = footTitle || (persona === "man" ? "Leather Oxford / Derby Shoes" : "Pointed-Toe Block Heel Formal Pumps");
-      footStyle = `Clean, supportive formal footwear in tailored neutral finish`;
-      footQuery = `${targetGender} formal ${persona === "man" ? "leather oxford derby shoes" : "pointed toe pumps block heels"} Myntra AJIO Tata CLiQ`;
-    } else if (isDateNight) {
-      footTitle = footTitle || (persona === "man" ? "Suede Penny Loafers" : "Strappy Kitten / Block Heels");
-      footStyle = `Elegant date-night footwear balancing comfort with alluring silhouette`;
-      footQuery = `${targetGender} ${persona === "man" ? "suede penny loafers" : "strappy kitten block heels"} Myntra AJIO Nykaa`;
-    } else if (isParty) {
-      footTitle = footTitle || (persona === "man" ? "Polished Chelsea Boots" : "Metallic Strappy Stiletto / Block Heels");
-      footStyle = `Statement party footwear with elevated finish`;
-      footQuery = `${targetGender} party ${persona === "man" ? "chelsea boots leather loafers" : "metallic strappy heels stiletto"} Myntra AJIO`;
-    } else {
-      footTitle = footTitle || "Comfortable Minimalist Sneakers / Flats";
-      footStyle = `Versatile everyday footwear`;
-      footQuery = `${targetGender} clean minimalist sneakers flats Myntra AJIO`;
-    }
-
-    specs.push({
-      category: "footwear",
-      itemTitle: footTitle,
-      itemSubcategory: "footwear",
+  if (
+    applicableCategories.includes("footwear") ||
+    (applicableCategories as string[]).includes("footwear-accessories")
+  ) {
+    const footSpec = detectFootwearSpec(
+      look,
+      profile,
       targetGender,
-      dominantColor: dominantHumanColor,
-      stylingRequirement: `${footStyle} (${profile.occasion || "event"} appropriate)`,
-      searchQuery: footQuery.trim(),
-      preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"],
-      matchContext: `Coordinates proportions and color balance with your ${dominantHumanColor} outfit.`,
-    });
+      dominantHumanColor,
+      ctx,
+      persona,
+    );
+    specs.push(footSpec);
   }
 
   // 4. Dynamic Accessories Requirement (Bags, Clutches, Totes, Potlis, Belts)
@@ -2648,27 +2900,53 @@ export function planRequirementSpecs(
       }
     } else {
       // Fallback if no specific accessory was found in look, but category was requested
-      let accTitle = isGarbaOrNavratri || isTraditionalOrFestive
-        ? "Embroidered Festive Potli Bag with Pearl Handle"
-        : isOfficeOrFormal
-          ? (persona === "man" ? "Structured Leather Briefcase / Laptop Bag" : "Structured Leather Work Laptop Tote Bag")
-          : isDateNight || isParty
-            ? "Sleek Metallic Crossbody / Evening Clutch"
-            : "Structured Shoulder Bag / Daily Tote";
-      let accStyle = isGarbaOrNavratri || isTraditionalOrFestive
-        ? `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`
-        : isOfficeOrFormal
-          ? `Structured tote with dual handles and clean laptop compartment`
-          : isDateNight || isParty
-            ? `Compact evening clutch with chain strap`
-            : `Clean everyday bag`;
-      let accQuery = isGarbaOrNavratri || isTraditionalOrFestive
-        ? `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`
-        : isOfficeOrFormal
-          ? `${targetGender} ${dominantHumanColor} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`
-          : isDateNight || isParty
-            ? `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`
-            : `${targetGender} ${dominantHumanColor} shoulder bag tote Myntra AJIO`;
+      let accTitle = "";
+      let accStyle = "";
+      let accQuery = "";
+
+      if (ctx.isBoy || targetGender === "boys") {
+        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? "Boys Festive Brooch & Pocket Square"
+          : "Boys Casual Belt & Cap";
+        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? "Festive metallic brooch and matching pocket square"
+          : "Everyday durable belt and cap";
+        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
+          ? `boys festive brooch pocket square Myntra AJIO`
+          : `boys belt cap Myntra AJIO`;
+      } else if (ctx.isGirl || targetGender === "girls") {
+        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? "Girls Embroidered Festive Potli Bag"
+          : "Girls Hair Accessories & Sling Bag";
+        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? "Festive embellished potli bag with tassel drawstring"
+          : "Everyday cute sling bag and accessories";
+        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
+          ? `girls festive potli bag Myntra AJIO`
+          : `girls sling bag accessories Myntra AJIO`;
+      } else {
+        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? "Embroidered Festive Potli Bag with Pearl Handle"
+          : isOfficeOrFormal
+            ? (persona === "man" ? "Structured Leather Briefcase / Laptop Bag" : "Structured Leather Work Laptop Tote Bag")
+            : isDateNight || isParty
+              ? "Sleek Metallic Crossbody / Evening Clutch"
+              : "Structured Shoulder Bag / Daily Tote";
+        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
+          ? `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`
+          : isOfficeOrFormal
+            ? `Structured tote with dual handles and clean laptop compartment`
+            : isDateNight || isParty
+              ? `Compact evening clutch with chain strap`
+              : `Clean everyday bag`;
+        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
+          ? `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`
+          : isOfficeOrFormal
+            ? `${targetGender} ${dominantHumanColor} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`
+            : isDateNight || isParty
+              ? `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`
+              : `${targetGender} ${dominantHumanColor} shoulder bag tote Myntra AJIO`;
+      }
 
       specs.push({
         category: "accessories",
@@ -2715,13 +2993,388 @@ export function getBenchmarkCandidatesForRequirement(
   shade?: string;
   material?: string;
 }> {
-  const isMan = persona === "man";
-  const isChild = persona === "child";
+  const isMan = persona === "man" || spec.targetGender === "men";
+  const isChild = persona === "child" || spec.targetGender === "child" || spec.targetGender === "boys" || spec.targetGender === "girls";
+  const isBoy = spec.targetGender === "boys" || (isChild && spec.targetGender !== "girls");
+  const isGirl = spec.targetGender === "girls";
   const subcat = (spec.itemSubcategory || spec.itemTitle).toLowerCase();
   const color = spec.dominantColor || dominantColor || "Classic";
   const stylingReq = (spec.stylingRequirement || "").toLowerCase();
 
   if (spec.category === "outfit") {
+    if (isBoy) {
+      if (subcat === "shorts" || subcat.includes("shorts")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Cotton Chino Shorts`,
+            brand: "U.S. Polo Assn. Kids",
+            retailer: "Myntra",
+            price: 799,
+            originalPrice: 1399,
+            url: buildRetailerSearchUrl("Myntra", {
+              gender: "boys",
+              brand: "U.S. Polo Assn. Kids",
+              productName: `Boys ${color} Cotton Chino Shorts`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Breathable Cotton Twill",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Lightweight Vacation Linen-Blend Shorts`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1199,
+            originalPrice: 1899,
+            url: buildRetailerSearchUrl("AJIO", {
+              gender: "boys",
+              brand: "GAP Kids",
+              productName: `Boys ${color} Vacation Linen Shorts`,
+              color,
+              category: "outfit",
+            }),
+            material: "Cotton-Linen Summer Blend",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Pure Linen ${color} Vacation Shorts`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 1899,
+            originalPrice: 2499,
+            url: buildRetailerSearchUrl("Tata CLiQ", {
+              gender: "boys",
+              brand: "Marks & Spencer",
+              productName: `Boys ${color} Pure Linen Shorts`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Pure European Linen",
+          },
+        ];
+      }
+
+      if (subcat === "shirt" || subcat.includes("shirt")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Breathable Cotton Linen Button-Down Shirt`,
+            brand: "U.S. Polo Assn. Kids",
+            retailer: "Myntra",
+            price: 899,
+            originalPrice: 1499,
+            url: buildRetailerSearchUrl("Myntra", {
+              gender: "boys",
+              brand: "U.S. Polo Assn. Kids",
+              productName: `Boys ${color} Linen Button-Down Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "Breathable Cotton-Linen Blend",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Camp Collar Vacation Resort Shirt`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1399,
+            originalPrice: 1999,
+            url: buildRetailerSearchUrl("AJIO", {
+              gender: "boys",
+              brand: "GAP Kids",
+              productName: `Boys ${color} Vacation Resort Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Lightweight Poplin Cotton",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Pure Linen ${color} Casual Button-Down Shirt`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 2199,
+            originalPrice: 2999,
+            url: buildRetailerSearchUrl("Tata CLiQ", {
+              gender: "boys",
+              brand: "Marks & Spencer",
+              productName: `Boys ${color} Pure Linen Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Pure European Linen",
+          },
+        ];
+      }
+
+      if (
+        subcat.includes("resort") ||
+        subcat.includes("vacation") ||
+        subcat.includes("co-ord") ||
+        subcat.includes("coord") ||
+        stylingReq.includes("resort") ||
+        stylingReq.includes("vacation") ||
+        stylingReq.includes("linen")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Cotton-Linen Resort Shirt & Shorts Set`,
+            brand: "U.S. Polo Assn. Kids",
+            retailer: "Myntra",
+            price: 1199,
+            originalPrice: 1999,
+            url: buildRetailerSearchUrl("Myntra", {
+              gender: "boys",
+              brand: "U.S. Polo Assn. Kids",
+              productName: `Boys ${color} Linen Resort Shirt and Shorts Set`,
+              color,
+              category: "outfit",
+            }),
+            material: "Breathable Cotton-Linen Blend",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Camp Collar Vacation Co-ord Set`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1899,
+            originalPrice: 2799,
+            url: buildRetailerSearchUrl("AJIO", {
+              gender: "boys",
+              brand: "GAP Kids",
+              productName: `Boys ${color} Vacation Co-ord Set`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Lightweight Poplin Cotton",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Pure Linen ${color} Vacation Co-ord Set`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 2999,
+            originalPrice: 4499,
+            url: buildRetailerSearchUrl("Tata CLiQ", {
+              gender: "boys",
+              brand: "Marks & Spencer",
+              productName: `Boys ${color} Pure Linen Co-ord Set`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Pure European Linen",
+          },
+        ];
+      }
+
+      if (
+        subcat.includes("kurta") ||
+        subcat.includes("kedia") ||
+        subcat.includes("sherwani") ||
+        subcat.includes("dhoti") ||
+        subcat.includes("lehenga") ||
+        subcat.includes("chaniya") ||
+        stylingReq.includes("kurta") ||
+        ((stylingReq.includes("festive") || stylingReq.includes("traditional")) &&
+          !stylingReq.includes("vacation") &&
+          !stylingReq.includes("resort") &&
+          !stylingReq.includes("beach"))
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Printed Cotton Festive Kurta Dhoti Set`,
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 999,
+            originalPrice: 1999,
+            url: `https://www.myntra.com/boys-${encodeURIComponent(color.toLowerCase())}-kurta-dhoti-set`,
+            material: "100% Breathable Cotton with Foil Gota Accents",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Embroidered Festive Kedia Kurta Set`,
+            brand: "Tiber Taber",
+            retailer: "AJIO",
+            price: 1899,
+            originalPrice: 2899,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} festive kedia kurta set`)}`,
+            material: "Pure Cotton & Slub Silk with Mirror Embellishments",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Woven Silk Blend ${color} Festive Kurta Set with Jacket`,
+            brand: "Manyavar",
+            retailer: "Tata CLiQ",
+            price: 3499,
+            originalPrice: 4999,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`boys ${color} festive kurta set`)}`,
+            material: "Jacquard Pure Silk Blend with Inner Lining",
+          },
+        ];
+      }
+
+      if (subcat.includes("blazer") || subcat.includes("jacket")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Notch Lapel Single-Breasted Blazer`,
+            brand: "Gini & Jony",
+            retailer: "Myntra",
+            price: 1299,
+            originalPrice: 2499,
+            url: `https://www.myntra.com/boys-${encodeURIComponent(color.toLowerCase())}-blazer`,
+            material: "Poly-Viscose Structured Fabric",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys Tailored Fit ${color} Formal Suit Blazer`,
+            brand: "Marks & Spencer",
+            retailer: "AJIO",
+            price: 2299,
+            originalPrice: 3499,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} formal blazer`)}`,
+            material: "Fine Cotton Suiting Blend",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Velvet Embellished ${color} Bandhgala Blazer`,
+            brand: "Tiber Taber",
+            retailer: "Tata CLiQ",
+            price: 3699,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`boys ${color} bandhgala blazer`)}`,
+            material: "Rich Velvet with Metallic Buttons",
+          },
+        ];
+      }
+
+      if (subcat.includes("trouser") || subcat.includes("pant") || subcat.includes("jeans")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys Regular Fit Stretchable ${color} Denim Jeans`,
+            brand: "U.S. Polo Assn. Kids",
+            retailer: "Myntra",
+            price: 899,
+            originalPrice: 1799,
+            url: `https://www.myntra.com/boys-${encodeURIComponent(color.toLowerCase())}-jeans`,
+            material: "Comfort Stretch Cotton Denim",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys Flat-Front ${color} Chino Trousers`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1499,
+            originalPrice: 2299,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} chino trousers`)}`,
+            material: "100% Breathable Twill Cotton",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Tailored Suiting ${color} Formal Trousers`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 2199,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`boys ${color} formal trousers`)}`,
+            material: "Wool-Rich Suiting Blend",
+          },
+        ];
+      }
+
+      if (subcat.includes("inner_top") || subcat.includes("shirt") || subcat.includes("top")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys Solid Pure Cotton Button-Down Shirt`,
+            brand: "Allen Solly Junior",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1399,
+            url: "https://www.myntra.com/boys-cotton-shirt",
+            material: "100% Crisp Cotton",
+            shade: "White",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys Oxford Cotton Smart Casual Shirt`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1199,
+            originalPrice: 1999,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys formal cotton oxford shirt")}`,
+            material: "Soft Oxford Weave Cotton",
+            shade: "Pure White",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Embroidered Collar Formal Button-Down Shirt`,
+            brand: "Tommy Hilfiger Kids",
+            retailer: "Tata CLiQ",
+            price: 2199,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys tommy hilfiger white shirt")}`,
+            material: "Fine Poplin Pure Cotton",
+            shade: "Ivory White",
+          },
+        ];
+      }
+
+      // Default boys outfit set
+      return [
+        {
+          tier: "budget",
+          productTitle: `Boys ${color} Cotton Graphic T-Shirt & Chino Shorts Set`,
+          brand: "U.S. Polo Assn. Kids",
+          retailer: "Myntra",
+          price: 999,
+          originalPrice: 1999,
+          url: buildRetailerSearchUrl("Myntra", {
+            gender: "boys",
+            brand: "U.S. Polo Assn. Kids",
+            productName: `Boys ${color} T-Shirt and Shorts Set`,
+            color,
+            category: "outfit",
+          }),
+          material: "100% Breathable Cotton",
+        },
+        {
+          tier: "mid",
+          productTitle: `Boys ${color} Chambray Button-Down Shirt & Denim Jeans Set`,
+          brand: "Mothercare",
+          retailer: "AJIO",
+          price: 1899,
+          originalPrice: 2999,
+          url: buildRetailerSearchUrl("AJIO", {
+            gender: "boys",
+            brand: "Mothercare",
+            productName: `Boys ${color} Shirt and Denim Set`,
+            color,
+            category: "outfit",
+          }),
+          material: "Cotton Chambray & Stretch Denim",
+        },
+        {
+          tier: "premium",
+          productTitle: `Boys Tailored ${color} Smart Casual 2-Piece Outfit Set`,
+          brand: "Tommy Hilfiger Kids",
+          retailer: "Tata CLiQ",
+          price: 3499,
+          originalPrice: 4999,
+          url: buildRetailerSearchUrl("Tata CLiQ", {
+            gender: "boys",
+            brand: "Tommy Hilfiger Kids",
+            productName: `Boys ${color} Outfit Set`,
+            color,
+            category: "outfit",
+          }),
+          material: "Premium Organic Cotton & Twill",
+        },
+      ];
+    }
+
     // 1. Festive Chaniya Choli / Lehenga
     if (
       subcat.includes("lehenga") ||
@@ -3331,7 +3984,234 @@ export function getBenchmarkCandidatesForRequirement(
   }
 
   if (spec.category === "footwear") {
-    // 1. Traditional Juttis & Mojaris
+    if (isBoy) {
+      if (
+        stylingReq.includes("sandal") ||
+        stylingReq.includes("slide") ||
+        subcat.includes("sandal") ||
+        subcat.includes("slide")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Breathable Double-Strap Slide Sandals`,
+            brand: "Bata",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1199,
+            url: "https://www.myntra.com/boys-slide-sandals",
+            material: "Cushioned EVA with Adjustable Double Straps",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Lightweight Water-Resistant Slide Sandals`,
+            brand: "Crocs",
+            retailer: "AJIO",
+            price: 1495,
+            originalPrice: 1995,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} slide sandals`)}`,
+            material: "Croslite Foam Cushioning",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys ${color} Genuine Leather Comfort Slide Sandals`,
+            brand: "Clarks Kids",
+            retailer: "Tata CLiQ",
+            price: 2499,
+            originalPrice: 3299,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`boys ${color} clarks leather slide sandals`)}`,
+            material: "Genuine Full-Grain Leather with Padded Footbed",
+          },
+        ];
+      }
+
+      if (
+        stylingReq.includes("jutti") ||
+        stylingReq.includes("mojari") ||
+        stylingReq.includes("ethnic") ||
+        subcat.includes("jutti") ||
+        subcat.includes("mojari")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Boys Handcrafted Ethnic Slip-On Mojaris",
+            brand: "Klapz",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1399,
+            url: "https://www.myntra.com/boys-ethnic-mojaris",
+            material: "Cushioned Faux Leather with Metallic Thread Accents",
+          },
+          {
+            tier: "mid",
+            productTitle: "Boys Embroidered Padded Festive Mojari Shoes",
+            brand: "Mochi",
+            retailer: "AJIO",
+            price: 1290,
+            originalPrice: 1990,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys festive ethnic mojaris")}`,
+            material: "Cushioned Insole with Thread Work",
+          },
+          {
+            tier: "premium",
+            productTitle: "Boys Handcrafted Leather Ethnic Juttis",
+            brand: "Needledust Kids",
+            retailer: "Tata CLiQ",
+            price: 2490,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys ethnic juttis mojaris")}`,
+            material: "Genuine Soft Leather with Cushioned Sole",
+          },
+        ];
+      }
+      return [
+        {
+          tier: "budget",
+          productTitle: "Boys Cushioned Casual Sneakers",
+          brand: "Bata",
+          retailer: "Myntra",
+          price: 899,
+          originalPrice: 1599,
+          url: "https://www.myntra.com/boys-casual-sneakers",
+          material: "Breathable Canvas with Rubber Sole",
+        },
+        {
+          tier: "mid",
+          productTitle: "Boys Classic Slip-On Casual Loafers",
+          brand: "Puma",
+          retailer: "AJIO",
+          price: 1599,
+          originalPrice: 2499,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys casual sneakers shoes")}`,
+          material: "Synthetic Leather with Soft Insole",
+        },
+        {
+          tier: "premium",
+          productTitle: "Boys Leather Smart Derby Formal Shoes",
+          brand: "Clarks Kids",
+          retailer: "Tata CLiQ",
+          price: 2999,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys clarks leather shoes")}`,
+          material: "Genuine Full-Grain Leather",
+        },
+      ];
+    }
+
+    if (isGirl) {
+      if (
+        stylingReq.includes("sandal") ||
+        stylingReq.includes("slide") ||
+        subcat.includes("sandal") ||
+        subcat.includes("slide")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Girls ${color} Strappy Open-Toe Slide Sandals`,
+            brand: "Bata",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1199,
+            url: "https://www.myntra.com/girls-slide-sandals",
+            material: "Soft Faux Leather with Cushioned Insole",
+          },
+          {
+            tier: "mid",
+            productTitle: `Girls ${color} Embellished Summer Slide Sandals`,
+            brand: "Mochi",
+            retailer: "AJIO",
+            price: 1290,
+            originalPrice: 1890,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`girls ${color} slide sandals`)}`,
+            material: "Padded Footbed with Metallic Accents",
+          },
+          {
+            tier: "premium",
+            productTitle: `Girls ${color} Handcrafted Leather Strappy Sandals`,
+            brand: "Clarks Kids",
+            retailer: "Tata CLiQ",
+            price: 2499,
+            originalPrice: 3299,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`girls ${color} leather sandals`)}`,
+            material: "Supple Nappa Leather with Buckle Strap",
+          },
+        ];
+      }
+
+      if (
+        stylingReq.includes("jutti") ||
+        stylingReq.includes("mojari") ||
+        stylingReq.includes("ethnic") ||
+        subcat.includes("jutti") ||
+        subcat.includes("mojari")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Girls Embroidered Ethnic Punjabi Juttis`,
+            brand: "Anouk Girls",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1399,
+            url: "https://www.myntra.com/girls-ethnic-juttis",
+            material: "Handcrafted with Soft Velvet and Foil Zari",
+          },
+          {
+            tier: "mid",
+            productTitle: `Girls Mirror-Work Cushioned Festive Juttis`,
+            brand: "Mochi",
+            retailer: "AJIO",
+            price: 1190,
+            originalPrice: 1790,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("girls festive ethnic juttis")}`,
+            material: "Padded Insole with Mirror Embellishments",
+          },
+          {
+            tier: "premium",
+            productTitle: `Girls Handcrafted Zardozi Designer Juttis`,
+            brand: "Needledust Kids",
+            retailer: "Tata CLiQ",
+            price: 2290,
+            originalPrice: 3490,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("girls needledust ethnic juttis")}`,
+            material: "Pure Silk & Leather with Embroidered Sequins",
+          },
+        ];
+      }
+      return [
+        {
+          tier: "budget",
+          productTitle: "Girls Ballet Flats with Bow Accent",
+          brand: "Bata",
+          retailer: "Myntra",
+          price: 799,
+          originalPrice: 1399,
+          url: "https://www.myntra.com/girls-ballet-flats",
+          material: "Soft Faux Leather with Cushioned Footbed",
+        },
+        {
+          tier: "mid",
+          productTitle: "Girls Shimmer Slip-On Casual Shoes",
+          brand: "Puma",
+          retailer: "AJIO",
+          price: 1499,
+          originalPrice: 2299,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("girls casual sneakers shoes")}`,
+          material: "Glitter Canvas with Flexible Rubber Sole",
+        },
+        {
+          tier: "premium",
+          productTitle: "Girls Leather Mary Jane Formal Shoes",
+          brand: "Clarks Kids",
+          retailer: "Tata CLiQ",
+          price: 2699,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("girls clarks leather shoes")}`,
+          material: "Supple Nappa Leather with Buckle Strap",
+        },
+      ];
+    }
+
+    // 1. Traditional Juttis & Mojaris (Adults)
     if (
       stylingReq.includes("jutti") ||
       stylingReq.includes("mojari") ||
@@ -3374,6 +4254,45 @@ export function getBenchmarkCandidatesForRequirement(
     }
 
     if (isMan) {
+      if (
+        stylingReq.includes("sandal") ||
+        stylingReq.includes("slide") ||
+        subcat.includes("sandal") ||
+        subcat.includes("slide")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Men ${color} Genuine Leather Slide Sandals`,
+            brand: "Bata",
+            retailer: "Myntra",
+            price: 1199,
+            originalPrice: 1999,
+            url: "https://www.myntra.com/men-leather-slide-sandals",
+            material: "Genuine Soft Leather with Cushioned Footbed",
+          },
+          {
+            tier: "mid",
+            productTitle: `Men ${color} Two-Strap Cushioned Leather Slides`,
+            brand: "Woodland",
+            retailer: "AJIO",
+            price: 2495,
+            originalPrice: 3495,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`men ${color} leather slide sandals`)}`,
+            material: "Oil-Pulled Leather with Shock Absorber",
+          },
+          {
+            tier: "premium",
+            productTitle: `Men ${color} Italian Leather Comfort Slides`,
+            brand: "Clarks",
+            retailer: "Tata CLiQ",
+            price: 4999,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`men ${color} clarks leather slide sandals`)}`,
+            material: "Handcrafted Italian Leather",
+          },
+        ];
+      }
+
       return [
         {
           tier: "budget",
@@ -3403,6 +4322,46 @@ export function getBenchmarkCandidatesForRequirement(
           price: 5499,
           url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men clarks formal leather shoes")}`,
           material: "Full Grain Leather",
+        },
+      ];
+    }
+
+    if (
+      stylingReq.includes("sandal") ||
+      stylingReq.includes("slide") ||
+      subcat.includes("sandal") ||
+      subcat.includes("slide")
+    ) {
+      return [
+        {
+          tier: "budget",
+          productTitle: `Women ${color} Open-Toe Flat Slide Sandals`,
+          brand: "Mast & Harbour",
+          retailer: "Myntra",
+          price: 799,
+          originalPrice: 1699,
+          url: "https://www.myntra.com/women-flat-slide-sandals",
+          material: "Soft Faux Leather with Textured Insole",
+        },
+        {
+          tier: "mid",
+          productTitle: `Women ${color} Braided Strap Leather Slide Sandals`,
+          brand: "Mochi",
+          retailer: "AJIO",
+          price: 1690,
+          originalPrice: 2490,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent(`women ${color} slide sandals`)}`,
+          material: "Cushioned Leather Footbed with Braided Finish",
+        },
+        {
+          tier: "premium",
+          productTitle: `Women ${color} Handcrafted Genuine Leather Comfort Slides`,
+          brand: "MANGO",
+          retailer: "Tata CLiQ",
+          price: 3590,
+          originalPrice: 4990,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`women ${color} mango leather slide sandals`)}`,
+          material: "100% Bovine Leather with Ergonomic Sole",
         },
       ];
     }
@@ -3441,7 +4400,114 @@ export function getBenchmarkCandidatesForRequirement(
   }
 
   if (spec.category === "accessories") {
-    // 1. Festive Potli Bags
+    if (isBoy) {
+      if (
+        stylingReq.includes("brooch") ||
+        stylingReq.includes("pocket") ||
+        stylingReq.includes("ethnic") ||
+        stylingReq.includes("festive") ||
+        subcat.includes("brooch")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Boys Festive Traditional Brooch & Pocket Square",
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 349,
+            originalPrice: 799,
+            url: "https://www.myntra.com/boys-accessories",
+            material: "Brass Plated with Enamel Finish",
+          },
+          {
+            tier: "mid",
+            productTitle: "Boys Handcrafted Royal Pearl Sherwani Brooch",
+            brand: "Tiber Taber",
+            retailer: "AJIO",
+            price: 699,
+            originalPrice: 1199,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys festive sherwani brooch")}`,
+            material: "Gold-Plated Brass with Faux Pearls",
+          },
+          {
+            tier: "premium",
+            productTitle: "Boys Traditional Zardozi Festive Stole & Brooch Set",
+            brand: "Manyavar",
+            retailer: "Tata CLiQ",
+            price: 1499,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys manyavar festive brooch stole")}`,
+            material: "Silk Blend Stole with Handcrafted Brooch",
+          },
+        ];
+      }
+      return [
+        {
+          tier: "budget",
+          productTitle: "Boys Reversible Classic Leather Belt",
+          brand: "Wildhorn Junior",
+          retailer: "Myntra",
+          price: 499,
+          originalPrice: 999,
+          url: "https://www.myntra.com/boys-belt",
+          material: "Durable Synthetic Leather",
+        },
+        {
+          tier: "mid",
+          productTitle: "Boys Classic Twill Baseball Cap & Belt Set",
+          brand: "Allen Solly Junior",
+          retailer: "AJIO",
+          price: 799,
+          originalPrice: 1299,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys belt cap set")}`,
+          material: "100% Cotton Twill",
+        },
+        {
+          tier: "premium",
+          productTitle: "Boys Water-Resistant Analog Watch",
+          brand: "Zoop by Titan",
+          retailer: "Tata CLiQ",
+          price: 1195,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys titan zoop watch")}`,
+          material: "Silicone Strap with Stainless Steel Back",
+        },
+      ];
+    }
+
+    if (isGirl) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Girls Embroidered Mini Festive Potli Bag",
+          brand: "Anekaant Kids",
+          retailer: "Myntra",
+          price: 499,
+          originalPrice: 999,
+          url: "https://www.myntra.com/girls-potli-bag",
+          material: "Satin with Gota Patti Trim",
+        },
+        {
+          tier: "mid",
+          productTitle: "Girls Glitter Crossbody Sling Bag",
+          brand: "Accessorize London Kids",
+          retailer: "AJIO",
+          price: 999,
+          originalPrice: 1699,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("girls sling bag accessories")}`,
+          material: "Shimmer PU with Long Chain",
+        },
+        {
+          tier: "premium",
+          productTitle: "Girls Handcrafted Velvet Festive Bag & Hairband Set",
+          brand: "Fayon Kids",
+          retailer: "Tata CLiQ",
+          price: 1850,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("girls fayon kids accessories set")}`,
+          material: "Embroidered Velvet",
+        },
+      ];
+    }
+
+    // 1. Festive Potli Bags (Adults)
     if (
       stylingReq.includes("potli") ||
       stylingReq.includes("ethnic") ||
@@ -4358,6 +5424,15 @@ Strictly adhere to:
   }
 
   // 3. Fast Parallel Verification of candidates and build products list
+  const candidatePersona: PersonaType | undefined =
+    spec.targetGender === "women"
+      ? "woman"
+      : spec.targetGender === "men"
+        ? "man"
+        : spec.targetGender === "child" || spec.targetGender === "boys" || spec.targetGender === "girls"
+          ? "child"
+          : undefined;
+
   const verifiedPromises = candidateList.map(async (cand, candIdx): Promise<ProductResult | null> => {
     // Consistency check with strict gender, subcategory, color, price sanity, image, and occasion verification
     const consistency = checkProductConsistency(
@@ -4366,13 +5441,14 @@ Strictly adhere to:
       spec.category,
       cand.url,
       undefined, // citationTitle
-      spec.targetGender === "women" ? "woman" : spec.targetGender === "men" ? "man" : spec.targetGender === "child" ? "child" : undefined,
+      candidatePersona,
       spec.itemSubcategory,
       spec.dominantColor,
       cand.imageUrl,
       cand.price,
       profile.occasion,
       cand.shade,
+      spec.targetGender,
     );
     if (!consistency.isConsistent) {
       logger.warn(
@@ -4432,13 +5508,14 @@ Strictly adhere to:
       spec.category,
       cand.url,
       undefined, // citationTitle
-      spec.targetGender === "women" ? "woman" : spec.targetGender === "men" ? "man" : spec.targetGender === "child" ? "child" : undefined,
+      candidatePersona,
       spec.itemSubcategory,
       spec.dominantColor,
       imageUrl,
       finalPrice,
       profile.occasion,
       cand.shade,
+      spec.targetGender,
     );
     if (!postConsistency.isConsistent) {
       logger.warn(
@@ -4511,23 +5588,66 @@ Strictly adhere to:
   // If fewer than 2 verified options were returned from live search,
   // supplement with benchmark candidates to ensure multi-retailer shopping diversity
   if (verifiedProducts.length < 2) {
+    const benchPersona: PersonaType =
+      spec.targetGender === "men"
+        ? "man"
+        : spec.targetGender === "child" || spec.targetGender === "boys" || spec.targetGender === "girls"
+          ? "child"
+          : "woman";
+
     const benchmarks = getBenchmarkCandidatesForRequirement(
       spec,
-      spec.targetGender === "men" ? "man" : "woman",
+      benchPersona,
       budgetLimit,
       spec.dominantColor || "Green",
     );
     for (const b of benchmarks) {
       if (verifiedProducts.length >= 3) break;
+      const benchGender =
+        spec.targetGender === "boys"
+          ? "boys"
+          : spec.targetGender === "girls"
+            ? "girls"
+            : spec.targetGender === "child"
+              ? "child"
+              : benchPersona === "man"
+                ? "men"
+                : "women";
+
       const cleanBenchUrl = sanitizeBenchmarkUrl(
         b.retailer,
         b.brand,
         b.productTitle,
         b.url,
-        spec.targetGender === "child" ? "child" : "woman",
+        benchGender,
         spec.category,
         spec.dominantColor,
       );
+
+      // Validate benchmark product against consistency rules
+      const benchConsistency = checkProductConsistency(
+        b.productTitle,
+        b.brand,
+        spec.category,
+        cleanBenchUrl,
+        undefined,
+        benchPersona,
+        spec.itemSubcategory,
+        spec.dominantColor,
+        b.imageUrl,
+        b.price,
+        profile.occasion,
+        b.shade,
+        spec.targetGender,
+      );
+      if (!benchConsistency.isConsistent) {
+        logger.info(
+          { productTitle: b.productTitle, reason: benchConsistency.reason },
+          "Skipping benchmark product due to demographic/consistency check",
+        );
+        continue;
+      }
+
       const canonicalUrl = getCanonicalProductUrl(cleanBenchUrl);
       if (seenCanonicalUrls.has(canonicalUrl)) continue;
       seenCanonicalUrls.add(canonicalUrl);
@@ -4641,7 +5761,14 @@ export async function searchProductsForLook(
     // Filter by requested category if specified (e.g. 'outfit')
     const specsToSearch =
       requestedCategory && requestedCategory !== "all"
-        ? plannedSpecs.filter((s) => s.category === requestedCategory)
+        ? requestedCategory === "footwear-accessories"
+          ? plannedSpecs.filter(
+              (s) =>
+                s.category === "footwear" ||
+                s.category === "accessories" ||
+                s.category === "jewellery",
+            )
+          : plannedSpecs.filter((s) => s.category === requestedCategory)
         : plannedSpecs;
 
     // Search alternatives for all requirements in parallel
@@ -4670,8 +5797,9 @@ export async function searchProductsForLook(
         return true;
       });
 
+      // Retain the planned group so the UI can either render products or clearly notify the user
+      validGroups.push({ ...grp, products: distinctGroupProducts });
       if (distinctGroupProducts.length > 0) {
-        validGroups.push({ ...grp, products: distinctGroupProducts });
         allProducts.push(...distinctGroupProducts);
       }
     }

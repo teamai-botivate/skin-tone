@@ -120,7 +120,11 @@ export function Generating({
             <h2 className="mt-2 font-serif text-2xl font-semibold text-foreground">
               Unable to generate styling recommendations
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{error}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {error === '[object Event]' || error === '[object Object]'
+                ? 'A temporary network connection or asset loading event occurred. Please click Try again.'
+                : error}
+            </p>
             <div className="mt-6 flex flex-wrap gap-3">
               {onRetry && (
                 <button

@@ -24,6 +24,7 @@ export function CustomStyleStep({
   onBack,
   step = 8,
   total = 10,
+  continueLabel = 'Continue',
 }: {
   profile: SkinTuneProfile;
   update: (p: Partial<SkinTuneProfile>) => void;
@@ -31,6 +32,7 @@ export function CustomStyleStep({
   onBack: () => void;
   step?: number;
   total?: number;
+  continueLabel?: string;
 }) {
   const value = profile.customStyleNotes ?? '';
 
@@ -117,7 +119,7 @@ export function CustomStyleStep({
           </div>
         </div>
 
-        <FooterActions onBack={onBack} onContinue={onNext} disabled={false} />
+        <FooterActions onBack={onBack} onContinue={onNext} disabled={false} label={continueLabel} />
       </Intro>
     </StepShell>
   );

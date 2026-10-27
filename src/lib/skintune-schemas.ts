@@ -3,6 +3,7 @@ import { z } from "zod";
 export const LetStyleProfileSchema = z.object({
   name: z.string().optional().default(''),
   pronouns: z.string().optional().default(''),
+  gender: z.string().optional().default(''),
   ageGroup: z.string().optional().default(''),
   height: z.string().optional().default(''),
   photoUrl: z.string().optional().default(''),
@@ -99,7 +100,7 @@ export const ProductResultSchema = z.object({
   shade: z.string().optional(),
   color: z.string().optional(),
   itemType: z.string().optional(),
-  targetGender: z.enum(["women", "men", "child", "unisex"]).optional(),
+  targetGender: z.enum(["women", "men", "child", "boys", "girls", "unisex"]).optional(),
   style: z.string().optional(),
   occasion: z.string().optional(),
   material: z.string().optional(),
