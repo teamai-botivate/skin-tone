@@ -35,9 +35,26 @@ export function AuthModal() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    const handleLogout = () => {
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setError(null);
+    };
+
+    window.addEventListener('letstyle:logout', handleLogout);
+    return () => window.removeEventListener('letstyle:logout', handleLogout);
+  }, []);
+
+  useEffect(() => {
     setTab(authModalTab);
     setError(null);
-    if (isAuthModalOpen && !name) {
+    if (!isAuthModalOpen) {
+      setPassword('');
+      setConfirmPassword('');
+      setError(null);
+    } else if (!name) {
       try {
         const saved =
           localStorage.getItem('letstyle-profile') || localStorage.getItem('skintune-profile');

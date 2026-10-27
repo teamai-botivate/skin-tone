@@ -184,7 +184,24 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
 
   const pronouns = (profile.pronouns || '').toLowerCase();
   const age = (profile.ageGroup || '').toLowerCase();
-  const isChild = age.includes('kids') || age.includes('0–12') || age.includes('0-12') || pronouns.includes('kids') || pronouns.includes('child');
+  const isChild =
+    age.includes('kids') ||
+    age.includes('0–12') ||
+    age.includes('0-12') ||
+    age.includes('0–13') ||
+    age.includes('0-13') ||
+    age.includes('13–18') ||
+    age.includes('13-18') ||
+    age.includes('0–5') ||
+    age.includes('0-5') ||
+    age.includes('6–10') ||
+    age.includes('6-10') ||
+    age.includes('11–15') ||
+    age.includes('11-15') ||
+    age.includes('15–19') ||
+    age.includes('15-19') ||
+    pronouns.includes('kids') ||
+    pronouns.includes('child');
   const isWoman = !isChild && (pronouns.includes('women') || pronouns.includes('female') || pronouns.includes('she/her'));
   const isMan = !isChild && !isWoman && (pronouns.includes('male') || pronouns.includes('he/him') || /\bmen\b/.test(pronouns));
 

@@ -121,3 +121,14 @@ export const setActiveVersion = (id: string): void => {
   if (!versions.some((v) => v.id === id)) return;
   saveVersions(versions.map((v) => ({ ...v, active: v.id === id })));
 };
+
+/** Clears all stored avatar versions upon sign out or data reset. */
+export const clearAvatarVersions = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+};
+

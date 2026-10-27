@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { clearPersonalizationStorage } from '@/lib/personalization-storage';
 
 export interface User {
   id: string;
@@ -153,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setCredits(0);
+      clearPersonalizationStorage();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('letstyle:logout'));
       }

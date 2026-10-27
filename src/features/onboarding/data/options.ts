@@ -18,13 +18,20 @@ export const pronounOptions: SelectOption[] = [
 ];
 
 export const ageGroupOptions: SelectOption[] = [
-  { label: 'Kids (0–12)' },
-  { label: 'Teens (13–17)' },
   { label: 'Under 25' },
   { label: '25–34' },
   { label: '35–49' },
   { label: '50+' },
   { label: 'Prefer not to say' },
+];
+
+export const adultAgeGroupOptions = ageGroupOptions;
+
+export const kidsAgeGroupOptions: SelectOption[] = [
+  { label: '0-5' },
+  { label: '6-10' },
+  { label: '11-15' },
+  { label: '15-19' },
 ];
 
 export const bodyBuildOptions: SelectOption[] = [

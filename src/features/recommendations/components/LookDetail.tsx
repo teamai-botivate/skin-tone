@@ -113,6 +113,18 @@ export function LookDetail({
     age.includes('kids') ||
     age.includes('0–12') ||
     age.includes('0-12') ||
+    age.includes('0–13') ||
+    age.includes('0-13') ||
+    age.includes('13–18') ||
+    age.includes('13-18') ||
+    age.includes('0–5') ||
+    age.includes('0-5') ||
+    age.includes('6–10') ||
+    age.includes('6-10') ||
+    age.includes('11–15') ||
+    age.includes('11-15') ||
+    age.includes('15–19') ||
+    age.includes('15-19') ||
     age.includes('child') ||
     pronouns.includes('kids') ||
     pronouns.includes('children');

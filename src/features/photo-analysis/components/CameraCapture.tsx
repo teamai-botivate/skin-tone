@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, RefreshCw, Timer } from 'lucide-react';
+import { X, RefreshCw, Timer, Upload } from 'lucide-react';
 
 export function CameraCapture({
   onCapture,
@@ -14,6 +14,7 @@ export function CameraCapture({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -72,6 +73,44 @@ export function CameraCapture({
     };
   }, [facingMode, mode]);
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const raw = event.target?.result as string;
+      if (!raw) return;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          onCapture(canvas.toDataURL('image/jpeg', 0.92));
+        } else {
+          onCapture(raw);
+        }
+      };
+      img.onerror = () => onCapture(raw);
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const executeCapture = () => {
     const video = videoRef.current;
     if (!video || !ready) return;
@@ -126,61 +165,67 @@ export function CameraCapture({
       aria-modal="true"
       aria-label={mode === 'body' ? 'Take full body selfie' : 'Take a selfie'}
     >
-      {/* Top action bar */}
+      {/* Top action bar: Mode title & Upload + Close buttons */}
       <div className="absolute top-4 inset-x-4 flex items-center justify-between z-10 max-w-md mx-auto">
-        <div className="flex items-center gap-2">
-          {/* Timer button */}
-          <button
-            type="button"
-            onClick={cycleTimer}
-            data-testid="button-camera-timer"
-            aria-label="Toggle camera timer"
-            className={`focus-ring inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-              timerSeconds > 0
-                ? 'bg-[#D9BC96] text-[#194A49]'
-                : 'bg-white/15 text-white hover:bg-white/25'
-            }`}
-          >
-            <Timer size={14} />
-            <span>{timerSeconds === 0 ? 'Timer Off' : `${timerSeconds}s`}</span>
-          </button>
+        <span className="rounded-full bg-black/60 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-white/90 backdrop-blur-sm border border-white/10">
+          {mode === 'body' ? 'Full Body Selfie' : 'Face Selfie'}
+        </span>
 
-          {/* Flip camera button */}
+        <div className="flex items-center gap-2">
+          {/* Upload photo button inside camera view */}
           <button
             type="button"
-            onClick={toggleCamera}
-            data-testid="button-camera-flip"
-            aria-label="Switch camera"
-            className="focus-ring inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/25 transition"
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="button-camera-upload"
+            aria-label="Upload photo from device"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-white/30 transition backdrop-blur-sm border border-white/15 active:scale-95 shadow-xs"
           >
-            <RefreshCw size={13} />
-            <span>{facingMode === 'user' ? 'Front' : 'Rear'}</span>
+            <Upload size={13} />
+            <span>Upload Photo</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="button-camera-close"
+            aria-label="Close camera"
+            className="focus-ring grid size-9 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 transition backdrop-blur-sm border border-white/10"
+          >
+            <X size={17} />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          data-testid="button-camera-close"
-          aria-label="Close camera"
-          className="focus-ring grid size-10 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25 transition"
-        >
-          <X size={18} />
-        </button>
       </div>
 
       {error ? (
         <div className="max-w-sm rounded-2xl bg-card p-6 text-center text-foreground border border-border">
           <p className="font-semibold text-base">Camera unavailable</p>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{error}</p>
-          <button
-            type="button"
-            onClick={onClose}
-            data-testid="button-camera-dismiss"
-            className="focus-ring mt-5 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-primary-foreground"
-          >
-            Close
-          </button>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="button-camera-error-upload"
+              className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground"
+            >
+              <Upload size={15} />
+              <span>Upload Photo Instead</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              data-testid="button-camera-dismiss"
+              className="focus-ring rounded-full border border-border px-4 py-2.5 text-sm font-bold text-foreground hover:bg-accent"
+            >
+              Close
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col items-center max-w-sm w-full">
@@ -241,17 +286,54 @@ export function CameraCapture({
             )}
           </div>
 
-          {/* Shutter Button & Controls */}
-          <div className="mt-5 flex items-center justify-center gap-6">
+          {/* Shutter Button & Controls: Timer on Left, Click Button in Center, Swipe/Flip Camera on Right */}
+          <div className="mt-5 flex items-center justify-center gap-5 sm:gap-7 w-full max-w-xs">
+            {/* Timer button (Side of click button) */}
+            <button
+              type="button"
+              onClick={cycleTimer}
+              disabled={countdown !== null}
+              data-testid="button-camera-timer"
+              aria-label="Toggle camera timer"
+              className={`focus-ring flex flex-col items-center justify-center size-13 rounded-full transition active:scale-95 border ${
+                timerSeconds > 0
+                  ? 'bg-[#D9BC96] text-[#194A49] border-[#D9BC96] shadow-md shadow-[#D9BC96]/20'
+                  : 'bg-white/20 text-white border-white/25 hover:bg-white/30'
+              }`}
+              title="Camera timer"
+            >
+              <Timer size={18} />
+              <span className="text-[10px] font-bold mt-0.5 leading-none">
+                {timerSeconds === 0 ? 'Timer Off' : `${timerSeconds}s`}
+              </span>
+            </button>
+
+            {/* Shutter Click Button (Center) */}
             <button
               type="button"
               onClick={handleCaptureClick}
               disabled={!ready || countdown !== null}
               data-testid="button-camera-capture"
               aria-label="Capture photo"
-              className="focus-ring grid size-18 place-items-center rounded-full border-4 border-white bg-white/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
+              className="focus-ring grid size-18 place-items-center rounded-full border-4 border-white bg-white/20 transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 shadow-xl"
             >
               <span className="size-14 rounded-full bg-white shadow-lg" />
+            </button>
+
+            {/* Flip / Swipe camera button (Side of click button) */}
+            <button
+              type="button"
+              onClick={toggleCamera}
+              disabled={countdown !== null}
+              data-testid="button-camera-flip"
+              aria-label="Switch camera"
+              className="focus-ring flex flex-col items-center justify-center size-13 rounded-full border border-white/25 bg-white/20 text-white hover:bg-white/30 transition active:scale-95"
+              title="Switch camera"
+            >
+              <RefreshCw size={17} />
+              <span className="text-[10px] font-bold mt-0.5 leading-none">
+                {facingMode === 'user' ? 'Front' : 'Rear'}
+              </span>
             </button>
           </div>
 

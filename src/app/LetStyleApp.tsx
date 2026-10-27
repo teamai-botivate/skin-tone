@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback, type ReactNode } from 'react';
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
 import { useAuth, type User } from '@/features/auth';
+import { clearPersonalizationStorage } from '@/lib/personalization-storage';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -16,6 +17,7 @@ import {
   Review,
   pronounOptions,
   ageGroupOptions,
+  kidsAgeGroupOptions,
   styleOptions,
   colorLoveOptions,
   colorAvoidOptions,
@@ -99,28 +101,42 @@ export function LetStyleApp() {
   const [deletedNotice, setDeletedNotice] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // Track previous user to immediately reset to the initial welcome landing screen upon signing out
+  // Centralized reset for all personalization state and browser caches
+  const resetPersonalization = useCallback(() => {
+    setProfile(initialProfile);
+    setGeneratedLooks([]);
+    setSavedLooks([]);
+    setFeeling('');
+    setChangeAreas([]);
+    setChangeRequest('');
+    setGenerationError(null);
+    setDetailId('look-01');
+    setDeletedNotice(false);
+    clearPersonalizationStorage();
+  }, []);
+
+  // Track previous user to immediately reset personalization upon signing out
   const prevUserRef = useRef<User | null>(user);
 
   useEffect(() => {
     const handleLogout = () => {
+      resetPersonalization();
       setScreen('welcome');
-      setGenerationError(null);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     window.addEventListener('letstyle:logout', handleLogout);
     return () => window.removeEventListener('letstyle:logout', handleLogout);
-  }, []);
+  }, [resetPersonalization]);
 
   useEffect(() => {
     if (prevUserRef.current && !user) {
+      resetPersonalization();
       setScreen('welcome');
-      setGenerationError(null);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     prevUserRef.current = user;
-  }, [user]);
+  }, [user, resetPersonalization]);
 
   // Sync user's name to profile if not yet set
   useEffect(() => {
@@ -153,7 +169,7 @@ export function LetStyleApp() {
   const back = () => {
     if (screen === 'detail' || screen === 'feedback') go('results');
     else if (index > 0) go(wizardScreens[index - 1]);
-    else go(profile.name ? 'home' : 'welcome');
+    else go(user && profile.name ? 'home' : 'welcome');
   };
   const saveProfile = () => {
     localStorage.setItem('letstyle-profile', JSON.stringify(profile));
@@ -165,7 +181,7 @@ export function LetStyleApp() {
     }
     go('generating');
   };
-  const openSettings = () => go(profile.name ? 'settings' : 'welcome');
+  const openSettings = () => go(user && profile.name ? 'settings' : 'welcome');
   const toggleChangeArea = (v: string) =>
     setChangeAreas((old) => (old.includes(v) ? old.filter((item) => item !== v) : [...old, v]));
 
@@ -223,9 +239,14 @@ export function LetStyleApp() {
 
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem('letstyle-saved-looks', JSON.stringify(savedLooks));
+      if (user && savedLooks.length > 0) {
+        localStorage.setItem('letstyle-saved-looks', JSON.stringify(savedLooks));
+      } else if (!user) {
+        localStorage.removeItem('letstyle-saved-looks');
+        localStorage.removeItem('skintune-saved-looks');
+      }
     }
-  }, [savedLooks, mounted]);
+  }, [savedLooks, mounted, user]);
 
   const currentLook = useMemo(
     () => generatedLooks.find((item) => item.id === detailId) || generatedLooks[0],
@@ -235,14 +256,22 @@ export function LetStyleApp() {
   if (screen === 'welcome') {
     return (
       <LandingPage
-        onStart={() => go('name')}
-        onPrivacy={() => go('settings')}
+        onStart={() => {
+          if (!user) {
+            resetPersonalization();
+          }
+          go('name');
+        }}
+        onPrivacy={() => go(user && profile.name ? 'settings' : 'welcome')}
         onQuickStart={(occasion) => {
+          if (!user) {
+            resetPersonalization();
+          }
           update({ occasion });
-          go(profile.name ? 'colors-occasion' : 'name');
+          go(user && profile.name ? 'colors-occasion' : 'name');
         }}
         hasExistingProfile={Boolean(user && profile.name)}
-        onGoHome={() => go('home')}
+        onGoHome={() => go(user && profile.name ? 'home' : 'welcome')}
       />
     );
   }
@@ -277,15 +306,9 @@ export function LetStyleApp() {
       <Settings
         profile={profile}
         deletedNotice={deletedNotice}
-        onBack={() => go(profile.name ? 'home' : 'welcome')}
+        onBack={() => go(user && profile.name ? 'home' : 'welcome')}
         onDelete={() => {
-          localStorage.removeItem('letstyle-profile');
-          localStorage.removeItem('letstyle-saved-looks');
-          localStorage.removeItem('letstyle-feedback');
-          localStorage.removeItem('skintune-profile');
-          localStorage.removeItem('skintune-saved-looks');
-          localStorage.removeItem('skintune-feedback');
-          setProfile(initialProfile);
+          resetPersonalization();
           setDeletedNotice(true);
           setTimeout(() => go('welcome'), 900);
         }}
@@ -387,7 +410,17 @@ export function LetStyleApp() {
     profile: (
       <SingleChoiceStep
         profile={profile}
-        update={update}
+        update={(p) => {
+          if (p.pronouns !== undefined && p.pronouns !== profile.pronouns) {
+            const wasKids = profile.pronouns.toLowerCase().includes('kids') || profile.pronouns.toLowerCase().includes('child');
+            const isNowKids = (p.pronouns || '').toLowerCase().includes('kids') || (p.pronouns || '').toLowerCase().includes('child');
+            if (wasKids !== isNowKids) {
+              update({ ...p, ageGroup: '' });
+              return;
+            }
+          }
+          update(p);
+        }}
         field="pronouns"
         step={2}
         eyebrow="02 / a little context"
@@ -400,22 +433,29 @@ export function LetStyleApp() {
         onBack={back}
       />
     ),
-    age: (
-      <SingleChoiceStep
-        profile={profile}
-        update={update}
-        field="ageGroup"
-        step={3}
-        eyebrow="03 / a little context"
-        title="Which age range feels right?"
-        body="This helps us tune proportions and references. There's no wrong answer."
-        options={ageGroupOptions}
-        allowOther={true}
-        otherPlaceholder="Type your age preference..."
-        onNext={() => go('consent')}
-        onBack={back}
-      />
-    ),
+    age: (() => {
+      const isKids =
+        profile.pronouns?.toLowerCase().includes('kids') ||
+        profile.pronouns?.toLowerCase().includes('child');
+      const currentAgeOptions = isKids ? kidsAgeGroupOptions : ageGroupOptions;
+
+      return (
+        <SingleChoiceStep
+          profile={profile}
+          update={update}
+          field="ageGroup"
+          step={3}
+          eyebrow="03 / a little context"
+          title="Which age range feels right?"
+          body="This helps us tune proportions and references. There's no wrong answer."
+          options={currentAgeOptions}
+          allowOther={!isKids}
+          otherPlaceholder="Type your age preference..."
+          onNext={() => go('consent')}
+          onBack={back}
+        />
+      );
+    })(),
     consent: (
       <ConsentStep
         profile={profile}

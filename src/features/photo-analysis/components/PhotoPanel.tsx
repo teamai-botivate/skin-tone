@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { PhotoStatus, SkinTuneProfile } from '@/types';
 import { Shell } from '@/components/common/Shell';
 import { Intro } from '@/components/common/Intro';
@@ -20,6 +20,7 @@ import {
   Shirt,
   RefreshCw,
   AlertCircle,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth';
 
@@ -42,6 +43,49 @@ export function PhotoPanel({
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [stageIndex, setStageIndex] = useState(0);
   const [activeCamera, setActiveCamera] = useState<'face' | 'body' | null>(null);
+  const faceFileInputRef = useRef<HTMLInputElement>(null);
+  const bodyFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (file: File, mode: 'face' | 'body') => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const raw = event.target?.result as string;
+      if (!raw) return;
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1600;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          if (mode === 'face') handleFaceCapture(dataUrl);
+          else handleBodyCapture(dataUrl);
+        } else {
+          if (mode === 'face') handleFaceCapture(raw);
+          else handleBodyCapture(raw);
+        }
+      };
+      img.onerror = () => {
+        if (mode === 'face') handleFaceCapture(raw);
+        else handleBodyCapture(raw);
+      };
+      img.src = raw;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const runAnalysis = (photoUrl: string) => {
     setAnalysisError(null);
@@ -326,20 +370,41 @@ export function PhotoPanel({
                 )}
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setActiveCamera('face')}
                   data-testid="button-open-face-camera"
-                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-6 py-3 text-xs font-bold transition shadow-sm ${
+                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold transition shadow-sm ${
                     hasFace
                       ? 'border border-border bg-card text-foreground hover:border-primary/50'
                       : 'bg-[#D9BC96] text-[#194A49] hover:bg-[#cfaf86]'
                   }`}
                 >
-                  {hasFace ? <RotateCcw size={14} /> : <Camera size={15} />}
-                  {hasFace ? 'Retake Face Selfie' : 'Take Face Selfie'}
+                  {hasFace ? <RotateCcw size={14} /> : <Camera size={14} />}
+                  <span>{hasFace ? 'Retake Selfie' : 'Take Face Selfie'}</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => faceFileInputRef.current?.click()}
+                  data-testid="button-upload-face-photo"
+                  className="focus-ring inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:border-primary/60 transition shadow-sm"
+                >
+                  <Upload size={14} className="text-[#194A49]" />
+                  <span>{hasFace ? 'Change Photo' : 'Upload Photo'}</span>
+                </button>
+                <input
+                  ref={faceFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file, 'face');
+                    e.target.value = '';
+                  }}
+                />
               </div>
             </div>
 
@@ -387,20 +452,41 @@ export function PhotoPanel({
                 )}
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setActiveCamera('body')}
                   data-testid="button-open-body-camera"
-                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-6 py-3 text-xs font-bold transition shadow-sm ${
+                  className={`focus-ring inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-xs font-bold transition shadow-sm ${
                     hasBody
                       ? 'border border-border bg-card text-foreground hover:border-primary/50'
                       : 'bg-[#D9BC96] text-[#194A49] hover:bg-[#cfaf86]'
                   }`}
                 >
-                  {hasBody ? <RotateCcw size={14} /> : <Camera size={15} />}
-                  {hasBody ? 'Retake Body Selfie' : 'Take Full Body Selfie'}
+                  {hasBody ? <RotateCcw size={14} /> : <Camera size={14} />}
+                  <span>{hasBody ? 'Retake Selfie' : 'Take Body Selfie'}</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => bodyFileInputRef.current?.click()}
+                  data-testid="button-upload-body-photo"
+                  className="focus-ring inline-flex items-center gap-2 rounded-full border border-[#B08A70]/40 bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:border-primary/60 transition shadow-sm"
+                >
+                  <Upload size={14} className="text-[#194A49]" />
+                  <span>{hasBody ? 'Change Photo' : 'Upload Photo'}</span>
+                </button>
+                <input
+                  ref={bodyFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file, 'body');
+                    e.target.value = '';
+                  }}
+                />
               </div>
             </div>
           </div>
