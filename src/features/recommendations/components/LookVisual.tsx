@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import type { LookRecommendation } from '@/types';
-import { Sparkles, RefreshCw, Clock3 } from 'lucide-react';
+import { Sparkles, RefreshCw, Clock3, Bell } from 'lucide-react';
+import { warmAudioContext, requestNotificationPermission } from '@/lib/notification';
 
 export const hasRealImage = (url: string) => Boolean(url) && !url.startsWith('/replace-with-generated/');
 
@@ -88,6 +89,11 @@ export function Generating({
 } = {}) {
   const [active, setActive] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    warmAudioContext();
+    requestNotificationPermission();
+  }, []);
 
   useEffect(() => {
     if (error) return;
@@ -186,6 +192,10 @@ export function Generating({
             ? 'Getting started…'
             : `${minutes > 0 ? `${minutes}m ` : ''}${seconds}s so far — five complete looks take real, careful work.`}
         </p>
+        <div className="mt-4 flex items-center gap-2 text-xs text-[#194A49]/85 bg-[#FAF5EE] border border-[#B08A70]/30 rounded-full px-3.5 py-1.5 w-fit shadow-xs">
+          <Bell size={13} className="text-[#194A49]" />
+          <span>A sound notification will alert you as soon as your photos are ready</span>
+        </div>
       </div>
     </div>
   );

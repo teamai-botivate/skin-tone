@@ -7,6 +7,7 @@ import { clearPersonalizationStorage } from '@/lib/personalization-storage';
 import { getStylingContext, getGenerationFingerprint } from '@/lib/styling-context';
 import { extractErrorMessage } from '@/lib/safe-error';
 import { clearClientProductCache } from '@/features/shopping';
+import { notifyLooksGenerated, warmAudioContext } from '@/lib/notification';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -238,9 +239,11 @@ export function LetStyleApp() {
     }
 
     setGenerationTrigger((prev) => prev + 1);
+    warmAudioContext();
 
     if (!user) {
       openAuthModal('signup', () => {
+        warmAudioContext();
         go('generating');
       });
       return;
@@ -253,6 +256,7 @@ export function LetStyleApp() {
 
   useEffect(() => {
     if (screen !== 'generating') return;
+    warmAudioContext();
     let active = true;
     setGenerationError(null);
 
@@ -297,6 +301,13 @@ export function LetStyleApp() {
           setGeneratedLooks(result);
           setLooksFingerprint(currentFingerprint);
           clearClientProductCache();
+
+          // Play sound and trigger notification as soon as photos are generated
+          notifyLooksGenerated({
+            title: 'Your personalized looks are ready! ✨',
+            description: '5 tailored outfits have been generated for you.',
+          });
+
           go('results');
         }
       })

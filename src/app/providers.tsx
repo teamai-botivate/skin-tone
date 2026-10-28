@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, type ReactNode } from 'react';
+import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import { AuthProvider, AuthModal } from '@/features/auth';
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <AuthProvider>
           {children}
           <AuthModal />
+          <Toaster position="top-center" closeButton />
         </AuthProvider>
       </ErrorBoundary>
     </TooltipProvider>
