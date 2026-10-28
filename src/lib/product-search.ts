@@ -83,6 +83,7 @@ import {
   determineUrlType,
   buildRetailerSearchUrl,
   getSafeProductUrl,
+  isUrlConsistentWithProduct,
 } from "./retailer-urls";
 
 export {
@@ -94,6 +95,7 @@ export {
   determineUrlType,
   buildRetailerSearchUrl,
   getSafeProductUrl,
+  isUrlConsistentWithProduct,
 };
 
 
@@ -2312,9 +2314,9 @@ export function decomposeOutfitGarments(
         rawTitle: `Matching ${dominantHumanColor} Embroidered Saree Blouse`,
       });
     } else {
-      // Split by clause connectors: "with", "paired with", "styled with", "and", "over", "worn with"
+      // Split by clause connectors: commas, semicolons, "with", "paired with", "styled with", "and", "over", "worn with"
       const rawClauses = outfitText
-        .split(/\b(?:with|paired\s+with|styled\s+with|teamed\s+with|complemented\s+by|worn\s+with|over\s+a?|over|and\s+a?|along\s+with)\b/i)
+        .split(/[,;]|\b(?:with|paired\s+with|styled\s+with|teamed\s+with|complemented\s+by|worn\s+with|layered\s+over\s+a?|layered\s+over|over\s+a?|over|and\s+a?|along\s+with)\b/i)
         .map((s) => s.trim().replace(/^[,.\s]+|[,.\s]+$/g, ""))
         .filter((s) => s.length > 2);
 
@@ -2409,6 +2411,28 @@ export function decomposeOutfitGarments(
         }
       }
     }
+  }
+
+  // Ensure that any visible layer (e.g. blazer, suit jacket, coat) explicitly mentioned
+  // in look description, title, or note is not omitted even if pieces only listed base separates
+  const fullLookText = `${look.outfit || ""} ${look.title || ""} ${look.note || ""}`.trim();
+  const hasVisibleLayer = isLayer(fullLookText);
+  const alreadyHasLayer = detectedGarments.some(
+    (g) => g.type === "layer" || g.subcat === "blazer" || isLayer(g.subcat) || isLayer(g.rawTitle),
+  );
+  if (hasVisibleLayer && !alreadyHasLayer) {
+    const layerMatch = fullLookText.match(
+      /\b((?:[a-zA-Z-]+\s+){0,3}(?:blazer|suit\s*jacket|jacket|coat|overcoat|trench(?:\s*coat)?|shrug|cardigan|waistcoat|vest|nehru\s*jacket))\b/i,
+    );
+    const layerPhrase = layerMatch ? layerMatch[1].trim() : "Tailored Blazer";
+    const layerSubcat = /\bblazer\b/i.test(layerPhrase) ? "blazer" : "jacket";
+    const layerColor = resolveHumanColor(layerPhrase, dominantHumanColor);
+    detectedGarments.unshift({
+      type: "layer",
+      subcat: layerSubcat,
+      rawTitle: cleanOutfitGarmentTitle(layerPhrase, targetGender) || `${layerColor} Tailored Blazer`,
+      color: layerColor,
+    });
   }
 
   // Fallback if still nothing detected: single outfit piece
@@ -3452,15 +3476,148 @@ export function getBenchmarkCandidatesForRequirement(
       ];
     }
 
-    // 2. Choli Blouse / Inner Top
+    // 2. Choli Blouse / Inner Top / Shirts
     if (
       subcat.includes("inner_top") ||
       subcat.includes("top") ||
+      subcat.includes("shirt") ||
       subcat.includes("camisole") ||
       subcat.includes("corset") ||
       subcat.includes("choli") ||
       subcat.includes("blouse")
     ) {
+      if (isMan) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Men ${color} Classic Pure Cotton Formal Shirt`,
+            brand: "Peter England",
+            retailer: "Myntra",
+            price: 999,
+            originalPrice: 1699,
+            url: `https://www.myntra.com/men-${encodeURIComponent(color.toLowerCase())}-shirt`,
+            material: "100% Crisp Breathable Cotton",
+            shade: color,
+          },
+          {
+            tier: "mid",
+            productTitle: `Men ${color} Slim Fit Button-Down Shirt`,
+            brand: "Raymond",
+            retailer: "AJIO",
+            price: 1699,
+            originalPrice: 2499,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`men ${color} formal shirt`)}`,
+            material: "Fine Cotton Twill",
+            shade: color,
+          },
+          {
+            tier: "premium",
+            productTitle: `Men Pure European Linen ${color} Shirt`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 2999,
+            originalPrice: 3999,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`men ${color} pure linen shirt`)}`,
+            material: "100% Pure European Linen",
+            shade: color,
+          },
+        ];
+      }
+
+      if (isBoy) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Breathable Cotton Linen Button-Down Shirt`,
+            brand: "U.S. Polo Assn. Kids",
+            retailer: "Myntra",
+            price: 899,
+            originalPrice: 1499,
+            url: buildRetailerSearchUrl("Myntra", {
+              gender: "boys",
+              brand: "U.S. Polo Assn. Kids",
+              productName: `Boys ${color} Linen Button-Down Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "Breathable Cotton-Linen Blend",
+            shade: color,
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Camp Collar Vacation Resort Shirt`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1399,
+            originalPrice: 1999,
+            url: buildRetailerSearchUrl("AJIO", {
+              gender: "boys",
+              brand: "GAP Kids",
+              productName: `Boys ${color} Vacation Resort Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Lightweight Poplin Cotton",
+            shade: color,
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Pure Linen ${color} Casual Button-Down Shirt`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 2199,
+            originalPrice: 2999,
+            url: buildRetailerSearchUrl("Tata CLiQ", {
+              gender: "boys",
+              brand: "Marks & Spencer",
+              productName: `Boys ${color} Pure Linen Shirt`,
+              color,
+              category: "outfit",
+            }),
+            material: "100% Pure European Linen",
+            shade: color,
+          },
+        ];
+      }
+
+      if (isGirl) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Girls ${color} Cotton Casual Blouse Top`,
+            brand: "Cutecumber",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 1299,
+            url: `https://www.myntra.com/girls-${encodeURIComponent(color.toLowerCase())}-tops`,
+            material: "100% Soft Breathable Cotton",
+            shade: color,
+          },
+          {
+            tier: "mid",
+            productTitle: `Girls ${color} Embroidered Ruffle Tiered Top`,
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 1199,
+            originalPrice: 1799,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`girls ${color} top`)}`,
+            material: "Cotton Poplin with Ruffle Accent",
+            shade: color,
+          },
+          {
+            tier: "premium",
+            productTitle: `Girls Embroidered Organic Cotton Smocked Top`,
+            brand: "Marks & Spencer",
+            retailer: "Tata CLiQ",
+            price: 1799,
+            originalPrice: 2499,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`girls ${color} top`)}`,
+            material: "100% Pure Organic Cotton",
+            shade: color,
+          },
+        ];
+      }
+
       if (stylingReq.includes("choli") || stylingReq.includes("festive") || stylingReq.includes("lehenga")) {
         return [
           {
@@ -3949,7 +4106,108 @@ export function getBenchmarkCandidatesForRequirement(
       ];
     }
 
-    // 3. Default minimal studs / earrings
+    // 3. Watches & default jewellery / minimal studs
+    if (isMan) {
+      if (subcat.includes("watch") || stylingReq.includes("watch")) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Men Minimalist Leather Strap Analog Watch",
+            brand: "Timex",
+            retailer: "Myntra",
+            price: 1495,
+            originalPrice: 2495,
+            url: "https://www.myntra.com/men-analog-watch",
+            material: "Genuine Leather Strap with Stainless Steel Dial",
+          },
+          {
+            tier: "mid",
+            productTitle: "Men Classic Multifunction Dress Watch",
+            brand: "Titan",
+            retailer: "AJIO",
+            price: 3495,
+            originalPrice: 4995,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men titan classic analog watch")}`,
+            material: "Stainless Steel Case with Mineral Glass",
+          },
+          {
+            tier: "premium",
+            productTitle: "Men Chronograph Stainless Steel Formal Watch",
+            brand: "Fossil",
+            retailer: "Tata CLiQ",
+            price: 7995,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men fossil chronograph watch")}`,
+            material: "Solid Stainless Steel with Quartz Movement",
+          },
+        ];
+      }
+      return [
+        {
+          tier: "budget",
+          productTitle: "Men Minimalist Stainless Steel Curb Chain",
+          brand: "Voylla",
+          retailer: "AJIO",
+          price: 599,
+          originalPrice: 1299,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("men stainless steel chain necklace")}`,
+          material: "Surgical Grade Stainless Steel",
+        },
+        {
+          tier: "mid",
+          productTitle: "Men 925 Sterling Silver Classic Box Chain",
+          brand: "GIVA",
+          retailer: "Myntra",
+          price: 1899,
+          originalPrice: 2899,
+          url: "https://www.myntra.com/men-silver-chain",
+          material: "925 Sterling Silver with Rhodium Finish",
+        },
+        {
+          tier: "premium",
+          productTitle: "Men Solid Stainless Steel Sleek Kada Bracelet",
+          brand: "Titan",
+          retailer: "Tata CLiQ",
+          price: 2995,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men titan stainless steel kada bracelet")}`,
+          material: "Hypoallergenic Solid Stainless Steel",
+        },
+      ];
+    }
+
+    if (subcat.includes("watch") || stylingReq.includes("watch")) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Women Minimalist Rose Gold Mesh Strap Watch",
+          brand: "Joker & Witch",
+          retailer: "Myntra",
+          price: 1199,
+          originalPrice: 2499,
+          url: "https://www.myntra.com/women-analog-watch",
+          material: "Rose Gold Ion-Plated Alloy",
+        },
+        {
+          tier: "mid",
+          productTitle: "Women Contemporary Mother of Pearl Analog Watch",
+          brand: "Titan Raga",
+          retailer: "AJIO",
+          price: 3995,
+          originalPrice: 5495,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("women titan raga analog watch")}`,
+          material: "Mother of Pearl Dial with Brass Bracelet",
+        },
+        {
+          tier: "premium",
+          productTitle: "Women Classic Petite Emerald Dial Mesh Watch",
+          brand: "Daniel Wellington",
+          retailer: "Tata CLiQ",
+          price: 8999,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("women daniel wellington watch")}`,
+          material: "Double Plated 316L Stainless Steel",
+        },
+      ];
+    }
+
     return [
       {
         tier: "budget",
@@ -4219,6 +4477,62 @@ export function getBenchmarkCandidatesForRequirement(
       subcat.includes("jutti") ||
       subcat.includes("mojari")
     ) {
+      if (isMan) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Men ${color} Traditional Leather Mojari Juttis`,
+            brand: "Metro",
+            retailer: "Myntra",
+            price: 1299,
+            originalPrice: 2299,
+            url: buildRetailerSearchUrl("Myntra", {
+              gender: "men",
+              brand: "Metro",
+              productName: `Men ${color} Traditional Ethnic Mojari Juttis`,
+              color,
+              category: "footwear",
+              subcategory: "mojaris",
+            }),
+            material: "Handcrafted Genuine Leather with Cushioned Insole",
+          },
+          {
+            tier: "mid",
+            productTitle: `Men Embroidered Festive Ethnic Mojaris`,
+            brand: "Mochi",
+            retailer: "AJIO",
+            price: 1990,
+            originalPrice: 2990,
+            url: buildRetailerSearchUrl("AJIO", {
+              gender: "men",
+              brand: "Mochi",
+              productName: `Men ${color} Festive Ethnic Mojaris`,
+              color,
+              category: "footwear",
+              subcategory: "mojaris",
+            }),
+            material: "Cushioned Genuine Leather with Zari Detailing",
+          },
+          {
+            tier: "premium",
+            productTitle: `Men Handcrafted Pure Leather Royal Wedding Mojaris`,
+            brand: "Manyavar",
+            retailer: "Tata CLiQ",
+            price: 3499,
+            originalPrice: 4999,
+            url: buildRetailerSearchUrl("Tata CLiQ", {
+              gender: "men",
+              brand: "Manyavar",
+              productName: `Men ${color} Royal Wedding Mojaris`,
+              color,
+              category: "footwear",
+              subcategory: "mojaris",
+            }),
+            material: "Hand-Embroidered Velvet & Full-Grain Leather",
+          },
+        ];
+      }
+
       return [
         {
           tier: "budget",
@@ -4507,12 +4821,13 @@ export function getBenchmarkCandidatesForRequirement(
       ];
     }
 
-    // 1. Festive Potli Bags (Adults)
+    // 1. Festive Potli Bags (Women)
     if (
-      stylingReq.includes("potli") ||
-      stylingReq.includes("ethnic") ||
-      stylingReq.includes("festive") ||
-      subcat.includes("potli")
+      !isMan &&
+      (stylingReq.includes("potli") ||
+        stylingReq.includes("ethnic") ||
+        stylingReq.includes("festive") ||
+        subcat.includes("potli"))
     ) {
       return [
         {
@@ -4549,6 +4864,47 @@ export function getBenchmarkCandidatesForRequirement(
     }
 
     if (isMan) {
+      if (
+        stylingReq.includes("brooch") ||
+        stylingReq.includes("pocket") ||
+        stylingReq.includes("festive") ||
+        stylingReq.includes("ethnic") ||
+        subcat.includes("brooch") ||
+        subcat.includes("stole")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Men Traditional Royal Brooch & Silk Pocket Square",
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 499,
+            originalPrice: 999,
+            url: "https://www.myntra.com/men-accessories",
+            material: "Gold-Plated Brass with Rich Silk",
+          },
+          {
+            tier: "mid",
+            productTitle: "Men Handcrafted Festive Sherwani Brooch",
+            brand: "Manyavar",
+            retailer: "AJIO",
+            price: 999,
+            originalPrice: 1699,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men festive sherwani brooch")}`,
+            material: "Gold-Plated with Faux Pearls & Enamel",
+          },
+          {
+            tier: "premium",
+            productTitle: "Men Handcrafted Zari Embroidered Silk Wedding Stole",
+            brand: "Manyavar",
+            retailer: "Tata CLiQ",
+            price: 2499,
+            originalPrice: 3499,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men manyavar wedding stole")}`,
+            material: "Pure Silk with Zari Embroidery",
+          },
+        ];
+      }
       return [
         {
           tier: "budget",

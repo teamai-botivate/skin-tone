@@ -120,12 +120,34 @@ export function buildRetailerSearchUrl(
     }
   }
 
-  if (params.productName) {
-    rawTerms.push(params.productName);
+  const cleanProductName = (params.productName || "");
+  let filteredName = cleanProductName;
+  if (isMan) {
+    filteredName = filteredName.replace(/\b(women|womens|women's|female|ladies|woman|girls|girl)\b/gi, "").trim();
+  } else if (isWoman) {
+    filteredName = filteredName.replace(/\b(men|mens|men's|male|gents|gentlemen|boys|boy)\b/gi, "").trim();
+  } else if (isChild) {
+    filteredName = filteredName.replace(/\b(women|womens|women's|female|ladies|woman|men|mens|men's|male|gents|gentlemen)\b/gi, "").trim();
+  }
+
+  if (filteredName) {
+    rawTerms.push(filteredName);
   } else if (params.subcategory) {
     rawTerms.push(params.subcategory);
   } else if (params.query) {
     rawTerms.push(params.query);
+  }
+
+  // Ensure essential item type keyword is present if not already contained
+  const currentTokensLower = rawTerms.join(" ").toLowerCase();
+  if (params.subcategory && !currentTokensLower.includes(params.subcategory.toLowerCase())) {
+    rawTerms.push(params.subcategory);
+  } else if (params.category === "footwear" && !/\b(shoe|shoes|flats?|heels?|sandals?|slides?|sneakers?|boots?|loafers?|mojaris?|juttis?|pumps?|kolhapuris?)\b/i.test(currentTokensLower)) {
+    rawTerms.push("shoes");
+  } else if (params.category === "jewellery" && !/\b(jewellery|jewelry|earrings?|jhumkas?|necklace|choker|pendant|bracelet|bangle|kada|ring|watch)\b/i.test(currentTokensLower)) {
+    rawTerms.push("jewellery");
+  } else if (params.category === "accessories" && !/\b(bag|bags|potli|clutch|tote|handbag|purse|sunglasses?|belt)\b/i.test(currentTokensLower)) {
+    rawTerms.push("bag");
   }
 
   // Deduplicate tokens while preserving order
@@ -156,7 +178,17 @@ export function buildRetailerSearchUrl(
       .replace(/[^a-z0-9-]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-+|-+$/g, "");
-    return `https://www.myntra.com/${slug || "clothing"}?rawQuery=${q}`;
+    const defaultSlug =
+      params.category === "footwear"
+        ? isMan ? "men-footwear" : isWoman ? "women-footwear" : "kids-footwear"
+        : params.category === "makeup"
+          ? "makeup"
+          : params.category === "jewellery"
+            ? isMan ? "men-jewellery" : "jewellery"
+            : params.category === "accessories"
+              ? isMan ? "men-accessories" : "accessories"
+              : isMan ? "men-clothing" : isWoman ? "women-clothing" : "clothing";
+    return `https://www.myntra.com/${slug || defaultSlug}?rawQuery=${q}`;
   }
 
   // 2. AJIO: MUST use /search/?text=<query> (with non-empty text param)
@@ -395,8 +427,87 @@ export function determineUrlType(urlStr: string): "exact_product" | "search_resu
 }
 
 /**
+ * Verifies whether a product URL is consistent with the selected audience (persona/gender),
+ * product category, and intended item subcategory.
+ */
+export function isUrlConsistentWithProduct(
+  urlStr: string,
+  product: {
+    productName?: string;
+    brand?: string;
+    category?: string;
+    subcategory?: string;
+  },
+  persona?: string,
+): boolean {
+  if (!urlStr || typeof urlStr !== "string") return false;
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase();
+    const fullUrlText = `${parsed.pathname} ${parsed.search}`.toLowerCase();
+    const gender = (persona || "").toLowerCase();
+    const isBoy = gender === "boy" || gender === "boys" || gender === "child_boy";
+    const isGirl = gender === "girl" || gender === "girls" || gender === "child_girl";
+    const isChild = isBoy || isGirl || gender === "child" || gender === "kids";
+    const isMan = !isChild && (gender === "man" || gender === "men" || gender === "male");
+    const isWoman = !isChild && (gender === "woman" || gender === "women" || gender === "female");
+
+    // 1. Audience consistency check
+    if (isMan) {
+      const hasFemaleKeyword = /(?:\/flats\/|\/women-|\/womens-|\/girls-|-women-|-womens-|\banouk-women\b|\bladies\b|\bwomen\b)/i.test(fullUrlText);
+      const hasMaleKeyword = /(?<!wo)(?:men-|mens-|\bmen\b|\bmens\b|\bmale\b)/i.test(fullUrlText);
+      if (hasFemaleKeyword && !hasMaleKeyword) {
+        return false;
+      }
+    } else if (isWoman) {
+      const hasMaleKeyword = /(?<!wo)(?:men-|mens-|\/boys-|-boys-|\bgents\b|\bboys?\b)/i.test(fullUrlText);
+      if (hasMaleKeyword && !/women/i.test(fullUrlText)) {
+        return false;
+      }
+    } else if (isChild) {
+      if (/(?:\/men-formal-|\/women-formal-)/i.test(fullUrlText)) {
+        return false;
+      }
+    }
+
+    // 2. Category consistency check
+    const cat = (product.category || "").toLowerCase();
+    if (cat === "footwear") {
+      if (/(?:\/clothing\/|\/dresses\/|\/sarees\/|\/kurtas\/|\/shirts\/|\/jeans\/|\/t-shirts\/|\/makeup\/|\/beauty\/)/i.test(fullUrlText)) {
+        return false;
+      }
+    } else if (cat === "outfit") {
+      if (/(?:\/flats\/|\/heels\/|\/footwear\/|\/shoes\/|\/sandals\/|\/makeup\/|\/lipstick\/)/i.test(fullUrlText)) {
+        return false;
+      }
+      const sub = (product.subcategory || "").toLowerCase();
+      if (sub === "blazer") {
+        if (/(?:\/t-shirts?\/|\/jeans\/|\/dresses?\/|\/shoes?\/|\/flats?\/)/i.test(fullUrlText) && !/blazer|suit/i.test(fullUrlText)) {
+          return false;
+        }
+      }
+    } else if (cat === "makeup") {
+      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/shirts\/)/i.test(fullUrlText)) {
+        return false;
+      }
+      if (host.includes("nykaafashion.com")) {
+        return false;
+      }
+    } else if (cat === "jewellery") {
+      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/shirts\/|\/lipstick\/)/i.test(fullUrlText)) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Safely sanitizes or resolves a product's destination URL for the UI card button.
- * If the direct product URL is verified and authentic, returns it.
+ * If the direct product URL is verified, authentic, and consistent with audience/category, returns it.
  * Otherwise, generates an authentic live search URL on that retailer using the product's
  * actual attributes (gender, category, brand, productName, and color).
  */
@@ -414,15 +525,16 @@ export function getSafeProductUrl(
   persona: string,
 ): string {
   const url = product.productUrl;
+  const isConsistent = url ? isUrlConsistentWithProduct(url, product, persona) : false;
   const isExact = product.urlType === "exact_product" && isValidProductUrl(url || "");
 
-  // If already a valid exact product URL, return it safely
-  if (isExact && url) {
+  // If already a valid exact product URL and consistent with product/audience, return it safely
+  if (isExact && url && isConsistent) {
     return url;
   }
 
-  // If already a valid, safe retailer search URL (not broken Myntra /search), keep it
-  if (url && isValidProductUrl(url)) {
+  // If already a valid, safe retailer search URL and consistent, keep it
+  if (url && isConsistent && isValidProductUrl(url)) {
     try {
       const u = new URL(url);
       const host = u.hostname.toLowerCase();

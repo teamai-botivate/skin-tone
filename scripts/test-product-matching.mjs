@@ -16,6 +16,7 @@ import {
   buildPersonalizedMakeupSpecs,
   buildRetailerSearchUrl,
   getSafeProductUrl,
+  isUrlConsistentWithProduct,
 } from "../src/lib/product-search.ts";
 import {
   generateFallbackLooks,
@@ -851,7 +852,138 @@ assert.strictEqual(hasExistingProfile, false, "Signed-out user must not display 
 
 console.log("✓ Scenario 19 Passed: Sign out invalidates session cookie, resets authenticated profile state, and returns to initial landing UI.");
 
+// ======================================================================
+// SCENARIO 20: Visible Outfit Components (e.g. Blazers) Inclusion
+// ======================================================================
+console.log("\n--- Scenario 20: Visible Outfit Components (Blazer) Inclusion ---");
+
+// Case A: Look specifies a blazer in outfit text, while pieces array only lists inner separates (camisole & trousers)
+const blazerSeparatesLook = {
+  id: "test-blazer-look-01",
+  title: "Power Tailoring",
+  outfit: "Tailored Navy Blazer layered over an Ivory Silk Camisole and Charcoal Trousers",
+  outfitColor: "Navy Blue with Charcoal",
+  pieces: [
+    { category: "Top", name: "Ivory Silk Camisole", detail: "Silk finish inner" },
+    { category: "Bottom", name: "Charcoal Trousers", detail: "Tailored fit" },
+  ],
+  jewellery: "Minimal studs",
+  accessories: "Structured tote",
+  footwear: "Pointed pumps",
+  applicableCategories: ["outfit", "footwear", "accessories"],
+};
+
+const blazerSeparatesProfile = {
+  name: "Pooja",
+  pronouns: "she/her/women",
+  appearance: { skinTone: "Medium", undertone: "Warm" },
+  occasion: "Executive Presentation",
+  style: ["Corporate", "Tailored"],
+};
+
+const plannedSeparatesSpecs = planRequirementSpecs(blazerSeparatesLook, blazerSeparatesProfile, "woman", ["outfit"]);
+const plannedSubcats = plannedSeparatesSpecs.map((s) => s.itemSubcategory);
+assert.ok(plannedSubcats.includes("blazer"), "Blazer must be included in outfit requirement specs when visible in outfit description");
+assert.ok(plannedSubcats.includes("inner_top"), "Inner camisole must remain included alongside blazer");
+assert.ok(plannedSubcats.includes("trousers"), "Trousers must remain included alongside blazer");
+
+// Case B: Comma-separated outfit description parses blazer, top, and pants distinctly
+const commaSeparatedLook = {
+  id: "test-blazer-look-02",
+  title: "Polished Day",
+  outfit: "Cedar blazer, cream bateau tee, and slate wide-leg pant",
+  outfitColor: "Cedar brown with slate",
+  pieces: [],
+  jewellery: "Sculptural ring",
+  accessories: "Shoulder bag",
+  footwear: "Pointed flat",
+  applicableCategories: ["outfit"],
+};
+
+const plannedCommaSpecs = planRequirementSpecs(commaSeparatedLook, blazerSeparatesProfile, "woman", ["outfit"]);
+const plannedCommaSubcats = plannedCommaSpecs.map((s) => s.itemSubcategory);
+assert.ok(plannedCommaSubcats.includes("blazer"), "Cedar blazer must be recognized from comma-separated text");
+assert.ok(plannedCommaSubcats.includes("top"), "Cream bateau tee must be recognized from comma-separated text");
+assert.ok(plannedCommaSubcats.includes("trousers"), "Slate wide-leg pant must be recognized from comma-separated text");
+
+console.log("✓ Scenario 20 Passed: Visible outfit components like blazers are reliably included in recommendations.");
+
+// ======================================================================
+// SCENARIO 21: Audience & Category Consistency in Recommendations & Product Links
+// ======================================================================
+console.log("\n--- Scenario 21: Audience & Category Consistency in Links ---");
+
+// Test 1: getSafeProductUrl rejects wrong-audience link and regenerates targeted search URL
+const menFootwearWithWomenUrl = {
+  id: "prod-footwear-01",
+  category: "footwear",
+  subcategory: "mojaris",
+  productName: "Men Traditional Ethnic Mojari Juttis",
+  brand: "Metro",
+  retailer: "Myntra",
+  productUrl: "https://www.myntra.com/flats/anouk/anouk-women-embroidered-punjabi-juttis/15902384/buy",
+  urlType: "exact_product",
+};
+
+const sanitizedMenFootwearUrl = getSafeProductUrl(menFootwearWithWomenUrl, "man");
+assert.ok(!sanitizedMenFootwearUrl.includes("anouk-women"), "Men's footwear link must reject women's product URL");
+assert.ok(!sanitizedMenFootwearUrl.includes("/flats/anouk/"), "Men's footwear link must reject women's flats department link");
+assert.ok(sanitizedMenFootwearUrl.toLowerCase().includes("men"), "Sanitized URL must contain men's keyword");
+
+// Test 2: getSafeProductUrl rejects wrong-category link (e.g. clothing URL for footwear)
+const footwearWithDressUrl = {
+  id: "prod-footwear-02",
+  category: "footwear",
+  subcategory: "shoes",
+  productName: "Classic Formal Derby Shoes",
+  brand: "Bata",
+  retailer: "Myntra",
+  productUrl: "https://www.myntra.com/dresses/tokyo-talkies/dress-123/buy",
+  urlType: "exact_product",
+};
+
+const sanitizedFootwearUrl = getSafeProductUrl(footwearWithDressUrl, "man");
+assert.ok(!sanitizedFootwearUrl.includes("/dresses/"), "Footwear link must reject dress/clothing URL");
+
+// Test 3: getBenchmarkCandidatesForRequirement provides masculine traditional footwear & accessories
+const menFootwearSpec = {
+  category: "footwear",
+  itemTitle: "Traditional Mojari Juttis",
+  itemSubcategory: "mojaris",
+  stylingRequirement: "traditional ethnic mojaris",
+  dominantColor: "Brown",
+  searchQuery: "men traditional ethnic mojaris",
+  preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
+};
+
+const menFootwearCandidates = getBenchmarkCandidatesForRequirement(menFootwearSpec, "man", null, "Brown");
+assert.ok(menFootwearCandidates.length >= 2, "Must return at least 2 footwear candidates for men");
+for (const cand of menFootwearCandidates) {
+  assert.ok(!cand.url.toLowerCase().includes("anouk-women"), "Men's candidate URL must not link to women's Anouk products");
+  assert.ok(!cand.productTitle.toLowerCase().includes("women"), "Men's candidate title must not say women");
+}
+
+// Test 4: getBenchmarkCandidatesForRequirement provides men's shirts rather than women's camisoles
+const menTopSpec = {
+  category: "outfit",
+  itemTitle: "Cotton Casual Shirt",
+  itemSubcategory: "top",
+  stylingRequirement: "crisp cotton shirt",
+  dominantColor: "White",
+  searchQuery: "men white cotton shirt",
+  preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
+};
+
+const menTopCandidates = getBenchmarkCandidatesForRequirement(menTopSpec, "man", null, "White");
+assert.ok(menTopCandidates.length >= 2, "Must return top candidates for men");
+for (const cand of menTopCandidates) {
+  assert.ok(!cand.url.toLowerCase().includes("camisole"), "Men's top must not link to women's camisole");
+  assert.ok(!cand.productTitle.toLowerCase().includes("camisole"), "Men's top must not be a camisole");
+}
+
+console.log("✓ Scenario 21 Passed: Links and candidates strictly respect audience and category boundaries.");
+
 console.log("\n======================================================================");
-console.log("ALL 19 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 21 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
 
