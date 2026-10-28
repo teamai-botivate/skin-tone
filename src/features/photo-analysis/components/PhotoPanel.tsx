@@ -158,6 +158,16 @@ export function PhotoPanel({
   const hasBody = Boolean(profile.bodyPhotoUrl);
   const bothCaptured = hasFace && hasBody;
 
+  if (activeCamera) {
+    return (
+      <CameraCapture
+        mode={activeCamera}
+        onCapture={activeCamera === 'face' ? handleFaceCapture : handleBodyCapture}
+        onClose={() => setActiveCamera(null)}
+      />
+    );
+  }
+
   return (
     <Shell profile={profile} onBack={onBack} onSettings={onBack} step={5} total={10}>
       <div className="mx-auto max-w-5xl">
@@ -166,14 +176,6 @@ export function PhotoPanel({
           title="Take your face & body selfies."
           body="Your face selfie tunes color harmony and undertones, while your full body selfie tunes proportions, silhouette, and fabric drape. Camera capture only — kept private on your device."
         >
-          {/* Active Camera Modal */}
-          {activeCamera && (
-            <CameraCapture
-              mode={activeCamera}
-              onCapture={activeCamera === 'face' ? handleFaceCapture : handleBodyCapture}
-              onClose={() => setActiveCamera(null)}
-            />
-          )}
 
           {/* Analysis Error Alert */}
           {analysisError && (
@@ -194,8 +196,8 @@ export function PhotoPanel({
             </div>
           )}
 
-          {/* SIDE-BY-SIDE INSTRUCTIONS */}
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
+          {/* SIDE-BY-SIDE INSTRUCTIONS (Moved to top as requested) */}
+          <div className="mt-6 sm:mt-8 grid gap-5 md:grid-cols-2">
             {/* Face Selfie Instructions */}
             <div className="flex flex-col justify-between rounded-2xl border border-[#B08A70]/35 bg-[#FAF5EE] p-5 sm:p-6 shadow-sm">
               <div>
@@ -320,7 +322,7 @@ export function PhotoPanel({
           {/* SIDE-BY-SIDE SELFIE CAPTURE CARDS */}
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             {/* Card 1: Face Selfie */}
-            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-6 shadow-sm">
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-5 sm:p-6 shadow-sm">
               <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-3">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#795548]">
                   01 · Face Selfie
@@ -332,7 +334,7 @@ export function PhotoPanel({
                 )}
               </div>
 
-              <div className="my-6 flex flex-col items-center justify-center">
+              <div className="my-5 sm:my-6 flex flex-col items-center justify-center">
                 {hasFace ? (
                   <div className="relative aspect-[3/4] w-full max-w-[260px] overflow-hidden rounded-2xl border border-[#B08A70]/30 shadow-md">
                     <img
@@ -351,11 +353,11 @@ export function PhotoPanel({
                     )}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-center p-4">
-                    <div className="grid size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-4">
-                      <Camera size={32} />
+                  <div className="flex flex-col items-center text-center p-3 sm:p-4">
+                    <div className="grid size-16 sm:size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-3 sm:mb-4">
+                      <Camera size={28} className="sm:size-8" />
                     </div>
-                    <h3 className="font-serif text-xl font-bold text-[#194A49]">
+                    <h3 className="font-serif text-lg sm:text-xl font-bold text-[#194A49]">
                       Take your face selfie
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground max-w-xs">
@@ -410,7 +412,7 @@ export function PhotoPanel({
             </div>
 
             {/* Card 2: Full Body Selfie */}
-            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-6 shadow-sm">
+            <div className="relative flex flex-col justify-between overflow-hidden rounded-[1.6rem] border border-[#B08A70]/30 bg-[#FAF5EE] p-5 sm:p-6 shadow-sm">
               <div className="flex items-center justify-between border-b border-[#B08A70]/20 pb-3">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#795548]">
                   02 · Full Body Selfie
@@ -422,7 +424,7 @@ export function PhotoPanel({
                 )}
               </div>
 
-              <div className="my-6 flex flex-col items-center justify-center">
+              <div className="my-5 sm:my-6 flex flex-col items-center justify-center">
                 {hasBody ? (
                   <div className="relative aspect-[3/4] w-full max-w-[260px] overflow-hidden rounded-2xl border border-[#B08A70]/30 shadow-md">
                     <img
@@ -433,11 +435,11 @@ export function PhotoPanel({
                     />
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-center p-4">
-                    <div className="grid size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-4">
-                      <Camera size={32} />
+                  <div className="flex flex-col items-center text-center p-3 sm:p-4">
+                    <div className="grid size-16 sm:size-20 place-items-center rounded-full bg-[#D9BC96]/30 text-[#194A49] shadow-inner mb-3 sm:mb-4">
+                      <Camera size={28} className="sm:size-8" />
                     </div>
-                    <h3 className="font-serif text-xl font-bold text-[#194A49]">
+                    <h3 className="font-serif text-lg sm:text-xl font-bold text-[#194A49]">
                       Take your full body selfie
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground max-w-xs">
@@ -491,6 +493,7 @@ export function PhotoPanel({
               </div>
             </div>
           </div>
+
 
           {/* Progress / Status banner */}
           <div className="mt-6 flex items-center justify-center text-center">
