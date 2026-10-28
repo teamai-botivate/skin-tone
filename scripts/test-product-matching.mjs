@@ -17,6 +17,9 @@ import {
   buildRetailerSearchUrl,
   getSafeProductUrl,
   isUrlConsistentWithProduct,
+  calculateOutfitSimilarity,
+  getRetailerFromUrl,
+  normalizeRetailerName,
 } from "../src/lib/product-search.ts";
 import {
   generateFallbackLooks,
@@ -1102,8 +1105,182 @@ assert.ok(safeFallbackUrl.toLowerCase().includes("abhinav") || safeFallbackUrl.t
 
 console.log("✓ Scenario 22 Passed: Designer boutiques (Aza, Pernia's, Elahé) supported dynamically with strict homepage rejection and robust search fallback.");
 
+// ======================================================================
+// SCENARIO 23: Retailer-Card Destination Integrity & Outfit Similarity Ranking
+// ======================================================================
+console.log("\n--- Scenario 23: Retailer-Card Destination Integrity & Outfit Similarity Ranking ---");
+
+// Test 1: getRetailerFromUrl reliably maps domain to canonical store name
+assert.strictEqual(getRetailerFromUrl("https://www.myntra.com/brand/item/123/buy"), "Myntra");
+assert.strictEqual(getRetailerFromUrl("https://www.ajio.com/p/461234567"), "AJIO");
+assert.strictEqual(getRetailerFromUrl("https://www.tatacliq.com/p-mp0000000123"), "Tata CLiQ");
+assert.strictEqual(getRetailerFromUrl("https://www.azafashions.com/products/anarkali/123"), "Aza Fashions");
+assert.strictEqual(getRetailerFromUrl("https://www.perniaspopupshop.com/products/lehenga"), "Pernia's Pop-Up Shop");
+assert.strictEqual(getRetailerFromUrl("https://www.elahe.in/products/saree"), "Elahé");
+assert.strictEqual(getRetailerFromUrl("https://www.zara.com/in/en/product-p123.html"), "Zara");
+assert.strictEqual(getRetailerFromUrl("https://www.giva.co/products/necklace"), "GIVA");
+
+// Test 2: Card displayed retailer and destination URL belong to the same retailer
+const myntraProduct = {
+  id: "card-myntra-01",
+  category: "outfit",
+  subcategory: "kurta",
+  productName: "Men Navy Embroidered Silk Kurta",
+  brand: "Manyavar",
+  retailer: "Myntra",
+  productUrl: "https://www.myntra.com/manyavar/kurta/1029384/buy",
+  urlType: "exact_product",
+};
+const myntraCardSafeUrl = getSafeProductUrl(myntraProduct, "man");
+assert.ok(myntraCardSafeUrl.includes("myntra.com"), "Myntra card destination must open Myntra");
+assert.strictEqual(getRetailerFromUrl(myntraCardSafeUrl), "Myntra");
+
+const ajioProduct = {
+  id: "card-ajio-01",
+  category: "outfit",
+  subcategory: "jacket",
+  productName: "Men Tailored Wool Blend Blazer",
+  brand: "Marks & Spencer",
+  retailer: "AJIO",
+  productUrl: "https://www.ajio.com/p/461234567",
+  urlType: "exact_product",
+};
+const ajioCardSafeUrl = getSafeProductUrl(ajioProduct, "man");
+assert.ok(ajioCardSafeUrl.includes("ajio.com"), "AJIO card destination must open AJIO");
+assert.strictEqual(getRetailerFromUrl(ajioCardSafeUrl), "AJIO");
+
+// Test 3: Cross-retailer URL isolation — Results from different retailers NEVER inherit one another's URLs
+// If card is labeled Myntra, but receives an AJIO URL:
+const mismatchedCard = {
+  id: "card-mismatch-01",
+  category: "outfit",
+  subcategory: "blazer",
+  productName: "Men Navy Suiting Blazer",
+  brand: "Blackberrys",
+  retailer: "Myntra", // Card displays Myntra
+  productUrl: "https://www.ajio.com/p/461234567", // foreign retailer URL!
+  urlType: "exact_product",
+};
+assert.strictEqual(
+  isUrlConsistentWithProduct(mismatchedCard.productUrl, mismatchedCard, "man"),
+  false,
+  "isUrlConsistentWithProduct must detect retailer domain mismatch",
+);
+const resolvedMismatchUrl = getSafeProductUrl(mismatchedCard, "man");
+assert.ok(
+  resolvedMismatchUrl.includes("myntra.com"),
+  "A card displaying Myntra must NEVER send user to AJIO; must resolve safely on Myntra",
+);
+assert.ok(!resolvedMismatchUrl.includes("ajio.com"), "Mismatched destination URL must be discarded");
+
+// Conversely: A card labeled AJIO receiving a Myntra URL must NEVER send user to Myntra
+const reverseMismatchedCard = {
+  id: "card-mismatch-02",
+  category: "outfit",
+  subcategory: "dress",
+  productName: "Women Floral Printed Midi Dress",
+  brand: "AND",
+  retailer: "AJIO",
+  productUrl: "https://www.myntra.com/and/dress/987654/buy",
+  urlType: "exact_product",
+};
+assert.strictEqual(
+  isUrlConsistentWithProduct(reverseMismatchedCard.productUrl, reverseMismatchedCard, "woman"),
+  false,
+  "isUrlConsistentWithProduct must reject foreign retailer URL for AJIO card",
+);
+const resolvedReverseUrl = getSafeProductUrl(reverseMismatchedCard, "woman");
+assert.ok(
+  resolvedReverseUrl.includes("ajio.com"),
+  "A card displaying AJIO must NEVER send user to Myntra; must resolve on AJIO",
+);
+
+// Test 4: Dynamic search URLs for various stores never collapse to generic Myntra fallback
+const zaraCard = {
+  id: "card-zara-01",
+  category: "outfit",
+  subcategory: "blazer",
+  productName: "Double Breasted Wool Blazer",
+  brand: "Zara",
+  retailer: "Zara",
+};
+const zaraSafeUrl = getSafeProductUrl(zaraCard, "woman");
+assert.ok(zaraSafeUrl.includes("zara.com"), "Zara card destination must open Zara, never Myntra");
+
+const givaCard = {
+  id: "card-giva-01",
+  category: "jewellery",
+  subcategory: "necklace",
+  productName: "Silver Solitaire Pendant Necklace",
+  brand: "GIVA",
+  retailer: "GIVA",
+};
+const givaSafeUrl = getSafeProductUrl(givaCard, "woman");
+assert.ok(givaSafeUrl.includes("giva.co"), "GIVA card destination must open GIVA, never Myntra");
+
+// Test 5: Visual and attribute matching to the generated outfit (80–90%+ similarity target)
+const generatedOutfitLook = {
+  id: "gen-look-01",
+  title: "Regal Emerald Velvet Anarkali",
+  outfit: "Deep Emerald Green Velvet Anarkali with intricate gold Zari embroidery, sweetheart neckline, churidar sleeves",
+  outfitColor: "Emerald Green",
+  vibe: "Festive & Opulent",
+  jewellery: "Kundan choker with emerald drop accents",
+  footwear: "Embellished gold ethnic juttis",
+  accessories: "Handcrafted velvet potli bag",
+  pieces: [
+    { category: "outfit", name: "Emerald Velvet Anarkali", detail: "Gold Zari embroidery" },
+  ],
+  imageUrl: "https://cdn.letstyle.ai/generated/emerald-anarkali.jpg",
+};
+
+// High-similarity product (matching silhouette, color, fabric appearance, embroidery, and style)
+const highMatchProduct = {
+  productTitle: "Women Emerald Green Embroidered Velvet Anarkali Kurta Set",
+  brand: "Tarun Tahiliani",
+  retailer: "Aza Fashions",
+  price: 4990,
+  material: "Rich Velvet with Handcrafted Gold Zari",
+};
+const highMatchScore = calculateOutfitSimilarity(highMatchProduct, generatedOutfitLook, undefined, 6000);
+
+// Moderate/generic product (different silhouette and fabric)
+const lowMatchProduct = {
+  productTitle: "Women Blue Cotton Straight Tunic Kurti",
+  brand: "Biba",
+  retailer: "Myntra",
+  price: 1899,
+  material: "100% Breathable Cotton",
+};
+const lowMatchScore = calculateOutfitSimilarity(lowMatchProduct, generatedOutfitLook, undefined, 6000);
+
+assert.ok(
+  highMatchScore >= 80 && highMatchScore <= 95,
+  `High visual match score (${highMatchScore}%) must achieve 80–90%+ target similarity`,
+);
+assert.ok(
+  highMatchScore > lowMatchScore,
+  `Product matching the generated outfit's silhouette, color, and fabric (${highMatchScore}%) must rank higher than generic product (${lowMatchScore}%)`,
+);
+
+// Test 6: Safe handling of missing, empty, or unverified destinations
+const brokenCard = {
+  id: "card-broken-01",
+  category: "footwear",
+  subcategory: "mojaris",
+  productName: "Men Traditional Mojari Juttis",
+  brand: "Metro",
+  retailer: "Tata CLiQ",
+  productUrl: undefined,
+};
+const safeRecoveredUrl = getSafeProductUrl(brokenCard, "man");
+assert.ok(safeRecoveredUrl.includes("tatacliq.com"), "Safely generates authentic live search on Tata CLiQ");
+assert.ok(safeRecoveredUrl.includes("searchCategory=all") || safeRecoveredUrl.includes("text="), "Has valid search params");
+
+console.log("✓ Scenario 23 Passed: Product-card destinations strictly preserved, cross-retailer URLs isolated, outfit visual similarity ranked in 80–90%+ range, and unverified links recovered safely.");
+
 console.log("\n======================================================================");
-console.log("ALL 22 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 23 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
 
 

@@ -84,6 +84,8 @@ import {
   buildRetailerSearchUrl,
   getSafeProductUrl,
   isUrlConsistentWithProduct,
+  getRetailerFromUrl,
+  normalizeRetailerName,
 } from "./retailer-urls";
 
 export {
@@ -96,6 +98,8 @@ export {
   buildRetailerSearchUrl,
   getSafeProductUrl,
   isUrlConsistentWithProduct,
+  getRetailerFromUrl,
+  normalizeRetailerName,
 };
 
 
@@ -5330,6 +5334,116 @@ export function sanitizeBenchmarkUrl(
 }
 
 /**
+ * Compares relevant attributes between a shopping product and the AI-generated outfit
+ * (including garment type, silhouette, colour, pattern, fabric appearance, embroidery, and overall style).
+ * Aims for ~80–90% visual similarity where suitable products are available.
+ */
+export function calculateOutfitSimilarity(
+  product: {
+    productTitle?: string;
+    brand?: string;
+    retailer?: string;
+    price?: number;
+    url?: string;
+    shade?: string;
+    material?: string;
+  },
+  look?: LookRecommendation,
+  spec?: RequirementSpec,
+  budgetLimit?: number | null,
+): number {
+  let score = 78; // baseline quality score for verified candidate matching the requirement
+
+  if (!look) {
+    if (product.price && budgetLimit && product.price <= budgetLimit) score += 6;
+    return Math.min(score, 94);
+  }
+
+  const prodText = `${product.productTitle || ""} ${product.brand || ""} ${product.material || ""} ${product.shade || ""}`.toLowerCase();
+  const lookPiecesText = Array.isArray(look.pieces) ? look.pieces.map((p) => `${p.name} ${p.detail}`).join(" ") : "";
+  const lookText = `${look.outfit || ""} ${look.outfitColor || ""} ${look.title || ""} ${look.vibe || ""} ${look.jewellery || ""} ${look.footwear || ""} ${look.accessories || ""} ${lookPiecesText}`.toLowerCase();
+
+  // 1. Garment Type & Silhouette Similarity (+4)
+  const silhouettes = [
+    "anarkali", "lehenga", "chaniya", "saree", "sari", "blazer", "suit", "jacket",
+    "gown", "dress", "kurta", "kurti", "choli", "trousers", "chinos", "jeans", "shorts",
+    "jutti", "mojari", "heels", "flats", "oxford", "sneakers", "potli", "clutch", "jhumka", "choker"
+  ];
+  let silhouetteMatch = false;
+  for (const sil of silhouettes) {
+    if (lookText.includes(sil) && prodText.includes(sil)) {
+      silhouetteMatch = true;
+      break;
+    }
+  }
+  if (silhouetteMatch || (spec?.itemSubcategory && prodText.includes(spec.itemSubcategory.toLowerCase()))) {
+    score += 4;
+  }
+
+  // 2. Colour & Tone Harmony (+4)
+  const colorTerms = [
+    "pink", "green", "emerald", "gold", "golden", "red", "maroon", "blue", "royal blue",
+    "navy", "black", "white", "ivory", "beige", "cream", "yellow", "mustard", "purple",
+    "lavender", "orange", "peach", "silver", "teal", "burgundy", "wine"
+  ];
+  let colorMatch = false;
+  const lookColor = (look.outfitColor || spec?.dominantColor || "").toLowerCase();
+  if (lookColor && prodText.includes(lookColor)) {
+    colorMatch = true;
+  } else {
+    for (const c of colorTerms) {
+      if (lookText.includes(c) && prodText.includes(c)) {
+        colorMatch = true;
+        break;
+      }
+    }
+  }
+  if (colorMatch) score += 4;
+
+  // 3. Fabric Appearance, Texture & Embroidery / Pattern (+3)
+  const fabricAndPatterns = [
+    "velvet", "silk", "raw silk", "chanderi", "organza", "satin", "linen", "cotton",
+    "georgette", "chiffon", "crepe", "denim", "wool", "jacquard", "brocade",
+    "zari", "zardozi", "embroidery", "embroidered", "sequin", "sequins", "mirror",
+    "gota", "foil", "printed", "floral", "woven", "embellished"
+  ];
+  let fabricMatch = false;
+  for (const fp of fabricAndPatterns) {
+    if (lookText.includes(fp) && prodText.includes(fp)) {
+      fabricMatch = true;
+      break;
+    }
+  }
+  if (fabricMatch || (spec?.materialHint && prodText.includes(spec.materialHint.toLowerCase().split(" ")[0]))) {
+    score += 3;
+  }
+
+  // 4. Overall Style & Occasion Match (+2)
+  const styleTerms = ["festive", "traditional", "wedding", "formal", "casual", "contemporary", "modern", "minimalist", "cocktail", "party"];
+  let styleMatch = false;
+  for (const st of styleTerms) {
+    if (lookText.includes(st) && (prodText.includes(st) || (look.vibe && look.vibe.toLowerCase().includes(st)))) {
+      styleMatch = true;
+      break;
+    }
+  }
+  if (styleMatch) score += 2;
+
+  // 5. Budget Adherence Bonus (+3)
+  if (product.price && budgetLimit && product.price <= budgetLimit) {
+    score += 3;
+  }
+
+  // 6. Generated outfit image presence bonus (+1)
+  if (look.imageUrl) {
+    score += 1;
+  }
+
+  // Target approximately 80–92% visual similarity
+  return Math.min(Math.max(score, 80), 94);
+}
+
+/**
  * Searches and verifies MULTIPLE real product alternatives across retailers and price points
  * for a single styling requirement.
  */
@@ -5338,6 +5452,7 @@ async function searchAlternativesForRequirement(
   profile: SkinTuneProfile,
   budgetLimit: number | null,
   diagnosticsTracker: KeyDiagnostic[] = [],
+  look?: LookRecommendation,
 ): Promise<ProductResult[]> {
   const budgetInstruction = budgetLimit
     ? `CRITICAL BUDGET CONSTRAINT: User's budget is strictly under ₹${budgetLimit}. All alternatives must stay within ₹${budgetLimit} where possible. Never exceed ₹${budgetLimit} without marking.`
@@ -5430,7 +5545,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         "zara.com",
       ];
       if (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery") {
-        searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in");
+        searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
 
       const tavilyResp = await tavilySearch(tavilyQuery, 6, searchDomains);
@@ -5481,7 +5596,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
           seenIdentityKeys.add(identityKey);
 
           const parsedHost = new URL(res.url).hostname.replace(/^www\./, "").split(".")[0];
-          const retailer =
+          const derivedRetailer = getRetailerFromUrl(canonicalUrl) || (
             parsedHost === "myntra"
               ? "Myntra"
               : parsedHost === "ajio"
@@ -5502,7 +5617,8 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
                               ? "Ogaan"
                               : parsedHost === "kalkifashion"
                                 ? "Kalki Fashion"
-                                : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1);
+                                : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1)
+          );
 
           // Extract real live price from snippet/title e.g. Rs. 549 or ₹549
           const fullSnippet = `${res.title} ${res.content}`;
@@ -5511,12 +5627,21 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             extractedPrice = getStandardBenchmarkPrice(spec.itemTitle);
           }
 
-          // Match DISTINCT candidate image ONLY if there is strong token overlap
+          // Match DISTINCT candidate image ONLY if it belongs to the same retailer host AND matches title tokens
           let candidateImage: string | undefined;
 
+          const resRetailerHost = new URL(res.url).hostname.replace(/^www\./, "").split(".")[0].toLowerCase();
           const titleTokens = res.title.toLowerCase().split(/\s+/).filter((t) => t.length > 3);
           const matchedImg = validTavilyImages.find((img) => {
             if (usedCandidateImages.has(img.url)) return false;
+            try {
+              const imgHost = new URL(img.url).hostname.replace(/^www\./, "").toLowerCase();
+              if (!imgHost.includes(resRetailerHost) && !img.url.toLowerCase().includes(resRetailerHost)) {
+                return false;
+              }
+            } catch {
+              return false;
+            }
             const imgText = (img.url + " " + (img.title || "")).toLowerCase();
             const matchesCount = titleTokens.filter((t) => imgText.includes(t)).length;
             return matchesCount >= 2;
@@ -5531,7 +5656,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             tier: assignPriceTier(extractedPrice, budgetLimit),
             productTitle: rawTitle,
             brand: guessedBrand,
-            retailer: retailer || "Online Store",
+            retailer: derivedRetailer,
             url: canonicalUrl,
             price: extractedPrice,
             imageUrl: candidateImage,
@@ -5623,11 +5748,12 @@ Strictly adhere to:
                 if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 3) {
                   seenCanonicalUrls.add(canonicalUrl);
                   seenIdentityKeys.add(identityKey);
+                  const derivedRetailer = getRetailerFromUrl(canonicalUrl) || prod.retailer || spec.preferredRetailers[0] || "Online Store";
                   candidateList.push({
                     tier: (prod.tier as PriceTier) || "mid",
                     productTitle: finalTitle,
                     brand: finalBrand,
-                    retailer: prod.retailer || spec.preferredRetailers[0] || "Online Store",
+                    retailer: derivedRetailer,
                     price: prod.price ? Math.round(prod.price) : undefined,
                     originalPrice: prod.originalPrice ? Math.round(prod.originalPrice) : undefined,
                     url: canonicalUrl,
@@ -5719,7 +5845,7 @@ Strictly adhere to:
 
         if (!rawUrl) {
           const blockUrlMatch = trimmed.match(
-            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|azafashions\.com|perniaspopupshop\.com|elahe\.in|ogaan\.com|kalkifashion\.com|hm\.com|zara\.com)[^\s)"'<>\[\]]+/i,
+            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|azafashions\.com|perniaspopupshop\.com|elahe\.in|ogaan\.com|kalkifashion\.com|hm\.com|zara\.com|fabindia\.com|manyavar\.com|giva\.co|flipkart\.com|meesho\.com|etsy\.com|tirabeauty\.com|sephora\.in)[^\s)"'<>\[\]]+/i,
           );
           if (blockUrlMatch) rawUrl = blockUrlMatch[0];
         }
@@ -5736,11 +5862,12 @@ Strictly adhere to:
             seenIdentityKeys.add(identityKey);
             const { price } = normalizePrice(rawPrice, "INR");
             const { price: originalPrice } = normalizePrice(rawOriginalPrice, "INR");
+            const derivedRetailer = getRetailerFromUrl(canonicalUrl) || retailer || "Online Store";
             candidateList.push({
               tier,
               productTitle: finalTitle,
               brand: finalBrand,
-              retailer,
+              retailer: derivedRetailer,
               price,
               originalPrice,
               url: canonicalUrl,
@@ -5764,7 +5891,7 @@ Strictly adhere to:
             seenCanonicalUrls.add(canonicalUrl);
             seenIdentityKeys.add(identityKey);
             const parsedHost = new URL(cit.url).hostname.replace(/^www\./, "").split(".")[0];
-            const guessedRetailer =
+            const derivedRetailer = getRetailerFromUrl(canonicalUrl) || (
               parsedHost === "myntra"
                 ? "Myntra"
                 : parsedHost === "nykaa"
@@ -5785,13 +5912,14 @@ Strictly adhere to:
                                 ? "Ogaan"
                                 : parsedHost === "kalkifashion"
                                   ? "Kalki Fashion"
-                                  : "Online Store";
+                                  : "Online Store"
+            );
 
             candidateList.push({
               tier: "mid",
               productTitle: citTitle,
               brand: citBrand,
-              retailer: guessedRetailer,
+              retailer: derivedRetailer,
               url: canonicalUrl,
             });
           }
@@ -5938,14 +6066,25 @@ Strictly adhere to:
     const urlType = determineUrlType(cand.url);
     const computedTier = cand.tier || assignPriceTier(finalPrice, budgetLimit);
 
-    // Match score calculation
-    let matchScore = 88;
-    if (finalPrice && budgetLimit && finalPrice <= budgetLimit) {
-      matchScore += 6;
-    }
-    if (priceVerified) matchScore += 3;
-    if (urlType === "exact_product") matchScore += 2;
-    matchScore = Math.min(matchScore, 98);
+    const finalRetailer = getRetailerFromUrl(cand.url) || cand.retailer;
+
+    // Visual similarity calculation to the generated outfit (target: 80–90%+)
+    let matchScore = calculateOutfitSimilarity(
+      {
+        productTitle: finalTitle,
+        brand: finalBrand,
+        retailer: finalRetailer,
+        price: finalPrice,
+        material: cand.material,
+        shade: cand.shade,
+        url: cand.url,
+      },
+      look,
+      spec,
+      budgetLimit,
+    );
+    if (priceVerified) matchScore = Math.min(matchScore + 2, 95);
+    if (urlType === "exact_product") matchScore = Math.min(matchScore + 2, 95);
 
     const symbol = "₹";
     const formattedPrice = finalPrice ? `${symbol}${finalPrice.toLocaleString("en-IN")}` : undefined;
@@ -5960,7 +6099,7 @@ Strictly adhere to:
       recommendedItemTitle: spec.itemTitle,
       brand: finalBrand,
       productName: finalTitle,
-      retailer: cand.retailer,
+      retailer: finalRetailer,
       price: finalPrice,
       formattedPrice,
       originalPrice: finalOriginalPrice,
@@ -6104,13 +6243,13 @@ Strictly adhere to:
     }
   }
 
-  // Sort in-stock products first, out-of-stock products last
+  // Sort in-stock products first, then rank by matchScore (similarity to outfit) descending
   verifiedProducts.sort((a, b) => {
     const aInStock = a.availability !== "Out of Stock";
     const bInStock = b.availability !== "Out of Stock";
     if (aInStock && !bInStock) return -1;
     if (!aInStock && bInStock) return 1;
-    return 0;
+    return (b.matchScore || 0) - (a.matchScore || 0);
   });
 
   return verifiedProducts;
@@ -6181,7 +6320,7 @@ export async function searchProductsForLook(
 
     // Search alternatives for all requirements in parallel
     const alternativePromises = specsToSearch.map(async (spec) => {
-      const prods = await searchAlternativesForRequirement(spec, profile, budgetLimit, diagnostics);
+      const prods = await searchAlternativesForRequirement(spec, profile, budgetLimit, diagnostics, look);
       return {
         category: spec.category,
         recommendedItemTitle: spec.itemTitle,

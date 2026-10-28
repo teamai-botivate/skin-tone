@@ -29,7 +29,73 @@ export const APPROVED_RETAILERS = [
   "elahe.in",
   "ogaan.com",
   "kalkifashion.com",
+  "giva.co",
+  "flipkart.com",
+  "meesho.com",
+  "etsy.com",
+  "tirabeauty.com",
+  "sephora.in",
 ];
+
+/**
+ * Normalizes a retailer name into a lowercase alphanumeric key for comparison.
+ */
+export function normalizeRetailerName(name?: string): string {
+  if (!name) return "";
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Identifies the authentic canonical retailer name from a URL's hostname.
+ */
+export function getRetailerFromUrl(urlStr: string): string | null {
+  if (!urlStr || typeof urlStr !== "string") return null;
+  try {
+    const parsed = new URL(urlStr);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (host.includes("myntra.com")) return "Myntra";
+    if (host.includes("ajio.com")) return "AJIO";
+    if (host.includes("nykaafashion.com")) return "Nykaa Fashion";
+    if (host.includes("nykaa.com")) return "Nykaa";
+    if (host.includes("tatacliq.com")) return "Tata CLiQ";
+    if (host.includes("amazon.in") || host.includes("amazon.com")) return "Amazon India";
+    if (host.includes("azafashions.com")) return "Aza Fashions";
+    if (host.includes("perniaspopupshop.com")) return "Pernia's Pop-Up Shop";
+    if (host.includes("elahe.in")) return "Elahé";
+    if (host.includes("ogaan.com")) return "Ogaan";
+    if (host.includes("kalkifashion.com")) return "Kalki Fashion";
+    if (host.includes("hm.com")) return "H&M";
+    if (host.includes("zara.com")) return "Zara";
+    if (host.includes("fabindia.com")) return "Fabindia";
+    if (host.includes("manyavar.com")) return "Manyavar";
+    if (host.includes("sugarcosmetics.com")) return "SUGAR Cosmetics";
+    if (host.includes("lakmeindia.com")) return "Lakmé";
+    if (host.includes("maccosmetics.in")) return "M.A.C";
+    if (host.includes("giva.co")) return "GIVA";
+    if (host.includes("flipkart.com")) return "Flipkart";
+    if (host.includes("meesho.com")) return "Meesho";
+    if (host.includes("etsy.com")) return "Etsy";
+    if (host.includes("tirabeauty.com")) return "Tira Beauty";
+    if (host.includes("sephora.in")) return "Sephora";
+
+    // For any approved retailer domain, capitalize the primary brand segment
+    for (const approved of APPROVED_RETAILERS) {
+      if (host === approved || host.endsWith("." + approved)) {
+        const seg = approved.split(".")[0];
+        return seg.charAt(0).toUpperCase() + seg.slice(1);
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export const BANNED_PLACEHOLDER_PATTERNS = [
   "12345678",
@@ -256,7 +322,39 @@ export function buildRetailerSearchUrl(
     return `https://www.kalkifashion.com/search?q=${q}`;
   }
 
-  // Fallback safe URL
+  // 8. Fashion & Jewellery Platforms
+  if (r.includes("zara")) {
+    return `https://www.zara.com/in/en/search?searchTerm=${q}`;
+  }
+  if (r === "hm" || r.includes("h&m") || r.includes("hm.com")) {
+    return `https://www2.hm.com/en_in/search-results.html?q=${q}`;
+  }
+  if (r.includes("giva")) {
+    return `https://www.giva.co/search?q=${q}`;
+  }
+  if (r.includes("flipkart")) {
+    return `https://www.flipkart.com/search?q=${q}`;
+  }
+  if (r.includes("meesho")) {
+    return `https://www.meesho.com/search?q=${q}`;
+  }
+  if (r.includes("etsy")) {
+    return `https://www.etsy.com/in-en/search?q=${q}`;
+  }
+  if (r.includes("tira")) {
+    return `https://www.tirabeauty.com/search?q=${q}`;
+  }
+  if (r.includes("sephora")) {
+    return `https://sephora.in/search?q=${q}`;
+  }
+
+  // If retailer specifies a domain (e.g. store.com / store.in), construct a search URL on that store
+  if (r.includes(".com") || r.includes(".in") || r.includes(".co")) {
+    const cleanHost = r.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+    return `https://www.${cleanHost}/search?q=${q}`;
+  }
+
+  // Fallback safe URL for Myntra or unspecified retailer
   const slug = cleanTokens
     .join("-")
     .toLowerCase()
@@ -533,6 +631,7 @@ export function isUrlConsistentWithProduct(
     brand?: string;
     category?: string;
     subcategory?: string;
+    retailer?: string;
   },
   persona?: string,
 ): boolean {
@@ -547,6 +646,21 @@ export function isUrlConsistentWithProduct(
     const isChild = isBoy || isGirl || gender === "child" || gender === "kids";
     const isMan = !isChild && (gender === "man" || gender === "men" || gender === "male");
     const isWoman = !isChild && (gender === "woman" || gender === "women" || gender === "female");
+
+    // 0. Retailer consistency check: card retailer and URL destination MUST belong to the same retailer
+    if (product.retailer) {
+      const urlRetailer = getRetailerFromUrl(urlStr);
+      if (urlRetailer) {
+        const normUrlRet = normalizeRetailerName(urlRetailer);
+        const normExpectedRet = normalizeRetailerName(product.retailer);
+        if (normUrlRet && normExpectedRet) {
+          const isNykaaBoth = normUrlRet.includes("nykaa") && normExpectedRet.includes("nykaa");
+          if (!isNykaaBoth && normUrlRet !== normExpectedRet) {
+            return false;
+          }
+        }
+      }
+    }
 
     // 1. Audience consistency check
     if (isMan) {
@@ -603,7 +717,7 @@ export function isUrlConsistentWithProduct(
 
 /**
  * Safely sanitizes or resolves a product's destination URL for the UI card button.
- * If the direct product URL is verified, authentic, and consistent with audience/category, returns it.
+ * If the direct product URL is verified, authentic, and consistent with audience/category/retailer, returns it.
  * Otherwise, generates an authentic live search URL on that retailer using the product's
  * actual attributes (gender, category, brand, productName, and color).
  */
@@ -624,7 +738,7 @@ export function getSafeProductUrl(
   const isConsistent = url ? isUrlConsistentWithProduct(url, product, persona) : false;
   const isExact = product.urlType === "exact_product" && isValidProductUrl(url || "");
 
-  // If already a valid exact product URL and consistent with product/audience, return it safely
+  // If already a valid exact product URL and consistent with product/audience/retailer, return it safely
   if (isExact && url && isConsistent) {
     return url;
   }
@@ -635,19 +749,32 @@ export function getSafeProductUrl(
       const u = new URL(url);
       const host = u.hostname.toLowerCase();
       if (!host.includes("myntra.com") || !u.pathname.includes("/search")) {
-        if (host.includes("ajio.com") && u.searchParams.get("text")) return url;
-        if (host.includes("nykaa.com") && u.searchParams.get("q")) return url;
-        if (host.includes("tatacliq.com") && (u.searchParams.get("text") || u.searchParams.get("searchCategory"))) return url;
-        if (host.includes("amazon") && u.searchParams.get("k")) return url;
-        if (
-          (host.includes("azafashions.com") ||
-            host.includes("perniaspopupshop.com") ||
-            host.includes("elahe.in") ||
-            host.includes("ogaan.com") ||
-            host.includes("kalkifashion.com")) &&
-          u.searchParams.get("q")
-        ) {
-          return url;
+        const urlRet = getRetailerFromUrl(url);
+        const normCardRet = normalizeRetailerName(product.retailer);
+        const normUrlRet = urlRet ? normalizeRetailerName(urlRet) : "";
+        const isRetMatch = !normCardRet || normCardRet === normUrlRet || (normCardRet.includes("nykaa") && normUrlRet.includes("nykaa"));
+
+        if (isRetMatch) {
+          if (host.includes("ajio.com") && u.searchParams.get("text")) return url;
+          if (host.includes("nykaa.com") && u.searchParams.get("q")) return url;
+          if (host.includes("tatacliq.com") && (u.searchParams.get("text") || u.searchParams.get("searchCategory"))) return url;
+          if (host.includes("amazon") && u.searchParams.get("k")) return url;
+          if (
+            (host.includes("azafashions.com") ||
+              host.includes("perniaspopupshop.com") ||
+              host.includes("elahe.in") ||
+              host.includes("ogaan.com") ||
+              host.includes("kalkifashion.com") ||
+              host.includes("giva.co") ||
+              host.includes("flipkart.com") ||
+              host.includes("meesho.com") ||
+              host.includes("etsy.com") ||
+              host.includes("tirabeauty.com") ||
+              host.includes("sephora.in")) &&
+            (u.searchParams.get("q") || u.searchParams.get("searchTerm"))
+          ) {
+            return url;
+          }
         }
       }
     } catch {
@@ -655,7 +782,7 @@ export function getSafeProductUrl(
     }
   }
 
-  // Otherwise, construct an authentic live search URL
+  // Otherwise, construct an authentic live search URL strictly belonging to product.retailer
   return buildRetailerSearchUrl(product.retailer, {
     gender: persona,
     brand: product.brand,
