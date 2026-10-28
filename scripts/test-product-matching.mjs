@@ -983,7 +983,127 @@ for (const cand of menTopCandidates) {
 
 console.log("✓ Scenario 21 Passed: Links and candidates strictly respect audience and category boundaries.");
 
+// ======================================================================
+// SCENARIO 22: Designer Boutique Support (Aza, Pernia's, Elahé) & URL Validation/Fallback
+// ======================================================================
+console.log("\n--- Scenario 22: Designer Boutique Support (Aza, Pernia's, Elahé) ---");
+
+// Test 1: APPROVED_RETAILERS includes luxury boutique domains
+import { APPROVED_RETAILERS } from "../src/lib/retailer-urls.ts";
+assert.ok(APPROVED_RETAILERS.includes("azafashions.com"), "APPROVED_RETAILERS must include azafashions.com");
+assert.ok(APPROVED_RETAILERS.includes("perniaspopupshop.com"), "APPROVED_RETAILERS must include perniaspopupshop.com");
+assert.ok(APPROVED_RETAILERS.includes("elahe.in"), "APPROVED_RETAILERS must include elahe.in");
+assert.ok(APPROVED_RETAILERS.includes("ogaan.com"), "APPROVED_RETAILERS must include ogaan.com");
+assert.ok(APPROVED_RETAILERS.includes("kalkifashion.com"), "APPROVED_RETAILERS must include kalkifashion.com");
+
+// Test 2: Bare homepages are STRICTLY rejected (Requirement 5: Never show homepages as verified recommendations)
+assert.strictEqual(isValidProductUrl("https://www.azafashions.com/"), false, "Aza homepage must be rejected");
+assert.strictEqual(isValidProductUrl("https://www.azafashions.com"), false, "Aza bare domain must be rejected");
+assert.strictEqual(isValidProductUrl("https://www.perniaspopupshop.com/"), false, "Pernia homepage must be rejected");
+assert.strictEqual(isValidProductUrl("https://www.elahe.in/"), false, "Elahé homepage must be rejected");
+
+// Test 3: Search URLs without query params are rejected
+assert.strictEqual(isValidProductUrl("https://www.azafashions.com/search"), false, "Aza bare search path must be rejected");
+assert.strictEqual(isValidProductUrl("https://www.perniaspopupshop.com/search?q="), false, "Empty search query must be rejected");
+
+// Test 4: Genuine product URLs and valid search URLs are accepted
+const validAzaProduct = "https://www.azafashions.com/products/tarun-tahiliani-embroidered-anarkali-set/189201";
+const validPerniaProduct = "https://www.perniaspopupshop.com/products/seema-gujral-sequin-lehenga-set";
+const validPerniaHtml = "https://www.perniaspopupshop.com/ridhi-mehra-printed-jumpsuit.html";
+const validElaheProduct = "https://www.elahe.in/products/raw-mango-chanderi-saree-gold";
+const validAzaSearch = "https://www.azafashions.com/search?q=designer+anarkali+set";
+
+assert.strictEqual(isValidProductUrl(validAzaProduct), true, "Valid Aza product URL must be accepted");
+assert.strictEqual(isValidProductUrl(validPerniaProduct), true, "Valid Pernia product URL must be accepted");
+assert.strictEqual(isValidProductUrl(validPerniaHtml), true, "Valid Pernia .html product URL must be accepted");
+assert.strictEqual(isValidProductUrl(validElaheProduct), true, "Valid Elahé product URL must be accepted");
+assert.strictEqual(isValidProductUrl(validAzaSearch), true, "Valid Aza search URL with query must be accepted");
+
+// Test 5: determineUrlType correctly classifies exact product pages vs search results
+assert.strictEqual(determineUrlType(validAzaProduct), "exact_product", "Aza /products/ path must be exact_product");
+assert.strictEqual(determineUrlType(validPerniaProduct), "exact_product", "Pernia /products/ path must be exact_product");
+assert.strictEqual(determineUrlType(validPerniaHtml), "exact_product", "Pernia .html path must be exact_product");
+assert.strictEqual(determineUrlType(validElaheProduct), "exact_product", "Elahé /products/ path must be exact_product");
+assert.strictEqual(determineUrlType(validAzaSearch), "search_result", "Aza /search?q= must be search_result");
+
+// Test 6: buildRetailerSearchUrl builds valid live search URLs dynamically for each boutique
+const azaSearchBuilt = buildRetailerSearchUrl("Aza Fashions", {
+  gender: "woman",
+  brand: "Tarun Tahiliani",
+  productName: "Embroidered Silk Anarkali Set",
+  category: "outfit",
+  color: "Pink",
+});
+assert.ok(azaSearchBuilt.startsWith("https://www.azafashions.com/search?q="), "Must generate Aza search URL");
+assert.ok(azaSearchBuilt.toLowerCase().includes("tarun") || azaSearchBuilt.toLowerCase().includes("anarkali"),
+  "Aza search query must contain relevant garment tokens");
+
+const perniaSearchBuilt = buildRetailerSearchUrl("Pernia's Pop-Up Shop", {
+  gender: "woman",
+  brand: "Seema Gujral",
+  productName: "Sequined Lehenga",
+  category: "outfit",
+  color: "Gold",
+});
+assert.ok(perniaSearchBuilt.startsWith("https://www.perniaspopupshop.com/search?q="), "Must generate Pernia search URL");
+
+const elaheSearchBuilt = buildRetailerSearchUrl("Elahé", {
+  gender: "woman",
+  brand: "Raw Mango",
+  productName: "Handwoven Silk Saree",
+  category: "outfit",
+  color: "Red",
+});
+assert.ok(elaheSearchBuilt.startsWith("https://www.elahe.in/search?q="), "Must generate Elahé search URL");
+
+// Test 7: getCanonicalProductUrl normalizes boutique product URLs
+assert.strictEqual(
+  getCanonicalProductUrl("https://www.azafashions.com/products/tarun-tahiliani-set/189201?utm_source=google&ref=123"),
+  "https://www.azafashions.com/products/tarun-tahiliani-set/189201",
+  "getCanonicalProductUrl must strip tracking params on Aza product URLs",
+);
+assert.strictEqual(
+  getCanonicalProductUrl("https://www.elahe.in/products/raw-mango-saree?variant=12345"),
+  "https://www.elahe.in/products/raw-mango-saree",
+  "getCanonicalProductUrl must clean Elahé product URL",
+);
+
+// Test 8: getSafeProductUrl returns verified exact boutique product URL when valid and consistent
+const verifiedBoutiqueProduct = {
+  id: "boutique-prod-01",
+  category: "outfit",
+  subcategory: "anarkali",
+  productName: "Embroidered Silk Anarkali Set",
+  brand: "Tarun Tahiliani",
+  retailer: "Aza Fashions",
+  productUrl: validAzaProduct,
+  urlType: "exact_product",
+};
+const safeExactUrl = getSafeProductUrl(verifiedBoutiqueProduct, "woman");
+assert.strictEqual(safeExactUrl, validAzaProduct, "Verified exact boutique product URL must be preserved");
+
+// Test 9: getSafeProductUrl gracefully falls back to authentic search URL if homepage or invalid URL is provided
+const unverifiedBoutiqueProduct = {
+  id: "boutique-prod-02",
+  category: "outfit",
+  subcategory: "lehenga",
+  productName: "Mirror Work Raw Silk Lehenga",
+  brand: "Abhinav Mishra",
+  retailer: "Aza Fashions",
+  productUrl: "https://www.azafashions.com/", // bare homepage
+  urlType: "exact_product",
+};
+const safeFallbackUrl = getSafeProductUrl(unverifiedBoutiqueProduct, "woman");
+assert.notStrictEqual(safeFallbackUrl, "https://www.azafashions.com/", "Must NEVER return a bare homepage");
+assert.ok(safeFallbackUrl.startsWith("https://www.azafashions.com/search?q="),
+  "Must fall back to authentic dynamic search query on Aza Fashions");
+assert.ok(safeFallbackUrl.toLowerCase().includes("abhinav") || safeFallbackUrl.toLowerCase().includes("lehenga"),
+  "Fallback search URL must include product keywords");
+
+console.log("✓ Scenario 22 Passed: Designer boutiques (Aza, Pernia's, Elahé) supported dynamically with strict homepage rejection and robust search fallback.");
+
 console.log("\n======================================================================");
-console.log("ALL 21 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 22 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
+
 

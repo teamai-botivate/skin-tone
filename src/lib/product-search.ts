@@ -5297,7 +5297,13 @@ export function sanitizeBenchmarkUrl(
     originalUrl.includes("?searchCategory=") ||
     originalUrl.includes("?text=") ||
     (originalUrl.includes("nykaa") && originalUrl.includes("?q=")) ||
-    (originalUrl.includes("myntra.com") && originalUrl.includes("?rawQuery="))
+    (originalUrl.includes("myntra.com") && originalUrl.includes("?rawQuery=")) ||
+    ((originalUrl.includes("azafashions.com") ||
+      originalUrl.includes("perniaspopupshop.com") ||
+      originalUrl.includes("elahe.in") ||
+      originalUrl.includes("ogaan.com") ||
+      originalUrl.includes("kalkifashion.com")) &&
+      originalUrl.includes("?q="))
   ) {
     return originalUrl;
   }
@@ -5309,7 +5315,7 @@ export function sanitizeBenchmarkUrl(
     /\/p\/[a-zA-Z0-9_]+/i.test(originalUrl) ||
     /\/p-\w+/i.test(originalUrl) ||
     /\/dp\/[a-zA-Z0-9]+/i.test(originalUrl) ||
-    /https?:\/\/(?:www\.)?(?:myntra|ajio|tatacliq|nykaafashion|nykaa|amazon)\.(?:com|in)/i.test(originalUrl);
+    /https?:\/\/(?:www\.)?(?:myntra|ajio|tatacliq|nykaafashion|nykaa|amazon|azafashions|perniaspopupshop|elahe|ogaan|kalkifashion)\.(?:com|in)/i.test(originalUrl);
 
   if (hasGuessedId) {
     return buildRetailerSearchUrl(retailer, {
@@ -5342,7 +5348,7 @@ async function searchAlternativesForRequirement(
   const colorsAvoidStr = colorsAvoidList.join(", ");
 
   const prompt = `You are LetStyle's Multi-Retailer Product Discovery Engine.
-Your task is to search the web for 3 distinct, REAL, currently available products in India from multiple trusted retailers (Myntra, AJIO, Nykaa, Nykaa Fashion, Amazon India, Tata CLiQ, Fabindia, Manyavar, SUGAR, Lakmé, MAC, GIVA) that satisfy this EXACT styling requirement:
+Your task is to search the web for 3 distinct, REAL, currently available products in India from multiple trusted retailers and designer boutiques (Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India, Fabindia, Manyavar, SUGAR, Lakmé, MAC, GIVA) that satisfy this EXACT styling requirement:
 
 STYLING REQUIREMENT:
 - Item: "${spec.itemTitle}"
@@ -5359,7 +5365,7 @@ BUDGET INSTRUCTION:
 ${budgetInstruction}
 
 SEARCH INSTRUCTIONS:
-1. MULTI-RETAILER DIVERSITY: Search across MULTIPLE approved retailers: Myntra, AJIO, Nykaa, Tata CLiQ, Amazon India. If relevant products exist across multiple retailers, diversify the results (e.g. 1 from Myntra, 1 from AJIO, 1 from Nykaa/Tata CLiQ). Do NOT return all 3 from the same retailer if alternatives exist.
+1. MULTI-RETAILER DIVERSITY: Search across MULTIPLE approved retailers and designer boutiques: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India. If relevant products exist across multiple retailers, diversify the results (e.g. 1 from Myntra, 1 from AJIO, 1 from Aza/Pernia's/Nykaa). Do NOT return all 3 from the same retailer if alternatives exist.
 2. Find 3 distinct REAL shoppable products that satisfy this exact same styling requirement across different price levels (Budget, Mid-range, Premium).
 3. Do NOT change user's color, occasion, or style requirement between alternatives.
 4. You MUST extract the REAL, exact product page URL with the real product ID directly from your search result.
@@ -5370,7 +5376,7 @@ Format each product cleanly as:
 TIER: budget | mid | premium
 PRODUCT_TITLE: <exact title as listed on the retailer>
 BRAND: <brand name>
-RETAILER: <retailer name: Myntra, AJIO, Nykaa, Tata CLiQ, Amazon, etc.>
+RETAILER: <retailer name: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon, etc.>
 PRICE: <exact price number in INR>
 ORIGINAL_PRICE: <original MRP number in INR if discounted>
 URL: <exact real product page URL with real product ID>
@@ -5399,7 +5405,22 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
   if (tavilyHealth.isConfigured) {
     try {
       const tavilyQuery = `${spec.searchQuery} buy online india`;
-      const tavilyResp = await tavilySearch(tavilyQuery, 6, [
+
+      // Dynamically determine search domains based on occasion, style preferences, and budget
+      const occasionLower = (profile.occasion || "").toLowerCase();
+      const isBoutiqueOccasion =
+        occasionLower.includes("wedding") ||
+        occasionLower.includes("festive") ||
+        occasionLower.includes("party") ||
+        occasionLower.includes("cocktail") ||
+        occasionLower.includes("reception") ||
+        occasionLower.includes("sangeet") ||
+        occasionLower.includes("celebration") ||
+        occasionLower.includes("designer") ||
+        occasionLower.includes("luxury");
+      const isHighBudget = (budgetLimit ?? 0) >= 3500;
+
+      const searchDomains = [
         "myntra.com",
         "ajio.com",
         "nykaa.com",
@@ -5407,7 +5428,12 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         "tatacliq.com",
         "hm.com",
         "zara.com",
-      ]);
+      ];
+      if (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery") {
+        searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in");
+      }
+
+      const tavilyResp = await tavilySearch(tavilyQuery, 6, searchDomains);
 
       const usedCandidateImages = new Set<string>();
 
@@ -5429,7 +5455,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             img.url.includes("nykaa") ||
             img.url.includes("amazon") ||
             img.url.includes("myntra") ||
-            img.url.includes("ajio")),
+            img.url.includes("ajio") ||
+            img.url.includes("azafashions") ||
+            img.url.includes("perniaspopupshop") ||
+            img.url.includes("elahe") ||
+            img.url.includes("shopify")),
       );
 
       let candIdx = 0;
@@ -5462,7 +5492,17 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
                     ? "Amazon India"
                     : parsedHost === "tatacliq"
                       ? "Tata CLiQ"
-                      : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1);
+                      : parsedHost === "azafashions"
+                        ? "Aza Fashions"
+                        : parsedHost === "perniaspopupshop"
+                          ? "Pernia's Pop-Up Shop"
+                          : parsedHost === "elahe"
+                            ? "Elahé"
+                            : parsedHost === "ogaan"
+                              ? "Ogaan"
+                              : parsedHost === "kalkifashion"
+                                ? "Kalki Fashion"
+                                : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1);
 
           // Extract real live price from snippet/title e.g. Rs. 549 or ₹549
           const fullSnippet = `${res.title} ${res.content}`;
@@ -5549,7 +5589,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
 Strictly adhere to:
 1. Target gender: ${spec.targetGender || "unisex"}.
 2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}.
-3. Approved retailers only: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Amazon India (amazon.in).
+3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in).
 4. Provide REAL exact product page URLs found directly on retailer websites. Never invent product IDs or fake slugs.
 5. Provide real prices in INR and real retailer product image URLs if present in search results.`,
               },
@@ -5679,7 +5719,7 @@ Strictly adhere to:
 
         if (!rawUrl) {
           const blockUrlMatch = trimmed.match(
-            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|hm\.com|zara\.com)[^\s)"'<>\[\]]+/i,
+            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|azafashions\.com|perniaspopupshop\.com|elahe\.in|ogaan\.com|kalkifashion\.com|hm\.com|zara\.com)[^\s)"'<>\[\]]+/i,
           );
           if (blockUrlMatch) rawUrl = blockUrlMatch[0];
         }
@@ -5733,7 +5773,19 @@ Strictly adhere to:
                     ? "AJIO"
                     : parsedHost === "amazon"
                       ? "Amazon India"
-                      : "Online Store";
+                      : parsedHost === "tatacliq"
+                        ? "Tata CLiQ"
+                        : parsedHost === "azafashions"
+                          ? "Aza Fashions"
+                          : parsedHost === "perniaspopupshop"
+                            ? "Pernia's Pop-Up Shop"
+                            : parsedHost === "elahe"
+                              ? "Elahé"
+                              : parsedHost === "ogaan"
+                                ? "Ogaan"
+                                : parsedHost === "kalkifashion"
+                                  ? "Kalki Fashion"
+                                  : "Online Store";
 
             candidateList.push({
               tier: "mid",

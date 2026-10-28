@@ -24,6 +24,11 @@ export const APPROVED_RETAILERS = [
   "sugarcosmetics.com",
   "lakmeindia.com",
   "maccosmetics.in",
+  "azafashions.com",
+  "perniaspopupshop.com",
+  "elahe.in",
+  "ogaan.com",
+  "kalkifashion.com",
 ];
 
 export const BANNED_PLACEHOLDER_PATTERNS = [
@@ -84,7 +89,10 @@ export function buildRetailerSearchUrl(
     color?: string;
   },
 ): string {
-  const r = (retailer || "").toLowerCase();
+  const r = (retailer || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   const rawTerms: string[] = [];
 
   const gender = (params.gender || "").toLowerCase();
@@ -229,6 +237,23 @@ export function buildRetailerSearchUrl(
   }
   if (r.includes("mac")) {
     return `https://www.maccosmetics.in/esearch?search=${q}`;
+  }
+
+  // 7. Designer Boutiques & Multi-Brand Luxury Stores
+  if (r.includes("aza")) {
+    return `https://www.azafashions.com/search?q=${q}`;
+  }
+  if (r.includes("pernia")) {
+    return `https://www.perniaspopupshop.com/search?q=${q}`;
+  }
+  if (r.includes("elahe")) {
+    return `https://www.elahe.in/search?q=${q}`;
+  }
+  if (r.includes("ogaan")) {
+    return `https://www.ogaan.com/search?q=${q}`;
+  }
+  if (r.includes("kalki")) {
+    return `https://www.kalkifashion.com/search?q=${q}`;
   }
 
   // Fallback safe URL
@@ -384,6 +409,72 @@ export function getCanonicalProductUrl(rawUrl: string): string {
       return `${u.origin}${u.pathname}${u.search ? u.search : ""}`;
     }
 
+    // Designer Boutiques: Aza Fashions, Pernia's Pop-Up Shop, Elahé, Ogaan, Kalki Fashion
+    if (host.includes("azafashions.com")) {
+      if (u.pathname.includes("/products/")) {
+        return `https://www.azafashions.com${u.pathname.replace(/\/+$/, "")}`;
+      }
+      if (u.pathname.includes("/search")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.azafashions.com/search?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("perniaspopupshop.com")) {
+      if (u.pathname.includes("/products/") || /\.html$/i.test(u.pathname)) {
+        return `https://www.perniaspopupshop.com${u.pathname.replace(/\/+$/, "")}`;
+      }
+      if (u.pathname.includes("/search")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.perniaspopupshop.com/search?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("elahe.in")) {
+      if (u.pathname.includes("/products/")) {
+        return `https://www.elahe.in${u.pathname.replace(/\/+$/, "")}`;
+      }
+      if (u.pathname.includes("/search")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.elahe.in/search?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("ogaan.com")) {
+      if (u.pathname.includes("/products/") || /\.html$/i.test(u.pathname)) {
+        return `https://www.ogaan.com${u.pathname.replace(/\/+$/, "")}`;
+      }
+      if (u.pathname.includes("/search")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.ogaan.com/search?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("kalkifashion.com")) {
+      if (u.pathname.includes("/products/") || /\.html$/i.test(u.pathname)) {
+        return `https://www.kalkifashion.com${u.pathname.replace(/\/+$/, "")}`;
+      }
+      if (u.pathname.includes("/search")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.kalkifashion.com/search?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
     if (u.search && (u.pathname.includes("/search") || u.pathname === "/s" || u.pathname.startsWith("/s/") || u.searchParams.has("q") || u.searchParams.has("text") || u.searchParams.has("k"))) {
       return `${u.origin}${u.pathname}${u.search}`;
     }
@@ -415,7 +506,12 @@ export function determineUrlType(urlStr: string): "exact_product" | "search_resu
       (host.includes("ajio.com") && path.includes("/p/")) ||
       (host.includes("amazon.in") && (path.includes("/dp/") || path.includes("/gp/product/"))) ||
       (host.includes("tatacliq.com") && path.includes("/p-")) ||
-      (host.includes("hm.com") && path.includes(".productpage."))
+      (host.includes("hm.com") && path.includes(".productpage.")) ||
+      (host.includes("azafashions.com") && path.includes("/products/")) ||
+      (host.includes("perniaspopupshop.com") && (path.includes("/products/") || /\.html$/i.test(path))) ||
+      (host.includes("elahe.in") && path.includes("/products/")) ||
+      (host.includes("ogaan.com") && (path.includes("/products/") || /\.html$/i.test(path))) ||
+      (host.includes("kalkifashion.com") && (path.includes("/products/") || /\.html$/i.test(path)))
     ) {
       return "exact_product";
     }
@@ -543,6 +639,16 @@ export function getSafeProductUrl(
         if (host.includes("nykaa.com") && u.searchParams.get("q")) return url;
         if (host.includes("tatacliq.com") && (u.searchParams.get("text") || u.searchParams.get("searchCategory"))) return url;
         if (host.includes("amazon") && u.searchParams.get("k")) return url;
+        if (
+          (host.includes("azafashions.com") ||
+            host.includes("perniaspopupshop.com") ||
+            host.includes("elahe.in") ||
+            host.includes("ogaan.com") ||
+            host.includes("kalkifashion.com")) &&
+          u.searchParams.get("q")
+        ) {
+          return url;
+        }
       }
     } catch {
       // Fall through to buildRetailerSearchUrl

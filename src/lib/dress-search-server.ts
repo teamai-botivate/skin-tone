@@ -21,7 +21,21 @@ import { logger } from "./logger";
  * fixed list of real, general-purpose marketplaces; it does not encode any
  * per-user preference or category logic.
  */
-const SHOPPING_SITES = ["amazon.in", "flipkart.com", "myntra.com", "ajio.com", "meesho.com", "etsy.com"];
+const SHOPPING_SITES = [
+  "amazon.in",
+  "flipkart.com",
+  "myntra.com",
+  "ajio.com",
+  "azafashions.com",
+  "perniaspopupshop.com",
+  "elahe.in",
+  "meesho.com",
+  "etsy.com",
+  "zara.com",
+  "hm.com",
+  "tatacliq.com",
+  "nykaafassion.com",
+];
 
 /**
  * Builds a genuine shopping search query from the user's own profile —
@@ -217,6 +231,8 @@ const CDN_HOST_TO_RETAILER: Record<string, string> = {
   "assets.ajio.com": "ajio.com",
   "n.nordstrommedia.com": "nordstrom.com",
   "images.asos-media.com": "asos.com",
+  "static3.azafashions.com": "azafashions.com",
+  "img.perniaspopupshop.com": "perniaspopupshop.com",
 };
 
 /** Maps a real (possibly CDN) hostname to the retailer domain used for both the "visit store" link and the display site name. */
@@ -232,6 +248,12 @@ function retailerDomainOf(hostname: string): string {
 
 /** Turns a domain into a human-readable store name, e.g. "utsavfashion.com" -> "Utsavfashion". */
 function siteNameFrom(domain: string): string {
+  if (domain.includes("azafashions")) return "Aza Fashions";
+  if (domain.includes("perniaspopupshop")) return "Pernia's Pop-Up Shop";
+  if (domain.includes("elahe")) return "Elahé";
+  if (domain.includes("ogaan")) return "Ogaan";
+  if (domain.includes("kalkifashion")) return "Kalki Fashion";
+  if (domain.includes("tatacliq")) return "Tata CLiQ";
   const base = domain.split(".").slice(0, -1).join(".") || domain;
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
