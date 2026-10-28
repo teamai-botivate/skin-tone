@@ -27,11 +27,23 @@ function toError(value: unknown): Error {
     if (value.message === '[object Event]' || value.message === '[object Object]') {
       return new Error('A browser network or resource event failed to load. A page refresh usually resolves this.');
     }
+    if (
+      value.message.includes("Cannot read properties of undefined (reading 'call')") ||
+      value.message.includes('options.factory')
+    ) {
+      return new Error('A background build or chunk update invalidated modules. Refreshing the page will load the newest code.');
+    }
     return value;
   }
   if (typeof value === 'string') {
     if (value === '[object Event]' || value === '[object Object]') {
       return new Error('A browser network or resource event failed to load. Please refresh the page.');
+    }
+    if (
+      value.includes("Cannot read properties of undefined (reading 'call')") ||
+      value.includes('options.factory')
+    ) {
+      return new Error('A background build or chunk update invalidated modules. Refreshing the page will load the newest code.');
     }
     return new Error(value);
   }
@@ -64,7 +76,10 @@ function DefaultFallback({ error, resetError }: ErrorFallbackProps) {
   const isChunkOrEventError =
     error.message.includes('ChunkLoadError') ||
     error.message.includes('Browser event error') ||
-    error.message.includes('failed to load');
+    error.message.includes('failed to load') ||
+    error.message.includes("Cannot read properties of undefined (reading 'call')") ||
+    error.message.includes('options.factory') ||
+    error.message.includes('invalidated modules');
 
   const handleReload = () => {
     if (typeof window !== 'undefined') {

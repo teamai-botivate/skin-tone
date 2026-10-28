@@ -22,9 +22,38 @@ export function Providers({ children }: { children: ReactNode }) {
       }
     };
 
+    // Intercept stale webpack chunk / options.factory runtime mismatch
+    const handleError = (event: ErrorEvent) => {
+      const msg = event?.message || (event?.error && event.error.message) || '';
+      const isWebpackMismatch =
+        msg.includes("Cannot read properties of undefined (reading 'call')") ||
+        msg.includes('options.factory') ||
+        msg.includes('ChunkLoadError') ||
+        msg.includes('Loading chunk');
+
+      if (isWebpackMismatch) {
+        console.warn('Safely intercepted stale Webpack chunk mismatch error:', msg);
+        if (event.preventDefault) event.preventDefault();
+        event.stopImmediatePropagation?.();
+        try {
+          const key = 'webpack_chunk_reload_lock';
+          const now = Date.now();
+          const last = sessionStorage.getItem(key);
+          if (!last || now - parseInt(last, 10) > 8000) {
+            sessionStorage.setItem(key, String(now));
+            window.location.reload();
+          }
+        } catch {
+          // ignore storage access errors
+        }
+      }
+    };
+
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    window.addEventListener('error', handleError, true);
     return () => {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+      window.removeEventListener('error', handleError, true);
     };
   }, []);
 
