@@ -62,6 +62,10 @@ export function buildLookEditPrompt(
           : `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting. The outfit MUST be relaxed resort wear: ${look.outfit} (breezy resort dress, linen co-ord, sandals). Strictly DO NOT render heavy traditional ethnic wear (no heavy sarees, no bridal lehengas) or corporate office suits.`
     : "";
 
+  const menEthnicIntegrity = (ctx.isMan || ctx.isBoy)
+    ? `MASCULINE STYLING & ETHNIC WEAR INTEGRITY (CRITICAL): For men and boys wearing Indian traditional, ethnic, or festive attire (such as kurtas, sherwanis, bandhgalas, kurta-pyjama, dhoti-kurta): 1) WAIST BELTS ARE STRICTLY FORBIDDEN OVER ETHNIC TUNICS: NEVER render a belt strapped, buckled, or worn over the outside waist of a kurta or sherwani! Kurtas are tunic garments that MUST drape freely, straight, and naturally over the bottoms without any external waist belt cinching them. 2) STRICTLY NO FEMININE JEWELLERY: NEVER render women's jewellery on men — strictly NO gold temple necklaces, NO dangling pendants, NO choker necklaces, NO jhumkas, and NO feminine chains hanging over the chest/collar. Men's traditional accessories must be strictly masculine (e.g. an analog watch, metallic kada bracelet, royal sherwani brooch/sarpech, or multi-strand royal pearl groom mala only for wedding grooms). 3) STRICTLY NO WOMEN'S ACCESSORIES: NEVER render women's accessories on men — strictly NO potli bags, clutches, or women's purses.`
+    : "";
+
   const parts = [
     `This is a photo of a real specific person. The ONLY thing that must never change is WHO this person is: their face, facial structure, facial features, and skin tone must stay recognizably this exact same person. Everything else — hairstyle, expression, pose, body language, clothing, makeup, background — is yours to change as much as needed to produce the best possible result. Preserving identity is not the same as preserving the original photo; you are re-styling this person for a new shoot, not lightly editing their selfie.`,
     demographicInstruction,
@@ -78,6 +82,7 @@ export function buildLookEditPrompt(
     `Accessories: ${look.accessories}`,
     garbaInstruction,
     vacationInstruction,
+    menEthnicIntegrity,
     `New hairstyle: ${look.hairstyle}. This hairstyle MUST be visibly and clearly restyled to match this description — do not leave the hair looking like the input photo. A different look calls for a different hairstyle; rendering the same hair across every look is a failure. Changing hairstyle does NOT change who this person is, so restyle it with confidence.`,
     `Makeup: ${look.makeup}`,
     profile.bodyBuild ? `Preserve their natural build (${profile.bodyBuild}) — do not alter body shape.` : "",

@@ -20,6 +20,10 @@ import {
   calculateOutfitSimilarity,
   getRetailerFromUrl,
   normalizeRetailerName,
+  getProductEffectivePrice,
+  compareProductsByPriceAscending,
+  sortProductsByPriceAscending,
+  extractDynamicLookAccessories,
 } from "../src/lib/product-search.ts";
 import {
   generateFallbackLooks,
@@ -1279,8 +1283,583 @@ assert.ok(safeRecoveredUrl.includes("searchCategory=all") || safeRecoveredUrl.in
 
 console.log("✓ Scenario 23 Passed: Product-card destinations strictly preserved, cross-retailer URLs isolated, outfit visual similarity ranked in 80–90%+ range, and unverified links recovered safely.");
 
+// -----------------------------------------------------------------------------
+// Scenario 24: Sort Prices from Low to High Across Multiple Supported Retailers
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 24] Testing Ascending Price Sorting Across Retailers...");
+
+// Test 24.1: INR Price Parsing and Safe Handling of Missing/Unverified Prices
+assert.equal(getProductEffectivePrice({ price: 1299 }), 1299, "Numeric price parsed correctly");
+assert.equal(getProductEffectivePrice({ formattedPrice: "₹499" }), 499, "Rupee symbol formatted string parsed");
+assert.equal(getProductEffectivePrice({ formattedPrice: "₹ 2,499.00" }), 2499, "Rupee string with commas and decimals parsed");
+assert.equal(getProductEffectivePrice({ formattedPrice: "Rs. 1,199" }), 1199, "Rs. abbreviation parsed");
+assert.equal(getProductEffectivePrice({ price: null, formattedPrice: undefined }), Infinity, "Missing price treated as Infinity (never 0)");
+assert.equal(getProductEffectivePrice({ price: 0 }), Infinity, "Zero price treated as missing/Infinity to avoid false cheap sorting");
+assert.equal(getProductEffectivePrice({ price: -500 }), Infinity, "Negative price treated as missing/Infinity");
+
+// Test 24.2: Ascending price sorting across multiple retailers (Amazon, Myntra, AJIO, Tata CLiQ)
+const unsortedProducts = [
+  { id: "p-tatacliq", productName: "Silk Kurta", retailer: "Tata CLiQ", formattedPrice: "₹3,499", price: 3499, isVerified: true, priceVerified: true, availability: "In Stock" },
+  { id: "p-amazon", productName: "Cotton Kurta", retailer: "Amazon", formattedPrice: "₹499", price: 499, isVerified: true, priceVerified: true, availability: "In Stock" },
+  { id: "p-missing", productName: "Unverified Kurta", retailer: "Boutique", formattedPrice: null, price: undefined, isVerified: false, priceVerified: false, availability: "In Stock" },
+  { id: "p-myntra", productName: "Printed Kurta", retailer: "Myntra", formattedPrice: "₹999", price: 999, isVerified: true, priceVerified: true, availability: "In Stock" },
+  { id: "p-ajio", productName: "Embroidered Kurta", retailer: "AJIO", formattedPrice: "₹1,499", price: 1499, isVerified: true, priceVerified: true, availability: "In Stock" },
+];
+
+const sortedResults = sortProductsByPriceAscending(unsortedProducts);
+assert.equal(sortedResults[0].id, "p-amazon", "₹499 (Amazon) must be first (cheapest)");
+assert.equal(sortedResults[1].id, "p-myntra", "₹999 (Myntra) must be second");
+assert.equal(sortedResults[2].id, "p-ajio", "₹1,499 (AJIO) must be third");
+assert.equal(sortedResults[3].id, "p-tatacliq", "₹3,499 (Tata CLiQ) must be fourth");
+assert.equal(sortedResults[4].id, "p-missing", "Unverified/missing price must be sorted to the very end, NEVER treated as ₹0");
+
+// Test 24.3: Tie-breaking on equal price (verified price first, in-stock first)
+const tieProducts = [
+  { id: "p-tie-unverified", productName: "Kurta A", price: 999, priceVerified: false, availability: "In Stock", matchScore: 85 },
+  { id: "p-tie-verified", productName: "Kurta B", price: 999, priceVerified: true, availability: "In Stock", matchScore: 85 },
+  { id: "p-tie-oos", productName: "Kurta C", price: 999, priceVerified: true, availability: "Out of Stock", matchScore: 90 },
+];
+const sortedTies = sortProductsByPriceAscending(tieProducts);
+assert.equal(sortedTies[0].id, "p-tie-verified", "Verified price ranks before unverified price on price tie");
+assert.equal(sortedTies[1].id, "p-tie-unverified", "In-stock ranks before out-of-stock");
+assert.equal(sortedTies[2].id, "p-tie-oos", "Out of stock ranks last");
+
+console.log("✓ Scenario 24 Passed: Prices sorted strictly low-to-high across all retailers, INR formatting parsed accurately, missing prices placed at end without zero-confusion.");
+
+// -----------------------------------------------------------------------------
+// Scenario 25: Discover Multiple Valid Results Across Supported Retailers
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 25] Testing Discovery Breadth Across Supported Retailers...");
+
+// Test 25.1: Benchmark candidate generation provides options across supported retailers
+const discoverySpec = {
+  category: "outfit",
+  itemTitle: "Festive Embroidered Silk Kurta Set",
+  itemSubcategory: "kurta",
+  stylingRequirement: "Gold and mustard yellow silk festive kurta set",
+  searchQuery: "Festive Embroidered Silk Kurta Set",
+  matchContext: "Festive celebration look",
+  preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Amazon", "Nykaa", "Aza Fashions"],
+  dominantColor: "Yellow",
+  targetGender: "women",
+};
+
+const discoveredCandidates = getBenchmarkCandidatesForRequirement(
+  discoverySpec,
+  "woman",
+  null,
+  "Yellow",
+);
+
+assert.ok(discoveredCandidates.length >= 3, `Must discover multiple valid options (found ${discoveredCandidates.length})`);
+const candidateRetailers = new Set(discoveredCandidates.map((c) => c.retailer));
+assert.ok(candidateRetailers.size >= 2, "Discovered candidates must span multiple supported retailers");
+
+// Test 25.2: Multi-tier price coverage (budget, mid, premium)
+const tiers = new Set(discoveredCandidates.map((c) => c.tier));
+assert.ok(tiers.has("budget") || tiers.has("mid"), "Candidates must provide budget or mid-tier options");
+assert.ok(tiers.has("premium") || tiers.has("mid"), "Candidates must provide premium or mid-tier options");
+
+console.log(`✓ Scenario 25 Passed: Discovered ${discoveredCandidates.length} valid items across ${candidateRetailers.size} retailers (${[...candidateRetailers].join(", ")}).`);
+
+// -----------------------------------------------------------------------------
+// Scenario 26: Accessory Category Fidelity & Strict Laptop Bag Exclusion
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 26] Testing Accessory Subcategory Matching & Laptop Bag Exclusion...");
+
+// Test 26.1: Sunglasses Look — MUST accept sunglasses and REJECT laptop bags / briefcases
+const sunglassesSpec = {
+  category: "accessories",
+  itemTitle: "Aviator Sunglasses",
+  itemSubcategory: "sunglasses",
+  stylingRequirement: "Classic metal frame aviator sunglasses",
+};
+
+const validSunglassesTitle = "Ray-Ban Unisex Polarized Aviator Sunglasses";
+const sunglassesCheck = checkProductConsistency(
+  validSunglassesTitle,
+  "Ray-Ban",
+  "accessories",
+  "https://www.amazon.in/Ray-Ban-Polarized-Aviator-Sunglasses/dp/B0014C5Q2K",
+  undefined,
+  "woman",
+  "sunglasses",
+);
+assert.equal(sunglassesCheck.isConsistent, true, "Ray-Ban Aviators must be accepted for sunglasses spec");
+
+const laptopBagForSunglassesCheck = checkProductConsistency(
+  "Genuine Leather Laptop Bag with Shoulder Strap",
+  "Wildcraft",
+  "accessories",
+  "https://www.myntra.com/laptop-bags/wildcraft/genuine-leather-laptop-bag/12345/buy",
+  undefined,
+  "woman",
+  "sunglasses",
+);
+assert.equal(laptopBagForSunglassesCheck.isConsistent, false, "Laptop bag must be REJECTED for a sunglasses requirement");
+
+// Test 26.2: Belt Look — MUST accept belts and REJECT laptop bags / backpacks / clutches
+const beltSpec = {
+  category: "accessories",
+  itemTitle: "Reversible Leather Belt",
+  itemSubcategory: "belt",
+  stylingRequirement: "Dark brown Italian leather reversible belt with brushed silver buckle",
+};
+
+const validBeltTitle = "Tommy Hilfiger Men Brown Textured Reversible Leather Belt";
+const beltCheck = checkProductConsistency(
+  validBeltTitle,
+  "Tommy Hilfiger",
+  "accessories",
+  "https://www.myntra.com/belts/tommy-hilfiger/men-brown-leather-belt/67890/buy",
+  undefined,
+  "man",
+  "belt",
+);
+assert.equal(beltCheck.isConsistent, true, "Leather belt must be accepted for belt spec");
+
+const laptopBagForBeltCheck = checkProductConsistency(
+  "Structured Leather Laptop Briefcase 15.6 inch",
+  "Hidesign",
+  "accessories",
+  "https://www.tatacliq.com/hidesign-leather-laptop-briefcase/p-mp00000001",
+  undefined,
+  "man",
+  "belt",
+);
+assert.equal(laptopBagForBeltCheck.isConsistent, false, "Laptop bag must be REJECTED for a belt requirement");
+
+// Test 26.3: URL Consistency rejects bag paths for belt accessories
+const beltUrlCheckWithBag = isUrlConsistentWithProduct(
+  "https://www.myntra.com/bags/laptop-bags/hidesign/1234",
+  "accessories",
+  "belt",
+);
+assert.equal(beltUrlCheckWithBag, false, "URL containing bag/laptop-bag must be inconsistent for belt spec");
+
+// Test 26.4: Scarf Look — MUST accept scarves/stoles and REJECT laptop bags
+const scarfSpec = {
+  category: "accessories",
+  itemTitle: "Silk Jacquard Stole",
+  itemSubcategory: "scarf",
+  stylingRequirement: "Fine mulberry silk woven jacquard stole",
+};
+const validScarfTitle = "Ahujasons Pure Pashmina Silk Jacquard Stole";
+const scarfCheck = checkProductConsistency(
+  validScarfTitle,
+  "Ahujasons",
+  "accessories",
+  "https://www.nykaafashion.com/ahujasons-pure-silk-stole/p/112233",
+  undefined,
+  "woman",
+  "scarf",
+);
+assert.equal(scarfCheck.isConsistent, true, "Silk stole must be accepted for scarf spec");
+
+const laptopBagForScarfCheck = checkProductConsistency(
+  "Leather Laptop Messenger Bag",
+  "Woodland",
+  "accessories",
+  "https://www.amazon.in/Woodland-Leather-Laptop-Bag/dp/B012345",
+  undefined,
+  "woman",
+  "scarf",
+);
+assert.equal(laptopBagForScarfCheck.isConsistent, false, "Laptop bag must be REJECTED for a scarf requirement");
+
+// Test 26.5: Festive Look with Clutches/Potlis — MUST accept potli and REJECT laptop briefcase
+const potliSpec = {
+  category: "accessories",
+  itemTitle: "Embroidered Raw Silk Potli Bag",
+  itemSubcategory: "potli",
+  stylingRequirement: "Zardozi embroidered raw silk festive potli bag with pearl drawstring",
+};
+const validPotliTitle = "Raw Silk Pearl Embellished Festive Potli Bag";
+const potliCheck = checkProductConsistency(
+  validPotliTitle,
+  "Fabindia",
+  "accessories",
+  "https://www.fabindia.com/pearl-potli-bag/p/998877",
+  undefined,
+  "woman",
+  "potli",
+);
+assert.equal(potliCheck.isConsistent, true, "Potli bag must be accepted for potli spec");
+
+const laptopBagForPotliCheck = checkProductConsistency(
+  "Executive 16 Inch Laptop Briefcase",
+  "Samsonite",
+  "accessories",
+  "https://www.amazon.in/Samsonite-Executive-Laptop-Bag/dp/B07890",
+  undefined,
+  "woman",
+  "potli",
+);
+assert.equal(laptopBagForPotliCheck.isConsistent, false, "Laptop briefcase must be REJECTED for festive potli spec");
+
+// Test 26.6: Explicit Laptop Bag Look — ONLY allowed when explicitly specified
+const explicitLaptopSpec = {
+  category: "accessories",
+  itemTitle: "Structured Leather Laptop Bag",
+  itemSubcategory: "laptop_bag",
+  stylingRequirement: "Formal leather laptop bag for work tech essentials",
+};
+const explicitLaptopCheck = checkProductConsistency(
+  "Hidesign Icon Leather Laptop Bag 15.6 Inch",
+  "Hidesign",
+  "accessories",
+  "https://www.tatacliq.com/hidesign-leather-laptop-bag/p/554433",
+  undefined,
+  "woman",
+  "laptop_bag",
+);
+assert.equal(explicitLaptopCheck.isConsistent, true, "Laptop bag is accepted when the look explicitly calls for a laptop bag");
+
+console.log("✓ Scenario 26 Passed: Accessory categories matched with high fidelity; laptop bags strictly excluded from sunglasses, belts, scarves, and potlis.");
+
+// -----------------------------------------------------------------------------
+// Scenario 27: Excluding Unrelated Products & Invalid Destinations
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 27] Testing Exclusion of Unrelated Categories & Invalid Destinations...");
+
+// Test 27.1: Category boundary enforcement in checkProductConsistency
+const footwearForAccessory = checkProductConsistency(
+  "Puma Men Running Shoes",
+  "Puma",
+  "accessories",
+  "https://www.amazon.in/Puma-Men-Running-Shoes/dp/B01234",
+  undefined,
+  "man",
+  "belt",
+);
+assert.equal(footwearForAccessory.isConsistent, false, "Footwear product must be REJECTED when category is accessories");
+
+const bagForFootwear = checkProductConsistency(
+  "Leather Duffel Bag Weekend Travel",
+  "Wildcraft",
+  "footwear",
+  "https://www.myntra.com/bags/wildcraft/duffel/p/123",
+  undefined,
+  "man",
+  "shoes",
+);
+assert.equal(bagForFootwear.isConsistent, false, "Bag must be REJECTED when category is footwear");
+
+const makeupForJewellery = checkProductConsistency(
+  "Matte Lip Crayon Longstay Lipstick",
+  "Sugar",
+  "jewellery",
+  "https://www.nykaa.com/sugar-matte-lip-crayon/p/999",
+  undefined,
+  "woman",
+  "earrings",
+);
+assert.equal(makeupForJewellery.isConsistent, false, "Lipstick must be REJECTED when category is jewellery");
+
+// Test 27.2: URL Category Path Consistency Check
+const badFootwearUrl = isUrlConsistentWithProduct(
+  "https://www.myntra.com/handbags/lavie/tote/123",
+  "footwear",
+);
+assert.equal(badFootwearUrl, false, "Handbag URL must be inconsistent for footwear category");
+
+const badJewelleryUrl = isUrlConsistentWithProduct(
+  "https://www.tatacliq.com/footwear/formal-shoes/p-1234",
+  "jewellery",
+);
+assert.equal(badJewelleryUrl, false, "Footwear URL must be inconsistent for jewellery category");
+
+console.log("✓ Scenario 27 Passed: Cross-category mismatches and invalid URL paths strictly detected and excluded.");
+
+// -----------------------------------------------------------------------------
+// Scenario 28: Preserving Existing Retailers & Graceful Empty Fallback State
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 28] Testing All Configured Retailers & Unavailable State Handling...");
+
+// Test 28.1: Search URL generation for all major configured retailers
+const testStores = [
+  { retailer: "Amazon", query: "Formal Shoes", expectedDomain: "amazon.in" },
+  { retailer: "Myntra", query: "Cotton Kurta", expectedDomain: "myntra.com" },
+  { retailer: "AJIO", query: "Casual Shirt", expectedDomain: "ajio.com" },
+  { retailer: "Tata CLiQ", query: "Leather Belt", expectedDomain: "tatacliq.com" },
+  { retailer: "Nykaa", query: "Matte Lipstick", expectedDomain: "nykaa.com" },
+  { retailer: "H&M", query: "Linen Trousers", expectedDomain: "hm.com" },
+  { retailer: "Zara", query: "Blazer", expectedDomain: "zara.com" },
+  { retailer: "Aza Fashions", query: "Designer Lehenga", expectedDomain: "azafashions.com" },
+  { retailer: "Pernia's Pop-Up Shop", query: "Anarkali Suit", expectedDomain: "perniaspopupshop.com" },
+  { retailer: "Elahé", query: "Festive Kurti", expectedDomain: "elahe.in" },
+];
+
+for (const store of testStores) {
+  const url = buildRetailerSearchUrl(store.retailer, {
+    productName: store.query,
+    gender: "woman",
+  });
+  assert.ok(url.includes(store.expectedDomain), `${store.retailer} URL must target ${store.expectedDomain}`);
+}
+
+// Test 28.2: If an accessory category has zero matching products, return empty array rather than unrelated laptop bags
+const emptySubcatSpec = {
+  category: "accessories",
+  itemTitle: "Vintage Pocket Watch with Gold Chain",
+  itemSubcategory: "pocket_watch",
+  stylingRequirement: "Antique heirloom pocket watch",
+  searchQuery: "Vintage Pocket Watch with Gold Chain",
+  preferredRetailers: ["Tata CLiQ"],
+};
+const emptyCandidates = getBenchmarkCandidatesForRequirement(
+  emptySubcatSpec,
+  "man",
+  null,
+  "Gold",
+);
+assert.deepEqual(emptyCandidates, [], "Unknown/unmatched accessory must return empty candidates, NEVER unrelated laptop bags");
+
+console.log("✓ Scenario 28 Passed: All 10 configured retailers generate authentic URLs; empty/unavailable accessory state handled cleanly without fake or unrelated products.");
+
+// -----------------------------------------------------------------------------
+// Scenario 29: Men's Festive Accessories — Strictly Zero Potlis or Clutches
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 29] Testing Men's Festive Accessories: Never Suggest Potli Bags or Clutches...");
+
+const menFestiveProfile = {
+  name: "Rohan",
+  pronouns: "he/him/men",
+  ageGroup: "25–34",
+  appearance: { skinTone: "Medium", undertone: "Warm", confidence: 95, contrast: "Medium" },
+  style: ["Traditional", "Royal & Regal"],
+  colorsLove: ["Pink"],
+  colorsAvoid: [],
+  restrictions: [],
+  occasion: "Wedding Sangeet / Festive",
+  impression: ["Regal", "Festive"],
+  budget: "₹5K–₹15K",
+};
+
+const menFallbackLooks = generateFallbackLooks(menFestiveProfile);
+assert.ok(menFallbackLooks.length >= 5, "Must generate 5 complete fallback looks for men's festive profile");
+
+for (const look of menFallbackLooks) {
+  assert.ok(!look.accessories.toLowerCase().includes("potli"), `Men's look '${look.title}' accessories must NEVER mention potli`);
+  assert.ok(!look.accessories.toLowerCase().includes("clutch"), `Men's look '${look.title}' accessories must NEVER mention clutch`);
+  assert.ok(!look.accessories.toLowerCase().includes("purse"), `Men's look '${look.title}' accessories must NEVER mention purse`);
+  assert.ok(!look.jewellery.toLowerCase().includes("choker"), `Men's look '${look.title}' jewellery must NEVER mention choker`);
+  assert.ok(!look.jewellery.toLowerCase().includes("jhumka"), `Men's look '${look.title}' jewellery must NEVER mention jhumka`);
+}
+
+const menLook = menFallbackLooks[0];
+const menSpecs = planRequirementSpecs(menLook, menFestiveProfile, "man", [
+  "outfit",
+  "jewellery",
+  "footwear",
+  "accessories",
+]);
+
+const menAccessorySpec = menSpecs.find((s) => s.category === "accessories");
+assert.ok(menAccessorySpec, "Men's festive look must plan an accessory spec");
+assert.ok(!menAccessorySpec.itemTitle.toLowerCase().includes("potli"), "Men's accessory title must NEVER be a potli bag");
+assert.ok(!menAccessorySpec.itemTitle.toLowerCase().includes("clutch"), "Men's accessory title must NEVER be an evening clutch");
+assert.ok(
+  menAccessorySpec.itemTitle.toLowerCase().includes("pocket square") ||
+    menAccessorySpec.itemTitle.toLowerCase().includes("brooch") ||
+    menAccessorySpec.itemTitle.toLowerCase().includes("stole") ||
+    menAccessorySpec.itemTitle.toLowerCase().includes("sunglasses"),
+  `Men's festive accessory must be pocket square, brooch, stole, or sunglasses, got: ${menAccessorySpec.itemTitle}`
+);
+
+// Benchmark candidates check: potli subcat for man must return empty or non-potli
+const potliCandidatesForMan = getBenchmarkCandidatesForRequirement(
+  {
+    category: "accessories",
+    itemTitle: "Potli Bag",
+    itemSubcategory: "potli",
+    stylingRequirement: "Festive embroidered potli bag",
+    searchQuery: "men potli bag",
+    preferredRetailers: ["Myntra"],
+  },
+  "man",
+  null,
+  "Pink",
+);
+assert.equal(
+  potliCandidatesForMan.length,
+  0,
+  "Benchmark candidate query for potli on adult man must NEVER return feminine potlis",
+);
+
+console.log("✓ Scenario 29 Passed: Men's festive accessories strictly exclude potli bags, clutches, and purses; recommend pocket squares and brooches instead.");
+
+// -----------------------------------------------------------------------------
+// Scenario 30: Men's Ethnic Wear — Belts Strictly Forbidden Over Kurtas
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 30] Testing Men's Ethnic Wear: Belts Strictly Forbidden Over Kurtas...");
+
+const kurtaLookWithAccidentalBelt = {
+  id: "test-kurta-belt",
+  title: "Festive Coral Kurta",
+  note: "Men's coral festive kurta pyjama set",
+  outfit: "Men's Coral Festive Linen Kurta with White Pyjama",
+  outfitColor: "Coral and White",
+  jewellery: "Analog Watch",
+  hairstyle: "Neat side part",
+  makeup: "None",
+  footwear: "Ethnic Mojaris",
+  accessories: "Classic Leather Belt",
+  reasoning: ["Traditional comfort."],
+  confidence: 90,
+  applicableCategories: ["outfit", "footwear", "accessories"],
+  pieces: [
+    { category: "Top", name: "Men Coral Linen Kurta", detail: "Mandarin collar long tunic." },
+    { category: "Bottom", name: "White Cotton Pyjama", detail: "Traditional elasticated pyjama." },
+    { category: "Accessories", name: "Classic Leather Belt", detail: "Buckle belt." },
+    { category: "Shoe", name: "Leather Mojaris", detail: "Handcrafted." },
+  ],
+};
+
+const kurtaAccs = extractDynamicLookAccessories(kurtaLookWithAccidentalBelt, "man");
+const hasBelt = kurtaAccs.some((a) => a.type === "belt");
+assert.equal(hasBelt, false, "Belt must be completely excluded from accessories when a man wears an ethnic kurta/sherwani");
+
+const kurtaSpecs = planRequirementSpecs(kurtaLookWithAccidentalBelt, menFestiveProfile, "man", [
+  "outfit",
+  "accessories",
+]);
+const kurtaBeltSpec = kurtaSpecs.find((s) => s.category === "accessories");
+assert.ok(kurtaBeltSpec, "Accessories spec must be planned");
+assert.ok(
+  !kurtaBeltSpec.stylingRequirement.toLowerCase().includes("waist belt"),
+  "Kurta accessories requirement must NEVER suggest a waist belt cinched over the kurta",
+);
+assert.ok(
+  kurtaBeltSpec.stylingRequirement.toLowerCase().includes("pocket square") ||
+    kurtaBeltSpec.stylingRequirement.toLowerCase().includes("brooch"),
+  "Kurta accessories requirement should substitute with pocket square or brooch pin",
+);
+
+console.log("✓ Scenario 30 Passed: Belts are strictly excluded over Indian kurtas and sherwanis for men; substituted with pocket squares and brooches.");
+
+// -----------------------------------------------------------------------------
+// Scenario 31: Men's Jewellery — Strictly Zero Women's Temple Necklaces / Chokers / Jhumkas
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 31] Testing Men's Jewellery: Strictly Zero Temple Necklaces, Chokers, or Jhumkas...");
+
+const menJewellerySpecs = planRequirementSpecs(
+  {
+    id: "test-sherwani-jewellery",
+    title: "Royal Sherwani Look",
+    note: "Men's raw silk royal wedding sherwani",
+    outfit: "Men's Dusty Pink Zardozi Royal Wedding Sherwani with Churidar",
+    outfitColor: "Dusty Pink and Antique Gold",
+    jewellery: "Traditional Jewellery",
+    hairstyle: "Neat groomed hair",
+    makeup: "Clean natural grooming",
+    footwear: "Royal Mojaris",
+    accessories: "Silk Pocket Square",
+    reasoning: ["Regal wedding aesthetic."],
+    confidence: 95,
+    applicableCategories: ["outfit", "jewellery"],
+  },
+  menFestiveProfile,
+  "man",
+  ["outfit", "jewellery"],
+);
+
+const menJewelleryItem = menJewellerySpecs.find((s) => s.category === "jewellery");
+assert.ok(menJewelleryItem, "Men's look must plan jewellery when category requested");
+assert.ok(!menJewelleryItem.itemTitle.toLowerCase().includes("jhumka"), "Men's jewellery must NEVER be jhumkas");
+assert.ok(!menJewelleryItem.stylingRequirement.toLowerCase().includes("choker"), "Men's jewellery must NEVER be a choker necklace");
+assert.ok(!menJewelleryItem.stylingRequirement.toLowerCase().includes("temple choker"), "Men's jewellery must NEVER be a temple choker");
+assert.ok(
+  menJewelleryItem.itemTitle.toLowerCase().includes("kada") ||
+    menJewelleryItem.itemTitle.toLowerCase().includes("watch"),
+  `Men's traditional jewellery must be kada bracelet or watch, got: ${menJewelleryItem.itemTitle}`,
+);
+
+console.log("✓ Scenario 31 Passed: Men's jewellery strictly excludes women's temple necklaces, chokers, and jhumkas; recommends masculine kada bracelets and watches.");
+
+// -----------------------------------------------------------------------------
+// Scenario 32: Demographic Product Verification Filtering for Men
+// -----------------------------------------------------------------------------
+console.log("\n[Scenario 32] Testing Demographic Product Consistency Enforcement for Men...");
+
+// Test 32.1: Reject potli bag for men
+const potliCheckForMen = checkProductConsistency(
+  "Anekaant Pink Velvet Embroidered Drawstring Potli Bag with Pearl Handle",
+  "Anekaant",
+  "accessories",
+  "https://www.myntra.com/clutches/anekaant/velvet-potli/123",
+  undefined,
+  "man",
+  "other_accessory",
+);
+assert.equal(potliCheckForMen.isConsistent, false, "Feminine potli bag must be REJECTED for men");
+
+// Test 32.2: Reject evening clutch for men
+const clutchCheckForMen = checkProductConsistency(
+  "Metro Metallic Shimmer Evening Box Clutch with Chain Strap",
+  "Metro",
+  "accessories",
+  "https://www.myntra.com/clutches/metro-evening-box-clutch/456",
+  undefined,
+  "man",
+  "other_accessory",
+);
+assert.equal(clutchCheckForMen.isConsistent, false, "Evening clutch must be REJECTED for men");
+
+// Test 32.3: Reject women's choker necklace for men
+const chokerCheckForMen = checkProductConsistency(
+  "Zaveri Pearls Gold-Plated Kundan & Temple Choker Necklace Set with Earrings",
+  "Zaveri Pearls",
+  "jewellery",
+  "https://www.myntra.com/jewellery/zaveri-pearls-choker-set/789",
+  undefined,
+  "man",
+  "necklace",
+);
+assert.equal(chokerCheckForMen.isConsistent, false, "Temple choker necklace must be REJECTED for men");
+
+// Test 32.4: Reject jhumkas for men
+const jhumkaCheckForMen = checkProductConsistency(
+  "Priyaasi Oxidised German Silver Tribal Dome Jhumkas",
+  "Priyaasi",
+  "jewellery",
+  "https://www.ajio.com/priyaasi-oxidised-jhumkas/p/999",
+  undefined,
+  "man",
+  "earrings",
+);
+assert.equal(jhumkaCheckForMen.isConsistent, false, "Jhumka earrings must be REJECTED for men");
+
+// Test 32.5: Accept masculine kada for men
+const kadaCheckForMen = checkProductConsistency(
+  "Titan Men Solid Stainless Steel Kada Bracelet",
+  "Titan",
+  "jewellery",
+  "https://www.tatacliq.com/titan-men-stainless-steel-kada/p/111",
+  undefined,
+  "man",
+  "bracelet",
+);
+assert.equal(kadaCheckForMen.isConsistent, true, "Masculine kada bracelet must be ACCEPTED for men");
+
+// Test 32.6: Accept pocket square / brooch set for men
+const broochCheckForMen = checkProductConsistency(
+  "Vastramay Men Traditional Royal Brooch & Silk Pocket Square",
+  "Vastramay",
+  "accessories",
+  "https://www.myntra.com/men-brooch-pocket-square/p/222",
+  undefined,
+  "man",
+  "other_accessory",
+);
+assert.equal(broochCheckForMen.isConsistent, true, "Men's royal brooch and pocket square must be ACCEPTED for men");
+
+console.log("✓ Scenario 32 Passed: checkProductConsistency strictly rejects feminine potlis, clutches, chokers, and jhumkas for men, while approving masculine kadas, watches, and brooches.");
+
 console.log("\n======================================================================");
-console.log("ALL 23 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
+console.log("ALL 32 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
+
+
 
 

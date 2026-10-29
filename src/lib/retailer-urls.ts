@@ -16,6 +16,7 @@ export const APPROVED_RETAILERS = [
   "nykaafashion.com",
   "ajio.com",
   "amazon.in",
+  "amazon.com",
   "tatacliq.com",
   "hm.com",
   "zara.com",
@@ -220,8 +221,24 @@ export function buildRetailerSearchUrl(
     rawTerms.push("shoes");
   } else if (params.category === "jewellery" && !/\b(jewellery|jewelry|earrings?|jhumkas?|necklace|choker|pendant|bracelet|bangle|kada|ring|watch)\b/i.test(currentTokensLower)) {
     rawTerms.push("jewellery");
-  } else if (params.category === "accessories" && !/\b(bag|bags|potli|clutch|tote|handbag|purse|sunglasses?|belt)\b/i.test(currentTokensLower)) {
-    rawTerms.push("bag");
+  } else if (params.category === "accessories") {
+    const sub = (params.subcategory || "").toLowerCase();
+    if (sub.includes("belt") && !currentTokensLower.includes("belt")) {
+      rawTerms.push("belt");
+    } else if ((sub.includes("sunglass") || sub.includes("eyewear")) && !currentTokensLower.includes("sunglass")) {
+      rawTerms.push("sunglasses");
+    } else if ((sub.includes("scarf") || sub.includes("stole") || sub.includes("shawl")) && !currentTokensLower.includes("scarf") && !currentTokensLower.includes("stole")) {
+      rawTerms.push("scarf");
+    } else if (sub.includes("clutch") && !currentTokensLower.includes("clutch")) {
+      rawTerms.push("clutch");
+    } else if (sub.includes("potli") && !currentTokensLower.includes("potli")) {
+      rawTerms.push("potli");
+    } else if ((sub.includes("hat") || sub.includes("cap")) && !currentTokensLower.includes("cap") && !currentTokensLower.includes("hat")) {
+      rawTerms.push("cap");
+    } else if (!/\b(bag|bags|potli|clutch|tote|handbag|purse|sunglasses?|belt|scarf|stole|shawl|cap|hat)\b/i.test(currentTokensLower)) {
+      if (sub && sub !== "accessories") rawTerms.push(sub);
+      else rawTerms.push("accessories");
+    }
   }
 
   // Deduplicate tokens while preserving order
@@ -626,17 +643,25 @@ export function determineUrlType(urlStr: string): "exact_product" | "search_resu
  */
 export function isUrlConsistentWithProduct(
   urlStr: string,
-  product: {
-    productName?: string;
-    brand?: string;
-    category?: string;
-    subcategory?: string;
-    retailer?: string;
-  },
-  persona?: string,
+  productOrCategory:
+    | {
+        productName?: string;
+        brand?: string;
+        category?: string;
+        subcategory?: string;
+        retailer?: string;
+      }
+    | string,
+  personaOrSubcategory?: string,
 ): boolean {
   if (!urlStr || typeof urlStr !== "string") return false;
   try {
+    const product =
+      typeof productOrCategory === "string"
+        ? { category: productOrCategory, subcategory: personaOrSubcategory }
+        : productOrCategory;
+    const persona = typeof productOrCategory === "string" ? undefined : personaOrSubcategory;
+
     const parsed = new URL(urlStr);
     const host = parsed.hostname.toLowerCase();
     const fullUrlText = `${parsed.pathname} ${parsed.search}`.toLowerCase();
@@ -683,11 +708,11 @@ export function isUrlConsistentWithProduct(
     // 2. Category consistency check
     const cat = (product.category || "").toLowerCase();
     if (cat === "footwear") {
-      if (/(?:\/clothing\/|\/dresses\/|\/sarees\/|\/kurtas\/|\/shirts\/|\/jeans\/|\/t-shirts\/|\/makeup\/|\/beauty\/)/i.test(fullUrlText)) {
+      if (/(?:\/clothing\/|\/dresses\/|\/sarees\/|\/kurtas\/|\/shirts\/|\/jeans\/|\/t-shirts\/|\/makeup\/|\/beauty\/|\/bags\/|\/handbags?\/|\/backpacks?\/|\/luggage\/|\/jewellery\/|\/jewels?\/)/i.test(fullUrlText)) {
         return false;
       }
     } else if (cat === "outfit") {
-      if (/(?:\/flats\/|\/heels\/|\/footwear\/|\/shoes\/|\/sandals\/|\/makeup\/|\/lipstick\/)/i.test(fullUrlText)) {
+      if (/(?:\/flats\/|\/heels\/|\/footwear\/|\/shoes\/|\/sandals\/|\/makeup\/|\/lipstick\/|\/jewellery\/)/i.test(fullUrlText)) {
         return false;
       }
       const sub = (product.subcategory || "").toLowerCase();
@@ -697,14 +722,28 @@ export function isUrlConsistentWithProduct(
         }
       }
     } else if (cat === "makeup") {
-      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/shirts\/)/i.test(fullUrlText)) {
+      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/shirts\/|\/bags\/|\/handbags?\/|\/jewellery\/)/i.test(fullUrlText)) {
         return false;
       }
       if (host.includes("nykaafashion.com")) {
         return false;
       }
     } else if (cat === "jewellery") {
-      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/shirts\/|\/lipstick\/)/i.test(fullUrlText)) {
+      if (/(?:\/shoes\/|\/footwear\/|\/formal-shoes\/|\/sandals\/|\/boots\/|\/clothing\/|\/dresses\/|\/shirts\/|\/lipstick\/|\/bags\/|\/handbags?\/)/i.test(fullUrlText)) {
+        return false;
+      }
+    } else if (cat === "accessories") {
+      if (/(?:\/shoes\/|\/footwear\/|\/clothing\/|\/dresses\/|\/sarees\/|\/kurtas\/|\/shirts\/|\/jeans\/|\/t-shirts\/|\/makeup\/|\/beauty\/)/i.test(fullUrlText)) {
+        return false;
+      }
+      const sub = (product.subcategory || "").toLowerCase();
+      if (sub.includes("belt") && /(?:\/bags\/|\/laptop-bags?\/|\/backpacks?\/|\/handbags?\/|\/totes?\/|laptop)/i.test(fullUrlText)) {
+        return false;
+      }
+      if (sub.includes("sunglass") && !/sunglass|eyewear|shades/i.test(fullUrlText) && /(?:bag|belt|backpack)/i.test(fullUrlText)) {
+        return false;
+      }
+      if (!sub.includes("laptop") && /(?:laptop-bags?|laptop_bags?|briefcase|messenger-bag)/i.test(fullUrlText)) {
         return false;
       }
     }
@@ -792,3 +831,85 @@ export function getSafeProductUrl(
     color: product.color,
   });
 }
+
+/**
+ * Safely extracts an effective numerical price in INR from a product.
+ * Returns null if price is missing, 0, NaN, or unverified/invalid.
+ * Handles Indian Rupee formatting strings (e.g. "₹1,499", "Rs. 799", "₹ 24,999.00").
+ * Missing, zero, or unverified prices return Infinity so they are safely sorted last and never treated as zero.
+ */
+export function getProductEffectivePrice(product: {
+  price?: number | null;
+  formattedPrice?: string | null;
+}): number {
+  if (typeof product.price === "number" && !isNaN(product.price) && product.price > 0) {
+    return Math.round(product.price);
+  }
+  if (typeof product.formattedPrice === "string" && product.formattedPrice.trim().length > 0) {
+    // Strip currency symbols and abbreviations first (including Rs., INR, ₹)
+    let cleaned = product.formattedPrice
+      .replace(/₹|inr|rs\.?|mrp|price/gi, "")
+      .trim();
+
+    // Remove commas used in Indian/international currency formatting (e.g. 1,499 or 24,999)
+    cleaned = cleaned.replace(/,/g, "");
+
+    // Extract numeric portion (handles integer and decimal prices)
+    const match = cleaned.match(/\d+(?:\.\d+)?/);
+    if (match) {
+      const parsed = parseFloat(match[0]);
+      if (!isNaN(parsed) && parsed > 0) {
+        return Math.round(parsed);
+      }
+    }
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Compares two products by price in ascending order (cheapest to most expensive).
+ * Missing, unverified, or invalid prices are safely sorted to the END (treated as Infinity, never 0).
+ * Consistent across all retailers.
+ */
+export function compareProductsByPriceAscending<T extends {
+  price?: number | null;
+  formattedPrice?: string | null;
+  priceVerified?: boolean;
+  availability?: string | null;
+  matchScore?: number | null;
+}>(a: T, b: T): number {
+  const valA = getProductEffectivePrice(a);
+  const valB = getProductEffectivePrice(b);
+
+  if (valA !== valB) {
+    return valA - valB;
+  }
+
+  // Tie-breaker for identical prices or both missing:
+  // 1. In-stock products first (never prioritize an out-of-stock item over an in-stock one)
+  const aInStock = a.availability !== "Out of Stock";
+  const bInStock = b.availability !== "Out of Stock";
+  if (aInStock && !bInStock) return -1;
+  if (!aInStock && bInStock) return 1;
+
+  // 2. Verified prices first
+  if (a.priceVerified && !b.priceVerified) return -1;
+  if (!a.priceVerified && b.priceVerified) return 1;
+
+  // 3. Higher match score
+  return (b.matchScore || 0) - (a.matchScore || 0);
+}
+
+/**
+ * Sorts an array of products in ascending order of their price (low to high).
+ */
+export function sortProductsByPriceAscending<T extends {
+  price?: number | null;
+  formattedPrice?: string | null;
+  priceVerified?: boolean;
+  availability?: string | null;
+  matchScore?: number | null;
+}>(products: T[]): T[] {
+  return [...products].sort(compareProductsByPriceAscending);
+}
+

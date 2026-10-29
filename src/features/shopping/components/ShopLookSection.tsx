@@ -29,6 +29,7 @@ import type {
 import {
   getSafeProductUrl,
   isValidProductUrl,
+  compareProductsByPriceAscending,
 } from '@/lib/retailer-urls';
 
 
@@ -116,8 +117,8 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [look.id, look.title, look.outfit, profile.occasion]);
 
-  // Filter products by selected tab
-  const filteredProducts =
+  // Filter products by selected tab, consistently sorted in ascending order of price (low to high)
+  const filteredProducts = (
     activeCategory === 'all'
       ? products
       : products.filter((p) => {
@@ -125,10 +126,11 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
           return p.category === 'footwear' || p.category === 'accessories';
         }
         return p.category === activeCategory;
-      });
+      })
+  ).slice().sort(compareProductsByPriceAscending);
 
-  // Filter groups by selected tab
-  const filteredGroups =
+  // Filter groups by selected tab, ensuring products in each group are sorted by price low to high
+  const filteredGroups = (
     activeCategory === 'all'
       ? groups
       : groups.filter((g) => {
@@ -136,7 +138,11 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
           return g.category === 'footwear' || g.category === 'accessories';
         }
         return g.category === activeCategory;
-      });
+      })
+  ).map((group) => ({
+    ...group,
+    products: group.products.slice().sort(compareProductsByPriceAscending),
+  }));
 
   // Calculate available categories for tabs
   const availableTabs: { id: string; label: string; icon: string }[] = [

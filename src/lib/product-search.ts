@@ -86,6 +86,9 @@ import {
   isUrlConsistentWithProduct,
   getRetailerFromUrl,
   normalizeRetailerName,
+  getProductEffectivePrice,
+  compareProductsByPriceAscending,
+  sortProductsByPriceAscending,
 } from "./retailer-urls";
 
 export {
@@ -100,6 +103,9 @@ export {
   isUrlConsistentWithProduct,
   getRetailerFromUrl,
   normalizeRetailerName,
+  getProductEffectivePrice,
+  compareProductsByPriceAscending,
+  sortProductsByPriceAscending,
 };
 
 
@@ -463,10 +469,16 @@ export function checkProductConsistency(
     }
   }
 
+  let urlPath = "";
+  try {
+    urlPath = new URL(urlStr).pathname.toLowerCase();
+  } catch {}
+  const productAndPathText = `${cleanName} ${urlPath}`;
+
   // 5. OUTFIT (Must strictly be apparel/clothing - NEVER footwear, bags, jewellery, or makeup)
   if (category === "outfit") {
     const isFootwear = /\b(shoe|shoes|heel|heels|heeled|sandal|sandals|sneaker|sneakers|boot|boots|loafer|loafers|stiletto|pumps|footwear|slipper|slippers|mule|mules|flats)\b/i.test(
-      fullCheckText,
+      productAndPathText,
     );
     if (isFootwear) {
       return {
@@ -476,7 +488,7 @@ export function checkProductConsistency(
     }
 
     const isBag = /\b(bag|bags|handbag|handbags|clutch|clutches|tote|totes|purse|purses|sling\s*bag|backpack|wallet|satchel)\b/i.test(
-      fullCheckText,
+      productAndPathText,
     );
     if (isBag) {
       return {
@@ -486,7 +498,7 @@ export function checkProductConsistency(
     }
 
     const isCosmeticOrJewel = /\b(lipstick|foundation|concealer|compact|powder|mascara|eyeliner|kajal|blush|earring|earrings|necklace|necklaces|choker|bangle|bangles|bracelet|bracelets)\b/i.test(
-      fullCheckText,
+      productAndPathText,
     );
     if (isCosmeticOrJewel) {
       return {
@@ -498,7 +510,7 @@ export function checkProductConsistency(
 
   // 6. FOOTWEAR (Must strictly be footwear - NEVER clothing, bags, cosmetics, jewellery, or electronics)
   if (category === "footwear") {
-    const isElectronics = /\b(airdopes|earbuds|earphones|headphones|boat|noise|smartwatch|watch|speakers?|bluetooth)\b/i.test(fullCheckText);
+    const isElectronics = /\b(airdopes|earbuds|earphones|headphones|boat|noise|smartwatch|watch|speakers?|bluetooth)\b/i.test(productAndPathText);
     if (isElectronics) {
       return {
         isConsistent: false,
@@ -506,8 +518,8 @@ export function checkProductConsistency(
       };
     }
 
-    const isApparelOrBag = /\b(dress|dresses|gown|gowns|saree|sari|saris|sarees|kurta|kurtas|kurti|kurtis|lehenga|blazer|blazers|suit|suits|t-shirt|tshirt|shirt|shirts|jeans|trouser|trousers|pant|pants|skirt|skirts|jumpsuit|co-ord|coord|handbag|handbags|tote|totes|clutch|purse|purses|backpack|lipstick|foundation|earring|necklace|bracelet)\b/i.test(
-      fullCheckText,
+    const isApparelOrBag = /\b(dress|dresses|gown|gowns|saree|sari|saris|sarees|kurta|kurtas|kurti|kurtis|lehenga|blazer|blazers|suit|suits|t-shirt|tshirt|shirt|shirts|jeans|trouser|trousers|pant|pants|skirt|skirts|jumpsuit|co-ord|coord|bag|bags|duffel|duffle|luggage|briefcase|handbag|handbags|tote|totes|clutch|purse|purses|backpack|lipstick|foundation|earring|necklace|bracelet)\b/i.test(
+      productAndPathText,
     );
     if (isApparelOrBag) {
       return {
@@ -565,10 +577,10 @@ export function checkProductConsistency(
     }
   }
 
-  // 7. ACCESSORIES (Bags, totes, clutches, belts, scarves - NEVER clothing, shoes, or makeup)
+  // 7. ACCESSORIES: Subcategory & Identity Consistency
   if (category === "accessories") {
     const isApparelOrShoeOrMakeup = /\b(dress|gown|saree|sari|kurta|kurti|lehenga|blazer|suit|t-shirt|tshirt|jeans|trouser|trousers|pant|pants|skirt|jumpsuit|shoe|shoes|heel|heels|sandal|sandals|sneaker|sneakers|boot|boots|loafer|loafers|footwear|lipstick|foundation|concealer|compact|powder|mascara|eyeliner)\b/i.test(
-      fullCheckText,
+      productAndPathText,
     );
     if (isApparelOrShoeOrMakeup) {
       return {
@@ -576,13 +588,92 @@ export function checkProductConsistency(
         reason: `Category is Accessories, but item is clothing, footwear, or makeup: ${productName} (${urlStr})`,
       };
     }
+
+    // 7a. Belt Subcategory Matching
+    if (subcat.includes("belt") || cleanName.includes("belt")) {
+      const isBelt = /\b(belt|belts|kamarbandh|waist\s*belt)\b/i.test(cleanName);
+      const isBagOrLuggage = /\b(bag|bags|tote|purse|clutch|backpack|laptop|briefcase|messenger|satchel|wallet)\b/i.test(cleanName);
+      if (!isBelt || isBagOrLuggage) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is Belt, but product is not a belt: ${productName} (${urlStr})`,
+        };
+      }
+    }
+
+    // 7b. Sunglasses / Eyewear Subcategory Matching
+    if (subcat.includes("sunglass") || subcat.includes("eyewear") || cleanName.includes("sunglass") || cleanName.includes("shades")) {
+      const isSunglasses = /\b(sunglasses?|shades?|eyewear|aviators?|wayfarers?)\b/i.test(cleanName);
+      const isBagOrBelt = /\b(bag|bags|tote|purse|clutch|backpack|laptop|belt)\b/i.test(cleanName);
+      if (!isSunglasses || isBagOrBelt) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is Sunglasses, but product is not eyewear: ${productName} (${urlStr})`,
+        };
+      }
+    }
+
+    // 7c. Scarf / Stole / Shawl Subcategory Matching
+    if (subcat.includes("scarf") || subcat.includes("stole") || subcat.includes("shawl") || subcat.includes("dupatta")) {
+      const isScarf = /\b(scarf|scarves|stole|stoles|shawl|shawls|dupatta|wrap|muffler)\b/i.test(cleanName);
+      const isBagOrBelt = /\b(bag|bags|tote|purse|clutch|backpack|laptop|belt)\b/i.test(cleanName);
+      if (!isScarf || isBagOrBelt) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is Scarf/Stole, but product is not a scarf: ${productName} (${urlStr})`,
+        };
+      }
+    }
+
+    // 7d. Clutch / Potli Subcategory Matching
+    if (subcat.includes("clutch") || subcat.includes("potli") || cleanName.includes("clutch") || cleanName.includes("potli")) {
+      const isClutchOrPotli = /\b(clutch|clutches|potli|potlis|minaudi[eè]re|evening\s*bag)\b/i.test(cleanName);
+      const isLaptopOrBackpack = /\b(laptop|briefcase|messenger|backpack|duffle|office\s*bag|work\s*bag)\b/i.test(cleanName);
+      if (!isClutchOrPotli || isLaptopOrBackpack) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is Clutch / Potli, but product is a laptop bag or large luggage: ${productName} (${urlStr})`,
+        };
+      }
+    }
+
+    // 7e. Laptop Bag vs Other Accessories: Reject laptop bags if look did not request one
+    const isExplicitLaptopRequirement =
+      subcat.includes("laptop") ||
+      subcat.includes("briefcase") ||
+      (itemSubcategory || "").toLowerCase().includes("laptop") ||
+      cleanName.includes("laptop") ||
+      cleanName.includes("briefcase");
+    const isLaptopProduct =
+      /\b(laptop|briefcase|messenger\s*bag|laptop\s*bag|laptop\s*tote|laptop\s*sleeve)\b/i.test(cleanName) ||
+      /\b(laptop-bag|laptop_bag|briefcase)\b/i.test(urlStr);
+
+    if (isLaptopProduct && !isExplicitLaptopRequirement) {
+      return {
+        isConsistent: false,
+        reason: `Accessory mismatch: Product '${productName}' is a laptop bag / briefcase, but current outfit did not request a laptop bag (${urlStr})`,
+      };
+    }
+
+    // 7f. Demographic Integrity for Men: Never allow feminine potli, clutches, or women's purses
+    if (persona === "man") {
+      const isFeminineBag =
+        /\b(potli|potlis|clutch|clutches|minaudi[eè]re|purse|purses|handbag|handbags|kamarbandh)\b/i.test(cleanName) ||
+        /\b(potli|clutch|clutches|handbags?|purses?)\b/i.test(urlStr);
+      if (isFeminineBag) {
+        return {
+          isConsistent: false,
+          reason: `Demographic mismatch: Feminine bag / potli / clutch '${productName}' is not suitable for men's styling (${urlStr})`,
+        };
+      }
+    }
   }
 
   // 8. JEWELLERY (Earrings, necklaces, bracelets, cuffs, bangles - NEVER clothing, shoes, bags, or makeup)
   if (category === "jewellery") {
     if (
       /\b(t-shirt|tshirt|shirt|dress|gown|saree|kurta|blazer|suit|jeans|trouser|pant|skirt|shoe|shoes|heel|heels|sandal|sandals|sneaker|boot|loafer|footwear|bag|handbag|tote|purse|clutch|lipstick|foundation|concealer|compact|mascara|eyeliner)\b/i.test(
-        fullCheckText,
+        productAndPathText,
       )
     ) {
       return {
@@ -590,13 +681,26 @@ export function checkProductConsistency(
         reason: `Category is Jewellery, but destination URL belongs to an unrelated item: ${urlStr}`,
       };
     }
+
+    // 8a. Demographic Integrity for Men: Never allow feminine jhumkas, chandbalis, choker necklaces, mangalsutras, maang tikkas, or anklets
+    if (persona === "man") {
+      const isFeminineJewellery =
+        /\b(jhumka|jhumkas|chandbali|chandbalis|choker|chokers|mangalsutra|maang\s*tikka|mathapatti|borla|nose\s*ring|nath|anklet|payal|bichhiya)\b/i.test(cleanName) ||
+        /\b(jhumka|chandbali|choker|mangalsutra|maang-tikka|anklet)\b/i.test(urlStr);
+      if (isFeminineJewellery) {
+        return {
+          isConsistent: false,
+          reason: `Demographic mismatch: Traditional women's jewellery '${productName}' is not suitable for men's styling (${urlStr})`,
+        };
+      }
+    }
   }
 
   // 9. MAKEUP (Lipstick, foundation, compact, etc. - NEVER apparel, footwear, bags, or jewellery)
   if (category === "makeup") {
     if (
       /\b(saree|dress|gown|kurta|blazer|suit|t-shirt|tshirt|jeans|trouser|pant|skirt|shoe|shoes|heel|heels|sandal|sandals|sneaker|boot|loafer|footwear|bag|handbag|tote|purse|clutch|necklace|choker|earring|bracelet|bangle)\b/i.test(
-        fullCheckText,
+        productAndPathText,
       )
     ) {
       return {
@@ -890,7 +994,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
       signal: AbortSignal.timeout(3500),
     });
 
-    if (res.status === 403 || res.status === 429) {
+    if (res.status === 403 || res.status === 429 || res.status === 503) {
       return {
         success: false,
         retailerRestricted: true,
@@ -928,6 +1032,21 @@ export async function verifyProductPage(urlStr: string): Promise<{
     }
 
     const html = await res.text();
+
+    // Check for bot access challenges
+    if (
+      html.includes("Robot Check") ||
+      html.includes("Enter the characters you see below") ||
+      html.includes("Attention Required! | Cloudflare") ||
+      html.includes("Access Denied")
+    ) {
+      return {
+        success: false,
+        retailerRestricted: true,
+        reason: "Retailer automated access challenge detected",
+        finalUrl: urlStr,
+      };
+    }
 
     // Check for 404 or product discontinuation
     if (
@@ -1117,6 +1236,18 @@ export async function verifyProductPage(urlStr: string): Promise<{
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    const isTimeout =
+      msg.toLowerCase().includes("timeout") ||
+      msg.toLowerCase().includes("abort") ||
+      msg.toLowerCase().includes("econnreset");
+    if (isTimeout) {
+      return {
+        success: false,
+        retailerRestricted: true,
+        reason: `Retailer access timeout or network restriction (${msg})`,
+        finalUrl: urlStr,
+      };
+    }
     return { success: false, reason: msg };
   }
 }
@@ -2058,7 +2189,22 @@ export interface RequirementSpec {
 }
 
 export type DetectedAccessory = {
-  type: "earrings" | "necklace" | "bracelet" | "watch" | "ring" | "maang_tikka" | "bag" | "belt" | "other_accessory";
+  type:
+    | "earrings"
+    | "necklace"
+    | "bracelet"
+    | "watch"
+    | "ring"
+    | "maang_tikka"
+    | "bag"
+    | "belt"
+    | "sunglasses"
+    | "scarf"
+    | "clutch"
+    | "potli"
+    | "hat"
+    | "laptop_bag"
+    | "other_accessory";
   category: "jewellery" | "accessories";
   title: string;
   sourceDetail?: string;
@@ -2078,6 +2224,8 @@ export function extractDynamicLookAccessories(
 
   const isChild = persona === "child";
   const isMan = persona === "man";
+  const lookOutfitText = `${look.outfit || ""} ${look.note || ""} ${look.title || ""}`.toLowerCase();
+  const isEthnicOutfit = /\b(kurta|sherwani|dhoti|pyjama|pajama|kedia|bandhgala|angrakha|achkan|nehru jacket)\b/i.test(lookOutfitText);
 
   function classifyPhrase(phrase: string): {
     type: DetectedAccessory["type"];
@@ -2092,11 +2240,18 @@ export function extractDynamicLookAccessories(
       return { type: "ring", category: "jewellery" };
     }
     if (/\b(?:jhumka|jhumkas|earring|earrings|stud|studs|hoop|hoops|chandbali|chandbalis|huggie|huggies|dangler|danglers)\b/i.test(l)) {
-      if (isChild) return null;
+      if (isChild || isMan) return null;
       return { type: "earrings", category: "jewellery" };
     }
     if (/\b(?:necklace|necklaces|chain|chains|pendant|pendants|choker|chokers|haar|mangalsutra|locket)\b/i.test(l)) {
       if (isChild) return null;
+      if (isMan) {
+        const isFeminineNecklace = /\b(choker|pendant|pendants|haar|mangalsutra|temple|locket)\b/i.test(l);
+        if (isFeminineNecklace) return null;
+        const isGroomOrRoyalMala = /\b(mala|pearl\s*mala|moti\s*mala)\b/i.test(l);
+        const isMenChain = /\b(chain|chains|curb\s*chain)\b/i.test(l);
+        if (!isGroomOrRoyalMala && !isMenChain) return null;
+      }
       return { type: "necklace", category: "jewellery" };
     }
     if (/\b(?:bangle|bangles|kada|kadas|bracelet|bracelets|cuff|cuffs|choodi|choodiyan|wristlet)\b/i.test(l)) {
@@ -2106,13 +2261,39 @@ export function extractDynamicLookAccessories(
       if (isChild || isMan) return null;
       return { type: "maang_tikka", category: "jewellery" };
     }
-    if (/\b(?:bag|bags|potli|potlis|clutch|clutches|tote|totes|crossbody|purse|purses|satchel|handbag|handbags|briefcase|messenger)\b/i.test(l)) {
-      return { type: "bag", category: "accessories" };
+    if (/\b(?:sunglasses?|shades?|aviators?|wayfarers?|eyewear)\b/i.test(l)) {
+      return { type: "sunglasses", category: "accessories" };
+    }
+    if (/\b(?:scarf|scarves|stole|stoles|shawl|shawls|wrap|muffler)\b/i.test(l) && !/\b(?:dupatta|odhani|chunni)\b/i.test(l)) {
+      return { type: "scarf", category: "accessories" };
+    }
+    if (/\b(?:hat|hats|cap|caps|beanie|fedora|beret)\b/i.test(l)) {
+      return { type: "hat", category: "accessories" };
+    }
+    if (/\b(?:clutch|clutches|minaudi[eè]re)\b/i.test(l)) {
+      if (isChild || isMan) return null;
+      return { type: "clutch", category: "accessories" };
+    }
+    if (/\b(?:potli|potlis|batwa)\b/i.test(l)) {
+      if (isChild || isMan) return null;
+      return { type: "potli", category: "accessories" };
     }
     if (/\b(?:belt|belts|kamarbandh|waist belt)\b/i.test(l)) {
+      if (isMan && isEthnicOutfit) return null;
       return { type: "belt", category: "accessories" };
     }
-    if (/\b(?:stole|stoles|pocket square|brooch|brooches|cufflink|cufflinks|sunglasses)\b/i.test(l)) {
+    if (/\b(?:laptop\s*(?:bag|tote|case|sleeve)|briefcase|work\s*messenger)\b/i.test(l)) {
+      return { type: "laptop_bag", category: "accessories" };
+    }
+    if (/\b(?:bag|bags|tote|totes|crossbody|purse|purses|satchel|handbag|handbags|backpack)\b/i.test(l)) {
+      if (isMan) {
+        const isFeminineBag = /\b(purse|purses|handbag|handbags)\b/i.test(l);
+        if (isFeminineBag) return null;
+        if (isEthnicOutfit && !/\b(duffle|travel)\b/i.test(l)) return null;
+      }
+      return { type: "bag", category: "accessories" };
+    }
+    if (/\b(?:pocket square|brooch|brooches|cufflink|cufflinks|tie|necktie|bow tie|wallet|cardholder)\b/i.test(l)) {
       return { type: "other_accessory", category: "accessories" };
     }
     return null;
@@ -2769,7 +2950,21 @@ export function planRequirementSpecs(
               : "Fashion jewellery / gold-tone plated / brass";
           }
         } else if (item.type === "necklace") {
-          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+          if (persona === "man" || targetGender === "men") {
+            const isGroomOrRoyal =
+              `${look.outfit || ""} ${look.title || ""} ${look.note || ""}`.toLowerCase().includes("sherwani") ||
+              `${look.outfit || ""} ${look.title || ""}`.toLowerCase().includes("groom") ||
+              `${look.outfit || ""} ${look.title || ""}`.toLowerCase().includes("wedding");
+            if (isGroomOrRoyal) {
+              styleReq = `Royal multi-strand pearl groom moti mala complementing sherwani`;
+              searchQuery = `men royal wedding groom pearl moti mala sherwani Myntra AJIO`;
+              materialHint = "Multi-strand faux pearl beads with emerald or ruby spacer accents";
+            } else {
+              styleReq = `Minimalist masculine curb chain or sleek kada bracelet`;
+              searchQuery = `men minimal stainless steel curb chain GIVA Myntra`;
+              materialHint = "Surgical grade stainless steel or 925 sterling silver chain";
+            }
+          } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
             styleReq = `Traditional ${undertone} gold-plated kundan or temple choker / necklace set`;
             searchQuery = `${targetGender} ${item.title} kundan choker necklace Zaveri Pearls Myntra Nykaa`;
             materialHint = "Gold-plated brass with kundan, meenakari, or faux pearls";
@@ -2824,7 +3019,33 @@ export function planRequirementSpecs(
       }
     } else {
       // Fallback if no specific jewellery was found in look, but category was explicitly selected
-      if (isGarbaOrNavratri || isTraditionalOrFestive) {
+      if (persona === "man" || targetGender === "men") {
+        if (isGarbaOrNavratri || isTraditionalOrFestive) {
+          specs.push({
+            category: "jewellery",
+            itemTitle: "Men's Festive Kada & Classic Watch",
+            itemSubcategory: "bracelet",
+            targetGender,
+            stylingRequirement: "Traditional solid metallic kada bracelet and classic analog watch",
+            searchQuery: `men festive brass kada bracelet analog watch Titan Myntra AJIO`,
+            preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
+            materialHint: "Solid stainless steel or brass with antique gold finish",
+            matchContext: "Traditional masculine jewellery accent complementing festive ethnic cuffs.",
+          });
+        } else {
+          specs.push({
+            category: "jewellery",
+            itemTitle: "Men's Minimalist Analog Watch",
+            itemSubcategory: "watch",
+            targetGender,
+            stylingRequirement: "Clean analog watch with refined leather or metal strap",
+            searchQuery: `men analog watch Titan Fossil Myntra Tata CLiQ`,
+            preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ"],
+            materialHint: "Stainless steel case with mineral glass",
+            matchContext: "Understated masculine accessory providing polished wrist detail.",
+          });
+        }
+      } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
         specs.push({
           category: "jewellery",
           itemTitle: isGarbaOrNavratri ? "Oxidised Silver Traditional Jhumkas" : "Kundan / Pearl Jhumkas",
@@ -2890,25 +3111,62 @@ export function planRequirementSpecs(
         let accStyle = "";
         let accQuery = "";
 
-        if (item.type === "bag") {
-          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+        if (item.type === "laptop_bag") {
+          accStyle = `Structured work laptop bag or briefcase with clean dedicated compartment`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} laptop bag briefcase Myntra AJIO Tata CLiQ`;
+        } else if (item.type === "bag") {
+          if (persona === "man" || targetGender === "men") {
+            if (isGarbaOrNavratri || isTraditionalOrFestive) {
+              accStyle = `Rich raw silk stole or pocket square coordinating with festive kurta`;
+              accQuery = `men ${dominantHumanColor} silk stole pocket square Myntra AJIO`;
+            } else if (isOfficeOrFormal) {
+              accStyle = `Structured leather briefcase or laptop messenger bag with dedicated compartment`;
+              accQuery = `men ${dominantHumanColor} structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
+            } else {
+              accStyle = `Clean leather messenger bag or sleek cardholder`;
+              accQuery = `men ${dominantHumanColor} leather messenger bag wallet Myntra AJIO`;
+            }
+          } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
             accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
             accQuery = `${targetGender} ${dominantHumanColor} ${item.title} potli bag festive clutch Myntra Nykaa AJIO`;
           } else if (isOfficeOrFormal) {
-            accStyle = `Structured tote with dual handles and clean laptop compartment`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`;
+            accStyle = `Structured formal tote or handbag with clean lines and dual handles`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} structured formal handbag tote Myntra AJIO Tata CLiQ`;
           } else if (isDateNight || isParty) {
-            accStyle = `Compact evening clutch with chain strap`;
+            accStyle = `Compact evening bag or sleek crossbody`;
             accQuery = `${targetGender} ${dominantHumanColor} ${item.title} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
           } else {
-            accStyle = `Clean everyday bag`;
+            accStyle = `Clean everyday shoulder bag or tote`;
             accQuery = `${targetGender} ${dominantHumanColor} ${item.title} shoulder bag tote Myntra AJIO`;
           }
         } else if (item.type === "belt") {
-          accStyle = isTraditionalOrFestive
-            ? `Embellished festive waist belt / kamarbandh coordinating with outfit drape`
-            : `Tailored structured belt in coordinating finish with clean buckle`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} belt Myntra AJIO Tata CLiQ`;
+          const isEthnicMen =
+            (persona === "man" || targetGender === "men") &&
+            (isGarbaOrNavratri || isTraditionalOrFestive || /\b(kurta|sherwani|dhoti|pyjama|pajama|bandhgala)\b/i.test(`${look.outfit || ""} ${look.title || ""}`));
+          if (isEthnicMen) {
+            accStyle = `Festive pure silk pocket square or royal sherwani brooch pin coordinating with kurta`;
+            accQuery = `men festive silk pocket square brooch set Myntra AJIO`;
+          } else {
+            accStyle = isTraditionalOrFestive
+              ? `Embellished festive waist belt / kamarbandh coordinating with outfit drape`
+              : `Tailored structured belt in coordinating finish with clean buckle`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} belt Myntra AJIO Tata CLiQ`;
+          }
+        } else if (item.type === "sunglasses") {
+          accStyle = `Classic UV-protected sunglasses complementing your facial features and outfit`;
+          accQuery = `${targetGender} ${item.title} sunglasses Myntra AJIO Amazon`;
+        } else if (item.type === "scarf") {
+          accStyle = `Soft coordinating scarf or stole adding dimension and texture to your outfit`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} scarf stole Myntra AJIO Tata CLiQ`;
+        } else if (item.type === "clutch") {
+          accStyle = `Compact evening clutch with refined metallic or textured finish`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} evening clutch Myntra AJIO Nykaa`;
+        } else if (item.type === "potli") {
+          accStyle = `Festive embellished potli bag with drawstring closure and tassel details`;
+          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} festive potli bag Myntra AJIO Nykaa`;
+        } else if (item.type === "hat") {
+          accStyle = `Breathable coordinating hat or cap`;
+          accQuery = `${targetGender} ${item.title} cap hat Myntra AJIO Amazon`;
         } else {
           accStyle = `Finishing accent coordinating with your ${dominantHumanColor} outfit`;
           accQuery = `${targetGender} ${dominantHumanColor} ${item.title} Myntra AJIO`;
@@ -2922,7 +3180,7 @@ export function planRequirementSpecs(
           dominantColor: dominantHumanColor,
           stylingRequirement: accStyle,
           searchQuery: accQuery.trim(),
-          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion"],
+          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
           matchContext: `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
         });
       }
@@ -2931,8 +3189,10 @@ export function planRequirementSpecs(
       let accTitle = "";
       let accStyle = "";
       let accQuery = "";
+      let fallbackSubcat = "bag";
 
       if (ctx.isBoy || targetGender === "boys") {
+        fallbackSubcat = isGarbaOrNavratri || isTraditionalOrFestive ? "other_accessory" : "belt";
         accTitle = isGarbaOrNavratri || isTraditionalOrFestive
           ? "Boys Festive Brooch & Pocket Square"
           : "Boys Casual Belt & Cap";
@@ -2943,6 +3203,7 @@ export function planRequirementSpecs(
           ? `boys festive brooch pocket square Myntra AJIO`
           : `boys belt cap Myntra AJIO`;
       } else if (ctx.isGirl || targetGender === "girls") {
+        fallbackSubcat = isGarbaOrNavratri || isTraditionalOrFestive ? "potli" : "bag";
         accTitle = isGarbaOrNavratri || isTraditionalOrFestive
           ? "Girls Embroidered Festive Potli Bag"
           : "Girls Hair Accessories & Sling Bag";
@@ -2952,39 +3213,56 @@ export function planRequirementSpecs(
         accQuery = isGarbaOrNavratri || isTraditionalOrFestive
           ? `girls festive potli bag Myntra AJIO`
           : `girls sling bag accessories Myntra AJIO`;
+      } else if (persona === "man" || targetGender === "men") {
+        if (isGarbaOrNavratri || isTraditionalOrFestive) {
+          fallbackSubcat = "other_accessory";
+          accTitle = "Men's Silk Pocket Square & Royal Brooch";
+          accStyle = `Festive pure silk pocket square and matching royal sherwani brooch pin`;
+          accQuery = `men festive silk pocket square brooch set Myntra AJIO`;
+        } else if (isOfficeOrFormal) {
+          fallbackSubcat = "laptop_bag";
+          accTitle = "Men's Structured Leather Briefcase";
+          accStyle = `Structured formal leather briefcase or messenger bag with clean lines`;
+          accQuery = `men structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
+        } else {
+          fallbackSubcat = "sunglasses";
+          accTitle = "Men's Classic UV-Protected Sunglasses";
+          accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
+          accQuery = `men classic sunglasses Myntra AJIO Amazon`;
+        }
       } else {
-        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? "Embroidered Festive Potli Bag with Pearl Handle"
-          : isOfficeOrFormal
-            ? (persona === "man" ? "Structured Leather Briefcase / Laptop Bag" : "Structured Leather Work Laptop Tote Bag")
-            : isDateNight || isParty
-              ? "Sleek Metallic Crossbody / Evening Clutch"
-              : "Structured Shoulder Bag / Daily Tote";
-        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`
-          : isOfficeOrFormal
-            ? `Structured tote with dual handles and clean laptop compartment`
-            : isDateNight || isParty
-              ? `Compact evening clutch with chain strap`
-              : `Clean everyday bag`;
-        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
-          ? `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`
-          : isOfficeOrFormal
-            ? `${targetGender} ${dominantHumanColor} structured formal tote shoulder laptop bag Myntra AJIO Tata CLiQ`
-            : isDateNight || isParty
-              ? `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`
-              : `${targetGender} ${dominantHumanColor} shoulder bag tote Myntra AJIO`;
+        if (isGarbaOrNavratri || isTraditionalOrFestive) {
+          fallbackSubcat = "potli";
+          accTitle = "Embroidered Festive Potli Bag with Pearl Handle";
+          accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
+          accQuery = `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`;
+        } else if (isOfficeOrFormal) {
+          fallbackSubcat = "bag";
+          accTitle = "Structured Leather Formal Handbag";
+          accStyle = `Structured formal handbag with dual handles and clean lines`;
+          accQuery = `${targetGender} ${dominantHumanColor} structured formal handbag tote Myntra AJIO Tata CLiQ`;
+        } else if (isDateNight || isParty) {
+          fallbackSubcat = "clutch";
+          accTitle = "Sleek Metallic Crossbody / Evening Clutch";
+          accStyle = `Compact evening clutch with chain strap`;
+          accQuery = `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
+        } else {
+          fallbackSubcat = "sunglasses";
+          accTitle = "Classic UV-Protected Sunglasses";
+          accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
+          accQuery = `${targetGender} classic sunglasses Myntra AJIO Amazon`;
+        }
       }
 
       specs.push({
         category: "accessories",
         itemTitle: accTitle,
-        itemSubcategory: "accessories",
+        itemSubcategory: fallbackSubcat,
         targetGender,
         dominantColor: dominantHumanColor,
         stylingRequirement: accStyle,
         searchQuery: accQuery.trim(),
-        preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion"],
+        preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
         matchContext: `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
       });
     }
@@ -3992,14 +4270,15 @@ export function getBenchmarkCandidatesForRequirement(
   }
 
   if (spec.category === "jewellery") {
-    // 1. Traditional Jhumkas / Festive Earrings
+    // 1. Traditional Jhumkas / Festive Earrings (Women only)
     if (
-      subcat.includes("jhumka") ||
-      subcat.includes("oxidised") ||
-      stylingReq.includes("jhumka") ||
-      stylingReq.includes("oxidised") ||
-      stylingReq.includes("tribal") ||
-      stylingReq.includes("festive")
+      !isMan &&
+      (subcat.includes("jhumka") ||
+        subcat.includes("oxidised") ||
+        stylingReq.includes("jhumka") ||
+        stylingReq.includes("oxidised") ||
+        stylingReq.includes("tribal") ||
+        stylingReq.includes("festive"))
     ) {
       return [
         {
@@ -4036,7 +4315,40 @@ export function getBenchmarkCandidatesForRequirement(
     }
 
     // 2. Wrist Bangles & Bracelets
-    if (subcat.includes("bracelet") || subcat.includes("bangle") || subcat.includes("wrist")) {
+    if (subcat.includes("bracelet") || subcat.includes("bangle") || subcat.includes("wrist") || subcat.includes("kada")) {
+      if (isMan) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Men Solid Stainless Steel Kada Bracelet",
+            brand: "Voylla",
+            retailer: "AJIO",
+            price: 599,
+            originalPrice: 1299,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men stainless steel kada bracelet")}`,
+            material: "Solid Stainless Steel with Smooth Polish",
+          },
+          {
+            tier: "mid",
+            productTitle: "Men Handcrafted Brass Antique Finish Kada",
+            brand: "Manyavar",
+            retailer: "Myntra",
+            price: 1299,
+            originalPrice: 1999,
+            url: "https://www.myntra.com/men-kada-bracelet",
+            material: "Brass with Antique Gold Finish",
+          },
+          {
+            tier: "premium",
+            productTitle: "Men Solid 925 Sterling Silver Royal Kada",
+            brand: "Titan",
+            retailer: "Tata CLiQ",
+            price: 3495,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men titan silver kada bracelet")}`,
+            material: "Hallmarked 925 Sterling Silver",
+          },
+        ];
+      }
       if (
         stylingReq.includes("oxidised") ||
         stylingReq.includes("bangle") ||
@@ -4828,6 +5140,7 @@ export function getBenchmarkCandidatesForRequirement(
     // 1. Festive Potli Bags (Women)
     if (
       !isMan &&
+      !isBoy &&
       (stylingReq.includes("potli") ||
         stylingReq.includes("ethnic") ||
         stylingReq.includes("festive") ||
@@ -4867,113 +5180,331 @@ export function getBenchmarkCandidatesForRequirement(
       ];
     }
 
-    if (isMan) {
-      if (
-        stylingReq.includes("brooch") ||
-        stylingReq.includes("pocket") ||
-        stylingReq.includes("festive") ||
-        stylingReq.includes("ethnic") ||
-        subcat.includes("brooch") ||
-        subcat.includes("stole")
-      ) {
+    // 1. Belts
+    if (subcat.includes("belt")) {
+      if (isMan || isBoy) {
         return [
           {
             tier: "budget",
-            productTitle: "Men Traditional Royal Brooch & Silk Pocket Square",
-            brand: "Vastramay",
+            productTitle: "Formal Reversible Leather Belt with Sleek Pin Buckle",
+            brand: "Wildhorn",
             retailer: "Myntra",
-            price: 499,
-            originalPrice: 999,
-            url: "https://www.myntra.com/men-accessories",
-            material: "Gold-Plated Brass with Rich Silk",
+            price: 799,
+            originalPrice: 1999,
+            url: "https://www.myntra.com/men-formal-leather-belt",
+            material: "Top Grain Leather",
           },
           {
             tier: "mid",
-            productTitle: "Men Handcrafted Festive Sherwani Brooch",
-            brand: "Manyavar",
+            productTitle: "Men Genuine Textured Leather Formal Belt",
+            brand: "Van Heusen",
             retailer: "AJIO",
-            price: 999,
-            originalPrice: 1699,
-            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men festive sherwani brooch")}`,
-            material: "Gold-Plated with Faux Pearls & Enamel",
+            price: 1199,
+            originalPrice: 1999,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men van heusen leather formal belt")}`,
+            material: "Genuine Leather",
           },
           {
             tier: "premium",
-            productTitle: "Men Handcrafted Zari Embroidered Silk Wedding Stole",
-            brand: "Manyavar",
+            productTitle: "Classic Formal Leather Belt with Brushed Metal Buckle",
+            brand: "Tommy Hilfiger",
             retailer: "Tata CLiQ",
-            price: 2499,
-            originalPrice: 3499,
-            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men manyavar wedding stole")}`,
-            material: "Pure Silk with Zari Embroidery",
+            price: 2999,
+            originalPrice: 3999,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men tommy hilfiger leather belt")}`,
+            material: "100% Full-Grain Leather",
           },
         ];
       }
       return [
         {
           tier: "budget",
-          productTitle: "Formal Reversible Leather Belt with Sleek Pin Buckle",
-          brand: "Wildhorn",
+          productTitle: "Women Sleek Gold-Buckle Slim Waist Belt",
+          brand: "DressBerry",
           retailer: "Myntra",
-          price: 799,
-          originalPrice: 1999,
-          url: "https://www.myntra.com/men-formal-leather-belt",
-          material: "Top Grain Leather",
+          price: 499,
+          originalPrice: 999,
+          url: "https://www.myntra.com/women-sleek-gold-buckle-belt",
+          material: "Faux Leather with Gold-Tone Buckle",
         },
         {
           tier: "mid",
-          productTitle: "Structured Leather Formal Messenger Laptop Bag",
-          brand: "Hammonds Flycatcher",
-          retailer: "AJIO",
-          price: 2499,
-          originalPrice: 4999,
-          url: `https://www.ajio.com/search/?text=${encodeURIComponent("men formal leather laptop briefcase")}`,
-          material: "Genuine Oil Wax Leather",
+          productTitle: "Tailored Reversible Classic Leather Belt",
+          brand: "Mango",
+          retailer: "Myntra",
+          price: 1490,
+          originalPrice: 2290,
+          url: "https://www.myntra.com/women-mango-classic-belt",
+          material: "Genuine Smooth Leather",
         },
         {
           tier: "premium",
-          productTitle: "Handcrafted Luxury Leather Briefcase Bag",
-          brand: "Hidesign",
+          productTitle: "Designer Signature Leather Waist Belt",
+          brand: "Coach",
           retailer: "Tata CLiQ",
-          price: 7995,
-          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men hidesign leather briefcase")}`,
-          material: "Vegetable Tanned Leather",
+          price: 8500,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("women coach leather waist belt")}`,
+          material: "Refined Calf Leather",
         },
       ];
     }
 
-    return [
-      {
-        tier: "budget",
-        productTitle: "Structured Formal Tote Handbag with Dual Handles",
-        brand: "Lavie",
-        retailer: "Myntra",
-        price: 1499,
-        originalPrice: 3499,
-        url: "https://www.myntra.com/women-formal-tote-handbag",
-        material: "Structured Textured Polyurethane",
-      },
-      {
-        tier: "mid",
-        productTitle: "Structured Faux Leather Office Shoulder Bag",
-        brand: "Caprese",
-        retailer: "AJIO",
-        price: 2499,
-        originalPrice: 4299,
-        url: `https://www.ajio.com/search/?text=${encodeURIComponent("women formal structured tote bag")}`,
-        material: "Faux Saffiano Leather",
-      },
-      {
-        tier: "premium",
-        productTitle: "Structured Leather Laptop Work Tote Bag",
-        brand: "Miraggio",
-        retailer: "Nykaa Fashion",
-        price: 4599,
-        originalPrice: 5999,
-        url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women miraggio structured work tote")}`,
-        material: "High-Grade Vegan Leather",
-      },
-    ];
+    // 2. Sunglasses / Eyewear
+    if (subcat.includes("sunglass") || subcat.includes("eyewear") || subcat.includes("shades")) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Polarized UV400 Aviator Metal Sunglasses",
+          brand: "Vincent Chase",
+          retailer: "Amazon India",
+          price: 799,
+          originalPrice: 1999,
+          url: `https://www.amazon.in/s?k=${encodeURIComponent("vincent chase polarized aviator sunglasses")}`,
+          material: "UV400 Protected Metal Alloy",
+        },
+        {
+          tier: "mid",
+          productTitle: "Classic Polarized Square Sunglasses",
+          brand: "Voyage",
+          retailer: "Myntra",
+          price: 1299,
+          originalPrice: 2500,
+          url: "https://www.myntra.com/polarized-classic-sunglasses",
+          material: "Acetate Frame with Polarized Lenses",
+        },
+        {
+          tier: "premium",
+          productTitle: "Original Wayfarer Classic Polarized Sunglasses",
+          brand: "Ray-Ban",
+          retailer: "Tata CLiQ",
+          price: 8590,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("ray ban original wayfarer classic")}`,
+          material: "Premium Acetate with Crystal Green Lenses",
+        },
+      ];
+    }
+
+    // 3. Scarves / Stoles
+    if (subcat.includes("scarf") || subcat.includes("stole") || subcat.includes("shawl")) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Printed Silk Touch Lightweight Fashion Scarf",
+          brand: "Accessorize London",
+          retailer: "Myntra",
+          price: 699,
+          originalPrice: 1495,
+          url: "https://www.myntra.com/printed-silk-touch-scarf",
+          material: "Poly-Silk Satin Blend",
+        },
+        {
+          tier: "mid",
+          productTitle: "Handcrafted Pure Wool Woven Stole",
+          brand: "Fabindia",
+          retailer: "Fabindia",
+          price: 1890,
+          originalPrice: 2490,
+          url: "https://www.fabindia.com/search?q=pure+wool+stole",
+          material: "100% Fine Merino Wool",
+        },
+        {
+          tier: "premium",
+          productTitle: "Handwoven Pure Pashmina Zari Border Stole",
+          brand: "Ahujasons",
+          retailer: "Tata CLiQ",
+          price: 6500,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("ahujasons pure pashmina stole")}`,
+          material: "Pure Certified Cashmere Pashmina",
+        },
+      ];
+    }
+
+    // 4. Clutches & Potlis (Women only)
+    if (!isMan && !isBoy && (subcat.includes("clutch") || subcat.includes("potli") || subcat.includes("evening"))) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Metallic Shimmer Evening Box Clutch with Chain Strap",
+          brand: "Metro",
+          retailer: "Myntra",
+          price: 999,
+          originalPrice: 2290,
+          url: "https://www.myntra.com/metallic-evening-box-clutch",
+          material: "Shimmer Textile with Detachable Metal Chain",
+        },
+        {
+          tier: "mid",
+          productTitle: "Handcrafted Embroidered Raw Silk Festive Potli Bag",
+          brand: "Biba",
+          retailer: "Myntra",
+          price: 1499,
+          originalPrice: 2499,
+          url: "https://www.myntra.com/biba-embroidered-potli-bag",
+          material: "Raw Silk with Zari and Pearl Tassels",
+        },
+        {
+          tier: "premium",
+          productTitle: "Embellished Crystal Designer Minaudière Clutch",
+          brand: "Tarun Tahiliani",
+          retailer: "Aza Fashions",
+          price: 6900,
+          url: "https://www.azafashions.com/search?q=designer+evening+clutch",
+          material: "Hand-Set Crystals on Satin Base",
+        },
+      ];
+    }
+
+    // 5. Men's Traditional Brooch / Stole / Pocket Square
+    if (
+      isMan &&
+      (stylingReq.includes("brooch") ||
+        stylingReq.includes("pocket square") ||
+        stylingReq.includes("pocket-square") ||
+        stylingReq.includes("sherwani") ||
+        stylingReq.includes("stole") ||
+        subcat.includes("brooch") ||
+        subcat.includes("pocket_square") ||
+        subcat.includes("other_accessory"))
+    ) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Men Traditional Royal Brooch & Silk Pocket Square",
+          brand: "Vastramay",
+          retailer: "Myntra",
+          price: 499,
+          originalPrice: 999,
+          url: "https://www.myntra.com/men-accessories",
+          material: "Gold-Plated Brass with Rich Silk",
+        },
+        {
+          tier: "mid",
+          productTitle: "Men Handcrafted Festive Sherwani Brooch",
+          brand: "Manyavar",
+          retailer: "AJIO",
+          price: 999,
+          originalPrice: 1699,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("men festive sherwani brooch")}`,
+          material: "Gold-Plated with Faux Pearls & Enamel",
+        },
+        {
+          tier: "premium",
+          productTitle: "Men Handcrafted Zari Embroidered Silk Wedding Stole",
+          brand: "Manyavar",
+          retailer: "Tata CLiQ",
+          price: 2499,
+          originalPrice: 3499,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men manyavar wedding stole")}`,
+          material: "Pure Silk with Zari Embroidery",
+        },
+      ];
+    }
+
+    // 6. Laptop Bag / Briefcase (ONLY when explicitly requested!)
+    if (subcat.includes("laptop") || subcat.includes("briefcase")) {
+      if (isMan || isBoy) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Formal Messenger Laptop Briefcase",
+            brand: "Wildhorn",
+            retailer: "Amazon India",
+            price: 1499,
+            originalPrice: 2999,
+            url: `https://www.amazon.in/s?k=${encodeURIComponent("men formal laptop messenger bag")}`,
+            material: "Vegan Leather with Padded Sleeve",
+          },
+          {
+            tier: "mid",
+            productTitle: "Structured Leather Formal Messenger Laptop Bag",
+            brand: "Hammonds Flycatcher",
+            retailer: "AJIO",
+            price: 2499,
+            originalPrice: 4999,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("men formal leather laptop briefcase")}`,
+            material: "Genuine Oil Wax Leather",
+          },
+          {
+            tier: "premium",
+            productTitle: "Handcrafted Luxury Leather Briefcase Bag",
+            brand: "Hidesign",
+            retailer: "Tata CLiQ",
+            price: 7995,
+            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("men hidesign leather briefcase")}`,
+            material: "Vegetable Tanned Leather",
+          },
+        ];
+      }
+      return [
+        {
+          tier: "budget",
+          productTitle: "Structured Formal Work Laptop Tote Bag",
+          brand: "Lavie",
+          retailer: "Myntra",
+          price: 1699,
+          originalPrice: 3999,
+          url: "https://www.myntra.com/women-laptop-work-tote",
+          material: "Textured Polyurethane with 14-inch Sleeve",
+        },
+        {
+          tier: "mid",
+          productTitle: "Structured Leather Laptop Work Tote Bag",
+          brand: "Miraggio",
+          retailer: "Nykaa Fashion",
+          price: 3499,
+          originalPrice: 4999,
+          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women miraggio structured laptop tote")}`,
+          material: "High-Grade Vegan Leather",
+        },
+        {
+          tier: "premium",
+          productTitle: "Classic Top-Zip Leather Laptop Briefcase",
+          brand: "Hidesign",
+          retailer: "Tata CLiQ",
+          price: 6995,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("women hidesign leather laptop tote")}`,
+          material: "Vegetable Tanned Genuine Leather",
+        },
+      ];
+    }
+
+    // 7. General Handbags / Totes
+    if (subcat.includes("bag") || subcat.includes("tote") || subcat.includes("handbag")) {
+      return [
+        {
+          tier: "budget",
+          productTitle: "Structured Formal Tote Handbag with Dual Handles",
+          brand: "Lavie",
+          retailer: "Myntra",
+          price: 1499,
+          originalPrice: 3499,
+          url: "https://www.myntra.com/women-formal-tote-handbag",
+          material: "Structured Textured Polyurethane",
+        },
+        {
+          tier: "mid",
+          productTitle: "Structured Faux Leather Shoulder Handbag",
+          brand: "Caprese",
+          retailer: "AJIO",
+          price: 2499,
+          originalPrice: 4299,
+          url: `https://www.ajio.com/search/?text=${encodeURIComponent("women formal structured tote bag")}`,
+          material: "Faux Saffiano Leather",
+        },
+        {
+          tier: "premium",
+          productTitle: "Elegant Structured Leather Shoulder Bag",
+          brand: "Da Milano",
+          retailer: "Tata CLiQ",
+          price: 5999,
+          originalPrice: 8999,
+          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("da milano women leather shoulder bag")}`,
+          material: "Italian Top-Grain Leather",
+        },
+      ];
+    }
+
+    return [];
   }
 
   // 5. Makeup & Beauty Suite (Layer A Essentials & Layer B Occasion Products)
@@ -5480,8 +6011,8 @@ BUDGET INSTRUCTION:
 ${budgetInstruction}
 
 SEARCH INSTRUCTIONS:
-1. MULTI-RETAILER DIVERSITY: Search across MULTIPLE approved retailers and designer boutiques: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India. If relevant products exist across multiple retailers, diversify the results (e.g. 1 from Myntra, 1 from AJIO, 1 from Aza/Pernia's/Nykaa). Do NOT return all 3 from the same retailer if alternatives exist.
-2. Find 3 distinct REAL shoppable products that satisfy this exact same styling requirement across different price levels (Budget, Mid-range, Premium).
+1. MULTI-RETAILER DIVERSITY: Search across ALL approved retailers and designer boutiques: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India. Discover all relevant, available matching products across multiple retailers rather than restricting to one store.
+2. Find distinct REAL shoppable products that satisfy this exact same styling requirement across price points (Budget, Mid-range, Premium).
 3. Do NOT change user's color, occasion, or style requirement between alternatives.
 4. You MUST extract the REAL, exact product page URL with the real product ID directly from your search result.
 5. NEVER invent URLs, placeholder IDs (like 12345678, 12345, 000000), or fake prices. If an item cannot be found on another store, return real verified stores only.
@@ -5548,7 +6079,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
 
-      const tavilyResp = await tavilySearch(tavilyQuery, 6, searchDomains);
+      const tavilyResp = await tavilySearch(tavilyQuery, 15, searchDomains);
 
       const usedCandidateImages = new Set<string>();
 
@@ -5580,7 +6111,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       let candIdx = 0;
 
       for (const res of tavilyResp.results || []) {
-        if (candidateList.length >= 3) break;
+        if (candidateList.length >= 10) break;
 
         if (res.url && isValidProductUrl(res.url)) {
           const canonicalUrl = getCanonicalProductUrl(res.url);
@@ -5670,8 +6201,9 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     }
   }
 
-  // 2. Fallback: OpenAI Live Web Search with structured product schema
-  if (candidateList.length < 2) {
+  // 2. Discover across more retailers via OpenAI if candidates are few or retailer diversity is low
+  const uniqueCandidateRetailers = new Set(candidateList.map((c) => c.retailer.toLowerCase()));
+  if (candidateList.length < 5 || uniqueCandidateRetailers.size < 2) {
     try {
       const openai = getOpenAIClient();
       const RESULT_JSON_SCHEMA = {
@@ -5745,7 +6277,7 @@ Strictly adhere to:
                 const finalBrand = prod.brand || finalTitle.split(" ")[0] || "Curated";
                 const identityKey = getProductIdentityKey(finalTitle, finalBrand);
 
-                if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 3) {
+                if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
                   seenCanonicalUrls.add(canonicalUrl);
                   seenIdentityKeys.add(identityKey);
                   const derivedRetailer = getRetailerFromUrl(canonicalUrl) || prod.retailer || spec.preferredRetailers[0] || "Online Store";
@@ -5857,7 +6389,7 @@ Strictly adhere to:
           const finalBrand = brand || finalTitle.split(" ")[0] || "Curated";
           const identityKey = getProductIdentityKey(finalTitle, finalBrand);
 
-          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 3) {
+          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
             seenCanonicalUrls.add(canonicalUrl);
             seenIdentityKeys.add(identityKey);
             const { price } = normalizePrice(rawPrice, "INR");
@@ -5878,10 +6410,10 @@ Strictly adhere to:
         }
       }
 
-      // Fallback to citations if fewer than 2 candidates were parsed
-      if (candidateList.length < 2 && citations.length > 0) {
+      // Fallback to citations if fewer than 4 candidates were parsed
+      if (candidateList.length < 4 && citations.length > 0) {
         for (const cit of citations) {
-          if (candidateList.length >= 3) break;
+          if (candidateList.length >= 12) break;
           const canonicalUrl = getCanonicalProductUrl(cit.url);
           const citTitle = cit.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
           const citBrand = citTitle.split(" ")[0] || "Curated";
@@ -6132,9 +6664,9 @@ Strictly adhere to:
   const verifiedProducts = verifiedRaw.filter((p): p is ProductResult => p !== null);
 
   // 4. Guaranteed Multi-Retailer Benchmark Supplementation
-  // If fewer than 2 verified options were returned from live search,
+  // If fewer than 3 verified options were returned from live search,
   // supplement with benchmark candidates to ensure multi-retailer shopping diversity
-  if (verifiedProducts.length < 2) {
+  if (verifiedProducts.length < 3) {
     const benchPersona: PersonaType =
       spec.targetGender === "men"
         ? "man"
@@ -6149,7 +6681,7 @@ Strictly adhere to:
       spec.dominantColor || "Green",
     );
     for (const b of benchmarks) {
-      if (verifiedProducts.length >= 3) break;
+      if (verifiedProducts.length >= 6) break;
       const benchGender =
         spec.targetGender === "boys"
           ? "boys"
@@ -6243,14 +6775,8 @@ Strictly adhere to:
     }
   }
 
-  // Sort in-stock products first, then rank by matchScore (similarity to outfit) descending
-  verifiedProducts.sort((a, b) => {
-    const aInStock = a.availability !== "Out of Stock";
-    const bInStock = b.availability !== "Out of Stock";
-    if (aInStock && !bInStock) return -1;
-    if (!aInStock && bInStock) return 1;
-    return (b.matchScore || 0) - (a.matchScore || 0);
-  });
+  // Sort products strictly in ascending order of current price (low to high)
+  verifiedProducts.sort(compareProductsByPriceAscending);
 
   return verifiedProducts;
 }
@@ -6275,7 +6801,7 @@ export async function searchProductsForLook(
   requestedCategory?: string,
   forceRefresh?: boolean,
 ): Promise<ProductRecommendationsResponse> {
-  const cacheKey = `v8:${look.id}:${requestedCategory || "all"}:${profile.occasion || ""}:${profile.style?.join("-") || ""}`;
+  const cacheKey = `v9:${look.id}:${requestedCategory || "all"}:${profile.occasion || ""}:${profile.style?.join("-") || ""}`;
   if (!forceRefresh) {
     const cached = serverProductCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -6344,27 +6870,33 @@ export async function searchProductsForLook(
         return true;
       });
 
+      // Sort products within each group ascending by actual verified price (low to high)
+      const sortedGroupProducts = sortProductsByPriceAscending(distinctGroupProducts);
+
       // Retain the planned group so the UI can either render products or clearly notify the user
-      validGroups.push({ ...grp, products: distinctGroupProducts });
-      if (distinctGroupProducts.length > 0) {
-        allProducts.push(...distinctGroupProducts);
+      validGroups.push({ ...grp, products: sortedGroupProducts });
+      if (sortedGroupProducts.length > 0) {
+        allProducts.push(...sortedGroupProducts);
       }
     }
+
+    // Sort all products across groups ascending by price (low to high)
+    const sortedAllProducts = sortProductsByPriceAscending(allProducts);
 
     const responseData: ProductRecommendationsResponse = {
       lookId: look.id,
       persona,
       applicableCategories,
-      products: allProducts,
+      products: sortedAllProducts,
       groups: validGroups,
-      status: allProducts.length > 0 ? "success" : "partial",
+      status: sortedAllProducts.length > 0 ? "success" : "partial",
       disclaimer: SHADE_MATCH_DISCLAIMER,
       searchedAt: new Date().toISOString(),
-      totalFound: allProducts.length,
+      totalFound: sortedAllProducts.length,
       diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
     };
 
-    if (allProducts.length > 0) {
+    if (sortedAllProducts.length > 0) {
       serverProductCache.set(cacheKey, {
         data: responseData,
         expiresAt: Date.now() + CACHE_TTL_MS,

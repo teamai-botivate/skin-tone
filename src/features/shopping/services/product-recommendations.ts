@@ -25,7 +25,7 @@ export async function getProductRecommendations(
   category?: ProductCategory | 'all',
   forceRefresh?: boolean,
 ): Promise<ProductRecommendationsResponse> {
-  const cacheKey = `v8:${look.id}:${look.title || ''}:${profile.occasion || ''}:${category || 'all'}`;
+  const cacheKey = `v9:${look.id}:${look.title || ''}:${profile.occasion || ''}:${category || 'all'}`;
 
   // Return from client cache immediately if available and refresh was not forced
   if (!forceRefresh) {

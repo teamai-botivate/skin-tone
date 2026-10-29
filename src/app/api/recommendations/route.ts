@@ -36,9 +36,14 @@ Guidelines:
     - Jewellery & Styling Harmony: Jewellery MUST strictly harmonize with the outfit formality and style aesthetic:
       * For formal, office/workwear, corporate, modern tailoring, or smart-casual: recommend MINIMAL, UNDERSTATED, and SLEEK jewellery (e.g. delicate geometric or pearl stud earrings, tiny huggies, sleek gold or silver chain/cuff bracelet or refined watch). STRICTLY AVOID gaudy dangling hoops, heavy loops, or oversized ethnic jhumkas for modern office/corporate attire.
       * Always propose a cohesive jewellery curation: explicitly specify BOTH ear jewellery (e.g. minimal studs) AND wrist jewellery (e.g. delicate sleek gold bangle/bracelet or minimal cuff) so the look is accessorized head-to-toe.
-    - Makeup: Flattering direction based on skin tone and undertone (foundation finish, lip shade, compact/setting).
-  * For Men: Complete outfit (e.g. kurta/sherwani/suit/blazer/chinos/etc.), colour direction, footwear, accessories (watch, pocket square, belt, sunglasses, cufflinks), grooming/hairstyle, and jewellery if appropriate. Set makeup to "Clean natural grooming" or "None". Do NOT prescribe women's makeup to men unless explicitly requested.
-- OCCASION & CULTURAL CONTEXT AUTHENTICITY (CRITICAL):
+  * For Men: Complete outfit (e.g. kurta/sherwani/suit/blazer/chinos/etc.), colour direction, footwear, accessories, grooming/hairstyle, and jewellery if appropriate. Set makeup to "Clean natural grooming" or "None". Do NOT prescribe women's makeup to men unless explicitly requested.
+    - MEN'S ACCESSORIES RULES:
+      * For festive/traditional wear (kurta, sherwani, dhoti, pyjama): recommend a silk pocket square, embroidered stole/doshala, metallic brooch pin, classic watch, or sunglasses.
+      * STRICT PROHIBITION ON FEMININE BAGS: NEVER recommend potli bags, clutches, minaudières, or women's purses for men! Potli bags and clutches are feminine accessories strictly for women and girls.
+      * STRICT PROHIBITION ON BELTS OVER ETHNIC WEAR: NEVER recommend a belt over an Indian kurta, sherwani, or traditional tunic! In Indian ethnic wear, the kurta hangs naturally and freely; wearing a belt strapped around the outside waist of a kurta is improper and strictly forbidden. Belts belong ONLY in western trousers/chinos/jeans through belt loops.
+    - MEN'S JEWELLERY RULES:
+      * Traditional men's jewellery is minimal and masculine: a classic analog watch, solid metallic kada/bracelet, signet ring, or royal sherwani brooch/sarpech (or multi-strand royal pearl groom mala only for wedding grooms).
+      * STRICT PROHIBITION ON FEMININE JEWELLERY: NEVER recommend women's jewellery for men (strictly NO temple necklaces, NO dangling pendants, NO choker necklaces, NO jhumkas, NO earrings, NO maang tikkas, NO anklets).
   * Garba / Navratri / Dandiya: Strictly propose culturally authentic traditional attire!
     - For Women & Girls: Flared mirror-work chaniya cholis, lehengas with broad flare, embroidered choli blouses, oxidised silver tribal jhumkas, stacked bangles, ethnic juttis, and potli bags.
     - For Men & Boys: Vibrant festive kurta sets with dhoti/churidar/pyjama, embroidered Nehru jackets or traditional kedia sets, and cushioned ethnic mojaris.
@@ -149,7 +154,7 @@ function buildUserPrompt(profile: SkinTuneProfile): string {
       : ctx.isKids
         ? "CRITICAL: The user is a CHILD. Propose age-appropriate children clothing. Strictly no adult clothing or mature styling!"
         : ctx.isMan
-          ? `CRITICAL: The user is an ADULT MAN. Propose Mens ${isVacationOrResort && !explicitlyRequestsEthnic ? "resort wear (linen shirts, shorts/chinos, loafers/sandals)" : "tailoring and clothing"}.`
+          ? `CRITICAL: The user is an ADULT MAN. Propose Mens ${isVacationOrResort && !explicitlyRequestsEthnic ? "resort wear (linen shirts, shorts/chinos, loafers/sandals)" : "tailoring and clothing"}. In Indian traditional wear (kurta, sherwani): strictly NO belts over kurtas, NO potli bags or clutches, and NO women's necklaces or jhumkas!`
           : `The user is an ADULT WOMAN. Propose Womens ${isVacationOrResort && !explicitlyRequestsEthnic ? "resort wear (sundresses, linen co-ords, sandals)" : "styling"}.`;
 
   return `User profile:
