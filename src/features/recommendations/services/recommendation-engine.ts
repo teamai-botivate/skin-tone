@@ -1162,10 +1162,15 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
  * deployed yet, etc.) this falls back to the dynamically generated
  * occasion/color/persona-aware look suite so the UI always has an accurate,
  * culturally faithful recommendation — never a generic mismatch.
+ *
+ * The curated suite cannot interpret free-text styling instructions, so when the
+ * user has written a custom styling request the failure is surfaced (the UI offers
+ * a retry) instead of substituting looks that ignore that request.
  */
 export const getLookRecommendations = async (
   profile: SkinTuneProfile,
 ): Promise<LookRecommendation[]> => {
+  let failureReason = 'The styling service could not be reached.';
   try {
     const { photoUrl: _photoUrl, ...profileForRequest } = profile;
     const res = await fetch('/api/recommendations', {
@@ -1181,6 +1186,7 @@ export const getLookRecommendations = async (
       }
     } else {
       const errData = await res.json().catch(() => null);
+      failureReason = errData?.message || errData?.error || `The styling service returned HTTP ${res.status}.`;
       console.warn(
         `Backend recommendations returned HTTP ${res.status}: ${errData?.message || errData?.error || 'falling back to curated looks'}`,
       );
@@ -1189,6 +1195,11 @@ export const getLookRecommendations = async (
     console.warn('Backend recommendations call failed, falling back to dynamic look generation:', err);
   }
 
+  if (profile.customStyleNotes?.trim()) {
+    throw new Error(
+      `${failureReason} Your custom styling request needs live AI styling, so no pre-made looks were substituted. Please try again.`,
+    );
+  }
   return generateFallbackLooks(profile);
 };
 

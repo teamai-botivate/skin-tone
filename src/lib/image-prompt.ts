@@ -3,6 +3,9 @@ import { getStylingContext } from "@/lib/styling-context";
 
 export type OccasionContext = { occasion: string; details: string };
 
+// Look-piece categories (as defined by the recommendation schema) that are not clothing garments
+const NON_GARMENT_PIECE_CATEGORY = /\b(shoe|footwear|jewel|accessor|bag|hair|makeup|finish)/i;
+
 export type StylingAddendum = {
   expression: string;
   headAndCameraAngle: string;
@@ -24,7 +27,10 @@ export function buildLookEditPrompt(
   addendum: StylingAddendum | null,
 ): string {
   const ctx = getStylingContext(profile);
-  const occText = `${context.occasion || ""} ${profile.occasion || ""} ${look.note || ""} ${look.title || ""}`.toLowerCase();
+  // Occasion-specific rendering rules follow the generated look itself (which the styling model
+  // derived from the user's full brief), not the raw selected occasion, which may be stale or
+  // superseded by the user's custom styling notes.
+  const occText = `${look.note || ""} ${look.title || ""} ${look.outfit || ""}`.toLowerCase();
   const isGarba = occText.includes("garba") || occText.includes("navratri") || occText.includes("dandiya");
   const isVacationOrResort =
     occText.includes("vacation") ||
@@ -33,6 +39,7 @@ export function buildLookEditPrompt(
     occText.includes("goa") ||
     occText.includes("holiday") ||
     occText.includes("summer");
+  const garmentBreakdown = (look.pieces || []).filter((p) => !NON_GARMENT_PIECE_CATEGORY.test(p.category)).map((p) => p.name);
 
   const demographicInstruction = ctx.isBoy
     ? `DEMOGRAPHIC & GENDER INTEGRITY: The subject is a young BOY child (age: ${profile.ageGroup || "child"}). The generated photo MUST depict an age-appropriate young boy in boys' kidswear. Do NOT change their gender presentation to a girl. Strictly NO dresses, skirts, chaniya choli, lehenga, adult women's kurtis, high heels, or makeup. The child must be dressed strictly in boys' clothing matching the requested outfit: ${look.outfit}.`
@@ -73,9 +80,14 @@ export function buildLookEditPrompt(
     // Head-to-toe full-length framing mandate
     "COMPOSITION & FRAMING: Strictly compose this as a full-length, head-to-toe fashion editorial photograph. The entire subject must be completely visible from the crown of their head all the way down to their feet and footwear, grounded naturally in the environment. Do NOT crop at the waist, hips, thighs, or knees; the complete outfit, bottoms, and styled footwear must be fully visible in the image.",
     "The head and face must be sized correctly and naturally for a full-length photograph — proportional to the rest of the body the way a real full-body editorial photo actually looks, not enlarged or close-up-sized like a selfie.",
-    `Re-dress and re-style this exact person for a ${context.occasion || "everyday"} setting.`,
+    context.details
+      ? `Re-dress and re-style this exact person for the occasion and setting described in the user's own styling request ("${context.details}"), which takes precedence over the selected occasion ("${context.occasion || "everyday"}") wherever they differ.`
+      : `Re-dress and re-style this exact person for a ${context.occasion || "everyday"} setting.`,
     addendum ? "" : buildMinimalPoseFallback(),
     `New outfit: ${look.outfit}`,
+    garmentBreakdown.length
+      ? `Garment breakdown — render exactly these clothing pieces together as this one outfit, with no substitutions: ${garmentBreakdown.join("; ")}.`
+      : "",
     `Colour direction: ${look.outfitColor}`,
     `Footwear: ${look.footwear}. The footwear must be fully and clearly visible on their feet grounded in this head-to-toe shot.`,
     `Jewellery: ${look.jewellery}. The jewellery must tastefully and visibly adorn the subject, harmonizing completely with the outfit and occasion.`,
