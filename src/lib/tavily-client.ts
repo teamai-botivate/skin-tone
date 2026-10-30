@@ -23,6 +23,16 @@ export type TavilySearchResponse = {
   results: TavilyResult[];
 };
 
+export class TavilySearchError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string = "",
+  ) {
+    super(`Tavily search failed with status ${status}${detail ? `: ${detail}` : ""}`);
+    this.name = "TavilySearchError";
+  }
+}
+
 function cleanEnv(val?: string): string {
   if (!val) return "";
   let trimmed = val.trim();
@@ -78,7 +88,9 @@ export async function tavilySearch(
   });
 
   if (!res.ok) {
-    throw new Error(`Tavily search failed with status ${res.status}`);
+    // Keep Tavily's own reason (e.g. HTTP 432 "exceeds your plan's set usage limit") for diagnostics
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    throw new TavilySearchError(res.status, detail);
   }
 
   const data = (await res.json()) as {

@@ -503,9 +503,15 @@ assert.equal(determineUrlType("https://www.myntra.com/dresses/tokyo-talkies/dres
 assert.equal(determineUrlType("https://www.ajio.com/search/?text=blazer"), "search_result", "Detects search URL");
 
 // Full end-to-end integration check for Garba Look
+// (runs without search API keys: the pipeline must complete with planned groups and never pad
+// results with curated benchmark products presented as live recommendations)
 const fullGarbaResult = await searchProductsForLook(primaryGarbaLook, garbaProfile, "all", true);
-assert.equal(fullGarbaResult.status, "success", "SearchProductsForLook must succeed");
-assert.ok(fullGarbaResult.products.length >= 8, "Must return comprehensive products for the Garba look");
+assert.notEqual(fullGarbaResult.status, "unavailable", "SearchProductsForLook must complete without throwing");
+assert.ok((fullGarbaResult.groups || []).length >= 4, "Must plan comprehensive product groups for the Garba look");
+assert.ok(
+  fullGarbaResult.products.every((p) => p.source === "live_search"),
+  "Only live, verified search results may be returned as product recommendations",
+);
 
 // Verify that product cards do not have men's apparel
 for (const p of fullGarbaResult.products) {
@@ -1859,7 +1865,6 @@ console.log("✓ Scenario 32 Passed: checkProductConsistency strictly rejects fe
 console.log("\n======================================================================");
 console.log("ALL 32 MASTER PROMPT SCENARIOS PASSED WITH ZERO REGRESSIONS! 🚀");
 console.log("======================================================================");
-
 
 
 

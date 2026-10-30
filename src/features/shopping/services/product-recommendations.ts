@@ -4,6 +4,7 @@ import type {
   ProductCategory,
   ProductRecommendationsResponse,
 } from '@/types';
+import { buildProductCacheFingerprint, PRODUCT_CACHE_VERSION } from '@/lib/product-cache-key';
 
 // Client-side cache to instantly return recommendations on look switch or tab navigation
 const clientProductCache = new Map<string, ProductRecommendationsResponse>();
@@ -25,7 +26,8 @@ export async function getProductRecommendations(
   category?: ProductCategory | 'all',
   forceRefresh?: boolean,
 ): Promise<ProductRecommendationsResponse> {
-  const cacheKey = `v9:${look.id}:${look.title || ''}:${profile.occasion || ''}:${category || 'all'}`;
+  // Same fingerprint as the server cache, so any material profile/look change misses the cache
+  const cacheKey = `${PRODUCT_CACHE_VERSION}:${look.id}:${buildProductCacheFingerprint(look, profile, category)}`;
 
   // Return from client cache immediately if available and refresh was not forced
   if (!forceRefresh) {

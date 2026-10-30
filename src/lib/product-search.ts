@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { getOpenAIClient, RECOMMENDATION_MODEL, getOpenAIKeyDiagnostics } from "./openai-client";
-import { tavilySearch, getTavilyKeyDiagnostics } from "./tavily-client";
+import { tavilySearch, getTavilyKeyDiagnostics, TavilySearchError } from "./tavily-client";
 import { logger } from "./logger";
 import { getStylingContext } from "./styling-context";
+import { buildProductCacheFingerprint, PRODUCT_CACHE_VERSION } from "./product-cache-key";
 import type {
   LookRecommendation,
   SkinTuneProfile,
@@ -1108,10 +1110,10 @@ export async function verifyProductPage(urlStr: string): Promise<{
               if (offers) {
                 const offerObj = Array.isArray(offers) ? offers[0] : offers;
                 if (offerObj.price) {
-                  const pNum = parseFloat(
-                    String(offerObj.price).replace(/[^0-9.]/g, ""),
+                  const pNum = parseInrAmount(
+                    typeof offerObj.price === "number" ? offerObj.price : String(offerObj.price),
                   );
-                  if (!isNaN(pNum) && pNum > 0) price = Math.round(pNum);
+                  if (pNum !== undefined && Math.round(pNum) > 0) price = Math.round(pNum);
                 }
                 if (offerObj.priceCurrency) currency = offerObj.priceCurrency;
                 if (offerObj.availability) {
@@ -1162,12 +1164,13 @@ export async function verifyProductPage(urlStr: string): Promise<{
     if (!price) {
       const priceMeta =
         html.match(/"discountedPrice":\s*(\d+)/i) ||
-        html.match(/"price":\s*"?(\d+)"?/i) ||
+        html.match(/"price":\s*"?([\d,]+(?:\.\d+)?)"?/i) ||
         html.match(/<meta property="(?:product|og):price:amount" content="([^"]+)"/i) ||
-        html.match(/content="(\d+)" property="(?:product|og):price:amount"/i);
+        html.match(/content="([\d,]+(?:\.\d+)?)" property="(?:product|og):price:amount"/i);
       if (priceMeta) {
-        const pNum = parseFloat(priceMeta[1]);
-        if (!isNaN(pNum) && pNum > 0) price = Math.round(pNum);
+        // parseFloat("1,499.00") would yield 1; parse the full comma-grouped amount
+        const pNum = parseInrAmount(priceMeta[1]);
+        if (pNum !== undefined && Math.round(pNum) > 0) price = Math.round(pNum);
       }
     }
 
@@ -1253,8 +1256,28 @@ export async function verifyProductPage(urlStr: string): Promise<{
 }
 
 /**
- * Clean and normalize a price value into an integer number and formatted string.
+ * A complete INR amount: plain digits ("1499") or comma-grouped in Indian/Western style
+ * ("1,499", "1,49,999"), with optional paise ("1,499.00"). The boundaries stop a regex from
+ * matching only part of a number (e.g. "149" out of "1499", or "499" out of "1499 INR").
  */
+const INR_AMOUNT = String.raw`(?<!\d)(?<!\d[.,])(\d{1,3}(?:,\d{2,3})+|\d+)(?:\.(\d{1,2}))?(?![\d,]|\.\d)`;
+const INR_AMOUNT_RE = new RegExp(INR_AMOUNT);
+const INR_CURRENCY_AMOUNT_RE = new RegExp(String.raw`(?:₹|Rs\.?|INR)\s*${INR_AMOUNT}`, "i");
+
+/**
+ * Parses a complete INR amount from a string such as "Rs. 1499", "₹1,499",
+ * "INR 1,49,999.00" or "1499". An amount next to a currency marker wins over other
+ * numbers (e.g. "Size 8 | ₹999" -> 999). Returns undefined when no amount is present.
+ */
+export function parseInrAmount(raw: unknown): number | undefined {
+  if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+  if (typeof raw !== "string") return undefined;
+  const match = raw.match(INR_CURRENCY_AMOUNT_RE) || raw.match(INR_AMOUNT_RE);
+  if (!match) return undefined;
+  const value = parseFloat(match[1].replace(/,/g, "") + (match[2] ? `.${match[2]}` : ""));
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 /**
  * Clean and normalize a price value into an integer number and formatted string.
  */
@@ -1267,9 +1290,9 @@ export function normalizePrice(
   if (typeof priceInput === "number" && !isNaN(priceInput) && priceInput > 0) {
     num = Math.round(priceInput);
   } else if (typeof priceInput === "string") {
-    const cleaned = priceInput.replace(/[^0-9.]/g, "");
-    const parsed = parseFloat(cleaned);
-    if (!isNaN(parsed) && parsed > 0) {
+    // Stripping non-digits would turn "Rs. 1,499" into ".1499"; parse the amount token instead
+    const parsed = parseInrAmount(priceInput);
+    if (parsed !== undefined && Math.round(parsed) > 0) {
       num = Math.round(parsed);
     }
   }
@@ -1547,18 +1570,18 @@ export function getVerifiedProductImage(
 
 export function extractPriceFromSnippet(text: string): number | undefined {
   if (!text) return undefined;
+  // Each pattern captures a complete amount (INR_AMOUNT), so "Rs. 1499" yields 1499, not 149
   const patterns = [
-    /(?:₹|Rs\.?|INR)\s*([0-9]{2,3}(?:,[0-9]{2,3})*(?:\.[0-9]{2})?)/i,
-    /(?:Price|MRP|Deal Price|Offer Price|Special Price)[:\s]+(?:₹|Rs\.?|INR)?\s*([0-9]{2,3}(?:,[0-9]{2,3})*)/i,
-    /([0-9]{2,3}(?:,[0-9]{2,3})*)\s*(?:INR|Rs\.?)/i,
+    new RegExp(String.raw`(?:₹|Rs\.?|INR)\s*${INR_AMOUNT}`, "i"),
+    new RegExp(String.raw`(?:Price|MRP|Deal Price|Offer Price|Special Price)[:\s]+(?:₹|Rs\.?|INR)?\s*${INR_AMOUNT}`, "i"),
+    new RegExp(String.raw`${INR_AMOUNT}\s*(?:INR|Rs\.?)`, "i"),
   ];
 
   for (const pat of patterns) {
     const match = text.match(pat);
     if (match) {
-      const cleaned = match[1].replace(/,/g, "");
-      const parsed = parseFloat(cleaned);
-      if (!isNaN(parsed) && parsed >= 99 && parsed <= 250000) {
+      const parsed = parseInrAmount(match[2] ? `${match[1]}.${match[2]}` : match[1]);
+      if (parsed !== undefined && parsed >= 99 && parsed <= 250000) {
         return Math.round(parsed);
       }
     }
@@ -5975,6 +5998,56 @@ export function calculateOutfitSimilarity(
 }
 
 /**
+ * Extracts `products` from the OpenAI web-search JSON output. When the output is truncated
+ * (e.g. a runaway string hits the token cap), every product object that was fully emitted
+ * before the cut is still recovered instead of discarding the whole response.
+ */
+export function parseWebSearchProductsJson(text: string): Array<Record<string, unknown>> {
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed?.products) ? parsed.products : [];
+  } catch {
+    // fall through to lenient recovery
+  }
+
+  const arrStart = text.search(/"products"\s*:\s*\[/);
+  if (arrStart === -1) return [];
+  const products: Array<Record<string, unknown>> = [];
+  let depth = 0;
+  let objStart = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = text.indexOf("[", arrStart) + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && objStart !== -1) {
+        try {
+          products.push(JSON.parse(text.slice(objStart, i + 1)));
+        } catch {
+          // skip a malformed object, keep the rest
+        }
+        objStart = -1;
+      }
+    } else if (ch === "]" && depth === 0) {
+      break;
+    }
+  }
+  return products;
+}
+
+/**
  * Searches and verifies MULTIPLE real product alternatives across retailers and price points
  * for a single styling requirement.
  */
@@ -6041,10 +6114,25 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     shade?: string;
     material?: string;
     imageUrl?: string;
+    // URL and details were written by the LLM rather than returned by a search index
+    modelAuthored?: boolean;
   }> = [];
 
   const seenCanonicalUrls = new Set<string>();
   const seenIdentityKeys = new Set<string>();
+
+  // Records how each discovery stage fared, so an empty result can be traced to its cause
+  const discovery = {
+    tavily: "not_configured" as "not_configured" | "ok" | "failed",
+    tavilyResults: 0,
+    tavilyRejectedUrls: [] as string[],
+    openai: "skipped" as "skipped" | "ok" | "failed",
+    openaiOutputChars: 0,
+    openaiProducts: 0,
+    openaiRejectedUrls: [] as string[],
+    openaiParseError: undefined as string | undefined,
+    citations: 0,
+  };
 
   // 1. Primary fast live web search: Tavily (direct <1.5s live search)
   const tavilyHealth = getTavilyKeyDiagnostics();
@@ -6080,6 +6168,8 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       }
 
       const tavilyResp = await tavilySearch(tavilyQuery, 15, searchDomains);
+      discovery.tavily = "ok";
+      discovery.tavilyResults = tavilyResp.results?.length ?? 0;
 
       const usedCandidateImages = new Set<string>();
 
@@ -6113,6 +6203,9 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       for (const res of tavilyResp.results || []) {
         if (candidateList.length >= 10) break;
 
+        if (!res.url || !isValidProductUrl(res.url)) {
+          discovery.tavilyRejectedUrls.push(String(res.url ?? "").slice(0, 120));
+        }
         if (res.url && isValidProductUrl(res.url)) {
           const canonicalUrl = getCanonicalProductUrl(res.url);
           const rawTitle = res.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
@@ -6151,12 +6244,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
                                 : parsedHost.charAt(0).toUpperCase() + parsedHost.slice(1)
           );
 
-          // Extract real live price from snippet/title e.g. Rs. 549 or ₹549
+          // Extract real live price from snippet/title e.g. Rs. 549 or ₹549.
+          // If none is found, leave it unset (page verification may fill it) rather than
+          // inventing a benchmark price that would be displayed as the product's price.
           const fullSnippet = `${res.title} ${res.content}`;
-          let extractedPrice = extractPriceFromSnippet(fullSnippet);
-          if (!extractedPrice) {
-            extractedPrice = getStandardBenchmarkPrice(spec.itemTitle);
-          }
+          const extractedPrice = extractPriceFromSnippet(fullSnippet);
 
           // Match DISTINCT candidate image ONLY if it belongs to the same retailer host AND matches title tokens
           let candidateImage: string | undefined;
@@ -6197,7 +6289,33 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         }
       }
     } catch (tavilyErr: unknown) {
-      logger.warn({ tavilyErr, spec: spec.itemTitle }, "Tavily fast search failed, falling back to OpenAI");
+      discovery.tavily = "failed";
+      logger.warn({ err: tavilyErr, spec: spec.itemTitle }, "Tavily fast search failed, falling back to OpenAI");
+
+      // Surface the provider failure so an empty result is not mistaken for "no matching products"
+      const tvStatus = tavilyErr instanceof TavilySearchError ? tavilyErr.status : undefined;
+      const tvMsg = tavilyErr instanceof Error ? tavilyErr.message : String(tavilyErr);
+      let statusType: "invalid_key" | "rate_limited" | "timeout" | "error" = "error";
+      let fixHint = "Check TAVILY_API_KEY configuration and Tavily service status.";
+      if (tvStatus === 401 || tvStatus === 403) {
+        statusType = "invalid_key";
+        fixHint = "Your TAVILY_API_KEY is invalid or revoked. Generate a new key at app.tavily.com and update .env.local.";
+      } else if (tvStatus === 429 || tvStatus === 432 || tvStatus === 433) {
+        statusType = "rate_limited";
+        fixHint = "Tavily plan or rate limit reached. Check usage at app.tavily.com or upgrade the plan; OpenAI web search is used as fallback.";
+      } else if (tavilyErr instanceof Error && (tavilyErr.name === "TimeoutError" || tavilyErr.name === "AbortError")) {
+        statusType = "timeout";
+        fixHint = "Tavily search timed out. Please retry in a few moments.";
+      }
+      if (!diagnosticsTracker.some((d) => d.keyName === "TAVILY_API_KEY")) {
+        diagnosticsTracker.push({
+          provider: "tavily",
+          status: statusType,
+          keyName: "TAVILY_API_KEY",
+          message: tvMsg,
+          suggestedFix: fixHint,
+        });
+      }
     }
   }
 
@@ -6206,6 +6324,9 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
   if (candidateList.length < 5 || uniqueCandidateRetailers.size < 2) {
     try {
       const openai = getOpenAIClient();
+      // Only identifying fields are requested. Prices, images and materials asked of the model
+      // were frequently invented (and a fabricated image hash once ran away until the JSON was
+      // truncated); those details now come solely from the verified retailer product page.
       const RESULT_JSON_SCHEMA = {
         type: "object",
         properties: {
@@ -6215,16 +6336,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
               type: "object",
               properties: {
                 pageUrl: { type: "string" },
-                imageUrl: { type: ["string", "null"] },
                 title: { type: "string" },
                 brand: { type: "string" },
                 retailer: { type: "string" },
-                price: { type: ["number", "null"] },
-                originalPrice: { type: ["number", "null"] },
-                material: { type: ["string", "null"] },
-                tier: { type: "string", enum: ["budget", "mid", "premium"] },
               },
-              required: ["pageUrl", "imageUrl", "title", "brand", "retailer", "price", "originalPrice", "material", "tier"],
+              required: ["pageUrl", "title", "brand", "retailer"],
               additionalProperties: false,
             },
           },
@@ -6233,70 +6349,80 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         additionalProperties: false,
       };
 
-      const response = await openai.responses.create({
-        model: "gpt-4o-mini",
-        tools: [{ type: "web_search" }],
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: `Search for real, purchasable, currently available products in India for: ${spec.searchQuery}.
+      const response = await openai.responses.create(
+        {
+          model: "gpt-4o-mini",
+          tools: [{ type: "web_search" }],
+          max_output_tokens: 1500,
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `Search for real, purchasable, currently available products in India for: ${spec.searchQuery}.
 Strictly adhere to:
 1. Target gender: ${spec.targetGender || "unisex"}.
 2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}.
-3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in).
-4. Provide REAL exact product page URLs found directly on retailer websites. Never invent product IDs or fake slugs.
-5. Provide real prices in INR and real retailer product image URLs if present in search results.`,
-              },
-            ],
-          },
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "web_search_products",
-            strict: true,
-            schema: RESULT_JSON_SCHEMA,
+3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in). Include products from more than one retailer when your search finds them.
+4. Return up to 8 products. Copy each product page URL exactly as it appears in your search results. Never invent, guess or complete product IDs or slugs; omit a product if you do not have its exact page URL.
+5. Use the product title exactly as listed by the retailer.`,
+                },
+              ],
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "web_search_products",
+              strict: true,
+              schema: RESULT_JSON_SCHEMA,
+            },
           },
         },
-      });
+        { timeout: 30_000, maxRetries: 1 },
+      );
 
       const outputText = response.output_text || "";
+      discovery.openai = "ok";
+      discovery.openaiOutputChars = outputText.length;
 
       if (outputText) {
         try {
-          const parsed = JSON.parse(outputText);
-          if (Array.isArray(parsed.products)) {
-            for (const prod of parsed.products) {
-              const cleanCandidateUrl = cleanUrl(prod.pageUrl);
-              if (cleanCandidateUrl && isValidProductUrl(cleanCandidateUrl)) {
-                const canonicalUrl = getCanonicalProductUrl(cleanCandidateUrl);
-                const finalTitle = prod.title || spec.itemTitle;
-                const finalBrand = prod.brand || finalTitle.split(" ")[0] || "Curated";
-                const identityKey = getProductIdentityKey(finalTitle, finalBrand);
-
-                if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
-                  seenCanonicalUrls.add(canonicalUrl);
-                  seenIdentityKeys.add(identityKey);
-                  const derivedRetailer = getRetailerFromUrl(canonicalUrl) || prod.retailer || spec.preferredRetailers[0] || "Online Store";
-                  candidateList.push({
-                    tier: (prod.tier as PriceTier) || "mid",
-                    productTitle: finalTitle,
-                    brand: finalBrand,
-                    retailer: derivedRetailer,
-                    price: prod.price ? Math.round(prod.price) : undefined,
-                    originalPrice: prod.originalPrice ? Math.round(prod.originalPrice) : undefined,
-                    url: canonicalUrl,
-                    imageUrl: prod.imageUrl || undefined,
-                    material: prod.material || undefined,
-                  });
-                }
-              }
-            }
+          JSON.parse(outputText);
+        } catch (parseErr: unknown) {
+          // Recorded for tracing; complete product objects are still recovered below
+          discovery.openaiParseError = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        }
+        const parsedProducts = parseWebSearchProductsJson(outputText);
+        discovery.openaiProducts = parsedProducts.length;
+        for (const prod of parsedProducts) {
+          const rawPageUrl = typeof prod.pageUrl === "string" ? prod.pageUrl : "";
+          const cleanCandidateUrl = cleanUrl(rawPageUrl);
+          if (!cleanCandidateUrl || !isValidProductUrl(cleanCandidateUrl)) {
+            discovery.openaiRejectedUrls.push(rawPageUrl.slice(0, 120));
+            continue;
           }
-        } catch { }
+          const canonicalUrl = getCanonicalProductUrl(cleanCandidateUrl);
+          const finalTitle = (typeof prod.title === "string" && prod.title.trim()) || spec.itemTitle;
+          const finalBrand = (typeof prod.brand === "string" && prod.brand.trim()) || finalTitle.split(" ")[0] || "Curated";
+          const identityKey = getProductIdentityKey(finalTitle, finalBrand);
+
+          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
+            seenCanonicalUrls.add(canonicalUrl);
+            seenIdentityKeys.add(identityKey);
+            const modelRetailer = typeof prod.retailer === "string" ? prod.retailer : "";
+            const derivedRetailer = getRetailerFromUrl(canonicalUrl) || modelRetailer || spec.preferredRetailers[0] || "Online Store";
+            candidateList.push({
+              tier: "mid",
+              productTitle: finalTitle,
+              brand: finalBrand,
+              retailer: derivedRetailer,
+              url: canonicalUrl,
+              modelAuthored: true,
+            });
+          }
+        }
       }
 
       // Extract search citations from tool annotations
@@ -6322,6 +6448,8 @@ Strictly adhere to:
           }
         }
       }
+
+      discovery.citations = citations.length;
 
       // Parse product blocks separated by '---'
       const blocks = outputText.split(/---|\bPRODUCT_START\b/i);
@@ -6405,6 +6533,7 @@ Strictly adhere to:
               url: canonicalUrl,
               shade: shade || undefined,
               material: material || undefined,
+              modelAuthored: true,
             });
           }
         }
@@ -6460,6 +6589,7 @@ Strictly adhere to:
     } catch (err: unknown) {
       const errObj = err as { status?: number; code?: string; message?: string };
       const errMsg = errObj.message || String(err);
+      discovery.openai = "failed";
       logger.warn({ err, spec: spec.itemTitle }, "OpenAI web search failed for styling requirement");
 
       let statusType: "missing_key" | "invalid_key" | "rate_limited" | "timeout" | "error" = "error";
@@ -6491,6 +6621,13 @@ Strictly adhere to:
     }
   }
 
+  if (candidateList.length === 0) {
+    logger.warn(
+      { spec: spec.itemTitle, discovery },
+      "No product candidates discovered for requirement; nothing to verify",
+    );
+  }
+
   // 3. Fast Parallel Verification of candidates and build products list
   const candidatePersona: PersonaType | undefined =
     spec.targetGender === "women"
@@ -6512,10 +6649,10 @@ Strictly adhere to:
       candidatePersona,
       spec.itemSubcategory,
       spec.dominantColor,
-      cand.imageUrl,
-      cand.price,
+      cand.modelAuthored ? undefined : cand.imageUrl,
+      cand.modelAuthored ? undefined : cand.price,
       profile.occasion,
-      cand.shade,
+      cand.modelAuthored ? undefined : cand.shade,
       spec.targetGender,
     );
     if (!consistency.isConsistent) {
@@ -6532,17 +6669,29 @@ Strictly adhere to:
       return null;
     }
 
-    let finalPrice = cand.price;
-    let finalOriginalPrice = cand.originalPrice;
+    // Model-written price/image/material/shade are never displayed; only the product page's values are
+    let finalPrice = cand.modelAuthored ? undefined : cand.price;
+    let finalOriginalPrice = cand.modelAuthored ? undefined : cand.originalPrice;
     let priceVerified = false;
     let productVerified = false;
     let availability: string | undefined = undefined;
-    let imageUrl = cand.imageUrl;
+    let imageUrl = cand.modelAuthored ? undefined : cand.imageUrl;
+    const candMaterial = cand.modelAuthored ? undefined : cand.material;
+    const candShade = cand.modelAuthored ? undefined : cand.shade;
     let finalTitle = cand.productTitle;
     let finalBrand = cand.brand;
 
     // Fast page verification on destination product page
     const pageData = await verifyProductPage(cand.url);
+    if (cand.modelAuthored && !pageData.success) {
+      // A URL written by the model (not returned by a search index) is only trusted once its
+      // page has actually been fetched; a bot-blocked page cannot confirm the product exists.
+      logger.info(
+        { url: cand.url, reason: pageData.reason },
+        "Dropping OpenAI-suggested candidate: retailer product page could not be verified",
+      );
+      return null;
+    }
     if (pageData.success) {
       if (pageData.price) {
         finalPrice = pageData.price;
@@ -6582,7 +6731,7 @@ Strictly adhere to:
       imageUrl,
       finalPrice,
       profile.occasion,
-      cand.shade,
+      candShade,
       spec.targetGender,
     );
     if (!postConsistency.isConsistent) {
@@ -6596,7 +6745,7 @@ Strictly adhere to:
     const finalImageUrl = imageUrl || undefined;
 
     const urlType = determineUrlType(cand.url);
-    const computedTier = cand.tier || assignPriceTier(finalPrice, budgetLimit);
+    const computedTier = cand.modelAuthored ? assignPriceTier(finalPrice, budgetLimit) : cand.tier || assignPriceTier(finalPrice, budgetLimit);
 
     const finalRetailer = getRetailerFromUrl(cand.url) || cand.retailer;
 
@@ -6607,8 +6756,8 @@ Strictly adhere to:
         brand: finalBrand,
         retailer: finalRetailer,
         price: finalPrice,
-        material: cand.material,
-        shade: cand.shade,
+        material: candMaterial,
+        shade: candShade,
         url: cand.url,
       },
       look,
@@ -6640,13 +6789,13 @@ Strictly adhere to:
       priceTier: computedTier,
       priceVerified,
       productVerified,
-      shade: cand.shade,
+      shade: candShade,
       color: spec.dominantColor,
       itemType: spec.itemSubcategory || spec.itemTitle,
       targetGender: spec.targetGender,
       style: profile.style?.[0] || "Contemporary",
       occasion: profile.occasion || "Special Event",
-      material: cand.material,
+      material: candMaterial,
       imageUrl: finalImageUrl,
       productUrl: cand.url,
       urlType,
@@ -6663,117 +6812,28 @@ Strictly adhere to:
   const verifiedRaw = await Promise.all(verifiedPromises);
   const verifiedProducts = verifiedRaw.filter((p): p is ProductResult => p !== null);
 
-  // 4. Guaranteed Multi-Retailer Benchmark Supplementation
-  // If fewer than 3 verified options were returned from live search,
-  // supplement with benchmark candidates to ensure multi-retailer shopping diversity
-  if (verifiedProducts.length < 3) {
-    const benchPersona: PersonaType =
-      spec.targetGender === "men"
-        ? "man"
-        : spec.targetGender === "child" || spec.targetGender === "boys" || spec.targetGender === "girls"
-          ? "child"
-          : "woman";
-
-    const benchmarks = getBenchmarkCandidatesForRequirement(
-      spec,
-      benchPersona,
-      budgetLimit,
-      spec.dominantColor || "Green",
-    );
-    for (const b of benchmarks) {
-      if (verifiedProducts.length >= 6) break;
-      const benchGender =
-        spec.targetGender === "boys"
-          ? "boys"
-          : spec.targetGender === "girls"
-            ? "girls"
-            : spec.targetGender === "child"
-              ? "child"
-              : benchPersona === "man"
-                ? "men"
-                : "women";
-
-      const cleanBenchUrl = sanitizeBenchmarkUrl(
-        b.retailer,
-        b.brand,
-        b.productTitle,
-        b.url,
-        benchGender,
-        spec.category,
-        spec.dominantColor,
-      );
-
-      // Validate benchmark product against consistency rules
-      const benchConsistency = checkProductConsistency(
-        b.productTitle,
-        b.brand,
-        spec.category,
-        cleanBenchUrl,
-        undefined,
-        benchPersona,
-        spec.itemSubcategory,
-        spec.dominantColor,
-        b.imageUrl,
-        b.price,
-        profile.occasion,
-        b.shade,
-        spec.targetGender,
-      );
-      if (!benchConsistency.isConsistent) {
-        logger.info(
-          { productTitle: b.productTitle, reason: benchConsistency.reason },
-          "Skipping benchmark product due to demographic/consistency check",
-        );
-        continue;
-      }
-
-      const canonicalUrl = getCanonicalProductUrl(cleanBenchUrl);
-      if (seenCanonicalUrls.has(canonicalUrl)) continue;
-      seenCanonicalUrls.add(canonicalUrl);
-
-      const symbol = "₹";
-      const formattedPrice = `${symbol}${b.price.toLocaleString("en-IN")}`;
-      const formattedOriginalPrice = b.originalPrice
-        ? `${symbol}${b.originalPrice.toLocaleString("en-IN")}`
-        : undefined;
-      const finalImg = b.imageUrl || undefined;
-
-      verifiedProducts.push({
-        id: `bench-${spec.category}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-        category: spec.category,
-        subcategory: spec.itemTitle,
-        recommendedItemTitle: spec.itemTitle,
-        brand: b.brand,
-        productName: b.productTitle,
-        retailer: b.retailer,
-        price: b.price,
-        formattedPrice,
-        originalPrice: b.originalPrice,
-        formattedOriginalPrice,
-        currency: "INR",
-        priceTier: b.tier,
-        priceVerified: false,
-        productVerified: false,
-        shade: b.shade,
-        color: spec.dominantColor,
-        itemType: spec.itemSubcategory || spec.itemTitle,
-        targetGender: spec.targetGender,
-        style: profile.style?.[0] || "Contemporary",
-        occasion: profile.occasion || "Special Event",
-        material: b.material,
-        imageUrl: finalImg,
-        productUrl: cleanBenchUrl,
-        urlType: determineUrlType(cleanBenchUrl),
-        isVerified: false,
-        matchScore: 90,
-        matchConfidence: 90,
-        matchReason: spec.matchContext,
-        availability: undefined,
-        source: "curated_benchmark",
-        lastChecked: new Date().toISOString(),
-      });
-    }
+  // When Tavily is down and the OpenAI fallback finds nothing verifiable, say so explicitly
+  // instead of leaving only the Tavily error to explain the empty group.
+  if (
+    discovery.tavily !== "ok" &&
+    discovery.openai === "ok" &&
+    verifiedProducts.length === 0 &&
+    !diagnosticsTracker.some((d) => d.provider === "openai_web_search")
+  ) {
+    logger.warn({ spec: spec.itemTitle, discovery }, "OpenAI web search fallback produced no verified products");
+    diagnosticsTracker.push({
+      provider: "openai_web_search",
+      status: "ok",
+      message:
+        `OpenAI web search fallback ran for "${spec.itemTitle}" and suggested ${discovery.openaiProducts} product(s), ` +
+        `but none could be confirmed on the retailer's product page.`,
+      suggestedFix: "Refresh to search again, or check other categories. Unverifiable suggestions are not shown.",
+    });
   }
+
+  // Only genuine retailer search results that passed verification are returned. If fewer
+  // products survive, the group stays short/empty and the UI shows its "no verified match"
+  // state; curated benchmark candidates are never injected as live recommendations.
 
   // Sort products strictly in ascending order of current price (low to high)
   verifiedProducts.sort(compareProductsByPriceAscending);
@@ -6792,6 +6852,22 @@ const serverProductCache = new Map<string, CachedProductResponse>();
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
+ * Server cache key: version, look, category, and a hash of the shared fingerprint
+ * (see buildProductCacheFingerprint for which inputs are included and why).
+ */
+export function buildProductCacheKey(
+  look: LookRecommendation,
+  profile: SkinTuneProfile,
+  requestedCategory?: string,
+): string {
+  const hash = createHash("sha256")
+    .update(buildProductCacheFingerprint(look, profile, requestedCategory))
+    .digest("hex")
+    .slice(0, 32);
+  return `${PRODUCT_CACHE_VERSION}:${look?.id ?? ""}:${requestedCategory || "all"}:${hash}`;
+}
+
+/**
  * Searches and returns MULTIPLE verified shoppable products across retailers and price points
  * for a LookRecommendation and SkinTuneProfile.
  */
@@ -6801,7 +6877,7 @@ export async function searchProductsForLook(
   requestedCategory?: string,
   forceRefresh?: boolean,
 ): Promise<ProductRecommendationsResponse> {
-  const cacheKey = `v9:${look.id}:${requestedCategory || "all"}:${profile.occasion || ""}:${profile.style?.join("-") || ""}`;
+  const cacheKey = buildProductCacheKey(look, profile, requestedCategory);
   if (!forceRefresh) {
     const cached = serverProductCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {

@@ -531,15 +531,66 @@ console.log('✓ Test 9 Passed: Image generation prompt uses latest occasion and
 // -----------------------------------------------------------------------------
 console.log('\n[Test 10] Verifying product recommendations match casual resort outfits...');
 
-const boyProductsRes = await searchProductsForLook(
-  boyGoaLooks[0],
-  reconciledBoyGoaProfile,
-  'outfit',
-);
+// Deterministic retailer search: Tavily responses and retailer product pages are mocked so this
+// test checks the pipeline's filtering, not live provider availability (and spends no credits).
+// The live equivalent is scripts/live-product-search.integration.mjs (opt-in).
+const shirtUrl = 'https://www.myntra.com/shirts/hopscotch/hopscotch-boys-maroon-linen-resort-shirt/29817364/buy';
+const kurtaUrl = 'https://www.ajio.com/boys-maroon-cotton-kurta-pyjama-set/p/469087213_maroon';
+const shortsUrl = 'https://www.ajio.com/boys-breathable-linen-drawstring-shorts/p/469076518_beige';
+const mockSearch = {
+  shirt: [
+    { url: shirtUrl, title: 'Hopscotch Boys Maroon Linen Resort Shirt | Myntra', content: 'Breathable linen shirt Rs. 1199' },
+    // Decoy: a festive kurta must never be recommended for a Goa resort look
+    { url: kurtaUrl, title: 'Boys Maroon Cotton Kurta Pyjama Set', content: 'Festive kurta set ₹1,499' },
+  ],
+  shorts: [
+    { url: shortsUrl, title: 'Boys Breathable Linen Drawstring Shorts', content: 'Relaxed linen shorts ₹1,099' },
+  ],
+};
+const mockPages = {
+  [shirtUrl]: { name: 'Hopscotch Boys Maroon Linen Resort Shirt', brand: 'Hopscotch', price: 1199 },
+  [kurtaUrl]: { name: 'Boys Maroon Cotton Kurta Pyjama Set', brand: 'AJIO', price: 1499 },
+  [shortsUrl]: { name: 'Boys Breathable Linen Drawstring Shorts', brand: 'AJIO', price: 1099 },
+};
+const savedSearchEnv = { openai: process.env.OPENAI_API_KEY, tavily: process.env.TAVILY_API_KEY };
+const realFetch = globalThis.fetch;
+delete process.env.OPENAI_API_KEY; // no paid OpenAI fallback calls from this test
+process.env.TAVILY_API_KEY = 'tvly-mock-key-for-offline-test';
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input.url ?? String(input);
+  if (url.startsWith('https://api.tavily.com/')) {
+    const query = JSON.parse(init?.body ?? '{}').query?.toLowerCase() ?? '';
+    const results = query.includes('shorts') ? mockSearch.shorts : query.includes('shirt') ? mockSearch.shirt : [];
+    return new Response(JSON.stringify({ results, images: [] }), { status: 200 });
+  }
+  const page = mockPages[url];
+  if (!page) return new Response('Page not found', { status: 404 });
+  const jsonLd = { '@type': 'Product', name: page.name, brand: { name: page.brand }, offers: { price: String(page.price), availability: 'https://schema.org/InStock' } };
+  return new Response(`<html><script type="application/ld+json">${JSON.stringify(jsonLd)}</script></html>`, { status: 200 });
+};
+
+let boyProductsRes;
+try {
+  boyProductsRes = await searchProductsForLook(
+    boyGoaLooks[0],
+    reconciledBoyGoaProfile,
+    'outfit',
+  );
+} finally {
+  globalThis.fetch = realFetch;
+  if (savedSearchEnv.openai === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = savedSearchEnv.openai;
+  if (savedSearchEnv.tavily === undefined) delete process.env.TAVILY_API_KEY;
+  else process.env.TAVILY_API_KEY = savedSearchEnv.tavily;
+}
 
 const boyProducts = boyProductsRes.products;
 console.log('  Product recommendations count:', boyProducts.length);
 assert.ok(boyProducts.length > 0, 'Must produce product recommendations');
+assert.ok(boyProducts.some((p) => p.productUrl === shirtUrl), 'Verified resort shirt must be recommended');
+assert.ok(boyProducts.every((p) => p.productUrl !== kurtaUrl), 'Decoy kurta must be filtered out');
+assert.ok(boyProducts.every((p) => p.source === 'live_search' && p.productUrl in mockPages), 'Only searched, verified products');
+assert.equal(boyProducts.find((p) => p.productUrl === shirtUrl).price, 1199, 'Verified page price must be used');
 
 for (const p of boyProducts) {
   const title = p.productName || p.productTitle || p.title || p.recommendedItemTitle || '';
