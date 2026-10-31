@@ -1,10 +1,6 @@
 'use client';
 import { Navbar } from './Navbar';
 import { HeroSection } from './HeroSection';
-import { StyleCategories } from './StyleCategories';
-import { HowItWorks } from './HowItWorks';
-import { LookShowcase } from './LookShowcase';
-import { BeautySection } from './BeautySection';
 import { OccasionSection } from './OccasionSection';
 import { AiVisualizationSection } from './AiVisualizationSection';
 import { FinalCTA } from './FinalCTA';
@@ -25,15 +21,15 @@ export function LandingPage({
   hasExistingProfile,
   onGoHome,
 }: LandingPageProps) {
-  const scrollToCategories = () => {
-    const el = document.getElementById('categories');
+  const scrollToOccasions = () => {
+    const el = document.getElementById('occasions');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F0E5D5] text-[#194A49] selection:bg-[#D9BC96] selection:text-[#194A49]">
+    <div suppressHydrationWarning className="min-h-screen bg-[#F0E5D5] text-[#194A49] selection:bg-[#D9BC96] selection:text-[#194A49]">
       {/* 1. Navbar */}
       <Navbar
         onStart={onStart}
@@ -45,47 +41,26 @@ export function LandingPage({
       {/* 2. Hero Section */}
       <HeroSection
         onStart={onStart}
-        onExplore={scrollToCategories}
+        onExplore={scrollToOccasions}
       />
 
-      {/* 3. What can LetStyle style for you? (Categories) */}
-      <StyleCategories
-        onStart={onStart}
-      />
-
-      {/* 4. How It Works (3 Steps) */}
-      <HowItWorks
-        onStart={onStart}
-      />
-
-      {/* 5. Personalized Look / OOTD Showcase */}
-      <LookShowcase
-        onStart={onStart}
-        onQuickStart={onQuickStart}
-      />
-
-      {/* 6. Beauty + Makeup Section */}
-      <BeautySection
-        onStart={onStart}
-      />
-
-      {/* 7. Jewellery + Occasion Section */}
+      {/* 3. Jewellery + Occasion Section */}
       <OccasionSection
         onStart={onStart}
         onQuickStart={onQuickStart}
       />
 
-      {/* 8. AI-Generated Looks / Visualizations */}
+      {/* 4. AI-Generated Looks / Visualizations */}
       <AiVisualizationSection
         onStart={onStart}
       />
 
-      {/* 10. Final CTA */}
+      {/* 5. Final CTA */}
       <FinalCTA
         onStart={onStart}
       />
 
-      {/* 11. Footer */}
+      {/* 6. Footer */}
       <LandingFooter
         onStart={onStart}
         onPrivacy={onPrivacy}

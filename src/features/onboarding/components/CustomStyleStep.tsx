@@ -7,9 +7,9 @@ import { FooterActions } from '@/components/common/FooterActions';
 import { RotateCcw } from 'lucide-react';
 
 const defaultQuickTags = [
-  '👗 Indo-Western lehenga',
+  '👗 Latest Indo-Western look',
   '✨ Minimal silver jewellery',
-  '🥻 Traditional silk saree',
+  '🥻 Latest traditional look',
   '🧥 Tailored power suit',
   '🌸 Soft pastel ethnic',
   '🌿 Comfortable breathable fabrics',
@@ -109,7 +109,7 @@ export function CustomStyleStep({
             onChange={(e) => update({ customStyleNotes: e.target.value })}
             data-testid="textarea-customStyleNotes"
             rows={5}
-            placeholder="e.g. Modern Indo-Western lehenga with lightweight flare and minimal silver jewellery; or a sharp navy tailored power suit with pointed pumps..."
+            placeholder="e.g. Latest Indo-Western look with lightweight flare and minimal silver jewellery; or a sharp navy tailored power suit with pointed pumps..."
             className="focus-ring w-full resize-none rounded-2xl border border-border/80 bg-background/90 p-4 text-xs sm:text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60 transition focus:border-primary shadow-inner"
           />
 

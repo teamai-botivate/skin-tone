@@ -81,7 +81,7 @@ export function OccasionSection({ onStart, onQuickStart }: OccasionSectionProps)
   const occasionList = ['Everyday', 'Work', 'Date Night', 'Wedding', 'Festive', 'Party'];
 
   return (
-    <section className="bg-[#F0E5D5] text-[#194A49] py-7 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
+    <section id="occasions" className="bg-[#F0E5D5] text-[#194A49] py-7 sm:py-10 lg:py-14 border-b border-[#B08A70]/30">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
         <div className="text-center max-w-2xl mx-auto">

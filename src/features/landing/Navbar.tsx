@@ -22,7 +22,7 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#B08A70]/30 bg-[#F0E5D5]/95 backdrop-blur-md transition-colors duration-200">
+    <header suppressHydrationWarning className="sticky top-0 z-40 w-full border-b border-[#B08A70]/30 bg-[#F0E5D5]/95 backdrop-blur-md transition-colors duration-200">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
         {/* Brand Logo */}
         <button
@@ -51,34 +51,22 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
         </button>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden items-center gap-8 md:flex" aria-label="Main Navigation">
+        <nav suppressHydrationWarning className="hidden items-center gap-8 md:flex" aria-label="Main Navigation">
           <button
+            suppressHydrationWarning
             type="button"
-            onClick={() => scrollToSection('categories')}
+            onClick={() => scrollToSection('occasions')}
             className="text-sm font-medium text-[#194A49]/80 transition-colors hover:text-[#194A49]"
           >
-            Discover
+            Occasions & Jewellery
           </button>
           <button
+            suppressHydrationWarning
             type="button"
-            onClick={() => scrollToSection('how-it-works')}
+            onClick={() => scrollToSection('ai-visualizations')}
             className="text-sm font-medium text-[#194A49]/80 transition-colors hover:text-[#194A49]"
           >
-            How It Works
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('looks-showcase')}
-            className="text-sm font-medium text-[#194A49]/80 transition-colors hover:text-[#194A49]"
-          >
-            Styling
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollToSection('beauty-section')}
-            className="text-sm font-medium text-[#194A49]/80 transition-colors hover:text-[#194A49]"
-          >
-            Beauty
+            AI Visualizer
           </button>
         </nav>
 
@@ -131,35 +119,23 @@ export function Navbar({ onStart, onPrivacy, hasExistingProfile, onGoHome }: Nav
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="border-b border-[#B08A70]/30 bg-[#F0E5D5] px-6 py-6 text-[#194A49] md:hidden animate-rise">
-          <nav className="flex flex-col gap-4">
+        <div suppressHydrationWarning className="border-b border-[#B08A70]/30 bg-[#F0E5D5] px-6 py-6 text-[#194A49] md:hidden animate-rise">
+          <nav suppressHydrationWarning className="flex flex-col gap-4">
             <button
+              suppressHydrationWarning
               type="button"
-              onClick={() => scrollToSection('categories')}
+              onClick={() => scrollToSection('occasions')}
               className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
             >
-              Discover
+              Occasions & Jewellery
             </button>
             <button
+              suppressHydrationWarning
               type="button"
-              onClick={() => scrollToSection('how-it-works')}
+              onClick={() => scrollToSection('ai-visualizations')}
               className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
             >
-              How It Works
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('looks-showcase')}
-              className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
-            >
-              Styling & Looks
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('beauty-section')}
-              className="text-left text-base font-medium text-[#194A49]/90 hover:text-[#194A49]"
-            >
-              Beauty & Makeup
+              AI Visualizer
             </button>
             <div className="my-2 border-t border-[#B08A70]/30 pt-4 flex flex-col gap-3">
               <div className="flex items-center justify-between pb-2">
