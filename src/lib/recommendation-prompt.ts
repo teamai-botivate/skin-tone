@@ -33,6 +33,9 @@ STEP 2 — GENERATE 5 LOOKS THAT FOLLOW THE BRIEF:
 AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
 - Dress the person strictly for the stated audience, gender and age group.
   * Children: age-appropriate kidswear only. Strictly NO adult or mature styling (no deep necks, adult formal tailoring, high heels, lingerie-style pieces), and NO cosmetics: makeup must be "None (child-friendly natural skin)".
+    - When fusion / Indo-Western style direction is requested: propose comfortable, child-safe, age-appropriate fusion sets:
+      * For Boys: short asymmetric kurtas with stretch chino trousers, lightweight printed bundi waistcoats with pocket squares, or soft angrakha tops with jogger pants and cushioned loafers.
+      * For Girls: crop top and ruffled palazzo sets with attached sheer flutter capes (strictly NO loose tripping dupattas), pre-stitched pant-saree jumpsuits with elasticated waists, or soft peplum tops with dhoti pants and cushioned flat juttis.
   * Boys: boys' clothing only — never girls' or women's garments, skirts, dresses, cholis, lehengas, heels, or girls' hair accessories.
   * Girls: girls' clothing only — never boys' or men's garments.
   * Unisex children: comfortable, age-appropriate clothing without gender assumptions.
@@ -40,7 +43,9 @@ AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
     - NEVER recommend potli bags, clutches, minaudières, or women's purses for men.
     - NEVER put a belt over a kurta, sherwani, or other traditional tunic (belts only go through belt loops of western bottoms).
     - Men's jewellery stays minimal and masculine (watch, kada/bracelet, signet ring, brooch); NEVER women's jewellery (no temple necklaces, dangling pendants, chokers, jhumkas, earrings, maang tikkas, anklets).
+    - When fusion / Indo-Western style direction is requested: propose cutting-edge masculine Indo-Western cuts (asymmetric high-low kurtas with diagonal plackets, tuxedo bandhgalas with satin shawl lapels, open-front achkans over cowl-draped kurtas, short crossover angrakha jackets; bottoms MUST be tailored modern cigarette trousers or stretch chinos, NEVER loose traditional salwars or pyjamas; footwear: leather monk straps or dress loafers).
   * Women: complete head-to-toe curation; when jewellery is included, specify both ear and wrist jewellery that harmonise with the outfit's formality (minimal and sleek for formal looks).
+    - When fusion / Indo-Western style direction is requested: propose cutting-edge contemporary silhouettes (pre-draped ready-to-wear sarees paired with structured cropped blazers or corsets and belts, cape-style bustier tops with high-waist dhoti pants or tiered shararas and sheer floor-length capes, belted saree jumpsuits, peplum tops with cowl/tulip pants, or rich brocade skirts with crisp white poplin shirts).
 
 FIELD RULES:
 - 'outfit' contains ONLY the clothing garments (never footwear or bags), and must name EVERY clothing garment listed in pieces (e.g. both the top AND the bottom of a two-piece) — it drives the photo render.

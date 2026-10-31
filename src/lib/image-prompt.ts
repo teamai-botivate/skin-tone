@@ -69,6 +69,30 @@ export function buildLookEditPrompt(
           : `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting. The outfit MUST be relaxed resort wear: ${look.outfit} (breezy resort dress, linen co-ord, sandals). Strictly DO NOT render heavy traditional ethnic wear (no heavy sarees, no bridal lehengas) or corporate office suits.`
     : "";
 
+  const fullStyleText = `${look.note || ""} ${look.title || ""} ${look.outfit || ""} ${(profile.style || []).join(" ")} ${profile.customStyleNotes || ""} ${context.details || ""} ${context.occasion || ""}`.toLowerCase();
+  const isIndoWestern =
+    fullStyleText.includes("indo-western") ||
+    fullStyleText.includes("indo western") ||
+    fullStyleText.includes("fusion") ||
+    occText.includes("pant-saree") ||
+    occText.includes("pre-draped") ||
+    occText.includes("dhoti-pant") ||
+    occText.includes("tuxedo bandhgala") ||
+    occText.includes("asymmetric") ||
+    occText.includes("cowl kurta");
+
+  const indoWesternInstruction = isIndoWestern
+    ? ctx.isBoy
+      ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is a modern, age-appropriate boys' Indo-Western fusion set (such as an asymmetric cut kurta with tailored stretch chino trousers, or a printed bundi waistcoat over a short kurta set). The garments must look sharp, stylish, and comfortable for a young boy with no bulky, uncomfortable layers.`
+      : ctx.isGirl
+        ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is a modern, age-appropriate girls' Indo-Western fusion set (such as a crop top with ruffled palazzo pants and an attached sheer flutter cape, or an elasticated pre-stitched pant-saree jumpsuit). It must be stylish, comfortable, and completely free of loose falling dupattas.`
+        : ctx.isKids
+          ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is an age-appropriate children's Indo-Western fusion set with clean lines, comfortable stretch bottoms, and modern tailored touches.`
+          : ctx.isMan
+            ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is contemporary menswear Indo-Western fusion (such as an asymmetric high-low kurta with diagonal placket paired with sharp tailored cigarette trousers, a tuxedo-style bandhgala with satin lapel detailing, or an open-front long achkan over a cowl-draped kurta). The bottoms MUST be crisp, tailored modern trousers (STRICTLY NO loose baggy traditional salwars or pyjamas). Footwear must be leather dress loafers or monk straps.`
+            : `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is high-fashion contemporary women's Indo-Western fusion (such as a pre-draped saree with a structured blazer or corset blouse and metallic belt, an embellished bustier with dhoti pants or sharara and a flowing floor-length sheer cape jacket, a belted saree jumpsuit, or a brocade skirt with a crisp white shirt). Visually render the exact fusion silhouette described in the outfit — sharp modern tailoring blended with rich Indian textures, with no messy loose wraps.`
+    : "";
+
   const menEthnicIntegrity = (ctx.isMan || ctx.isBoy)
     ? `MASCULINE STYLING & ETHNIC WEAR INTEGRITY (CRITICAL): For men and boys wearing Indian traditional, ethnic, or festive attire (such as kurtas, sherwanis, bandhgalas, kurta-pyjama, dhoti-kurta): 1) WAIST BELTS ARE STRICTLY FORBIDDEN OVER ETHNIC TUNICS: NEVER render a belt strapped, buckled, or worn over the outside waist of a kurta or sherwani! Kurtas are tunic garments that MUST drape freely, straight, and naturally over the bottoms without any external waist belt cinching them. 2) STRICTLY NO FEMININE JEWELLERY: NEVER render women's jewellery on men — strictly NO gold temple necklaces, NO dangling pendants, NO choker necklaces, NO jhumkas, and NO feminine chains hanging over the chest/collar. Men's traditional accessories must be strictly masculine (e.g. an analog watch, metallic kada bracelet, royal sherwani brooch/sarpech, or multi-strand royal pearl groom mala only for wedding grooms). 3) STRICTLY NO WOMEN'S ACCESSORIES: NEVER render women's accessories on men — strictly NO potli bags, clutches, or women's purses.`
     : "";
@@ -94,6 +118,7 @@ export function buildLookEditPrompt(
     `Accessories: ${look.accessories}`,
     garbaInstruction,
     vacationInstruction,
+    indoWesternInstruction,
     menEthnicIntegrity,
     `New hairstyle: ${look.hairstyle}. This hairstyle MUST be visibly and clearly restyled to match this description — do not leave the hair looking like the input photo. A different look calls for a different hairstyle; rendering the same hair across every look is a failure. Changing hairstyle does NOT change who this person is, so restyle it with confidence.`,
     `Makeup: ${look.makeup}`,

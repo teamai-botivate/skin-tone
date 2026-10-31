@@ -14,9 +14,6 @@ export const pronounOptions: SelectOption[] = [
   { label: 'Men’s styling', description: 'Sharp cuts, grooming, footwear & classic accessories' },
   { label: 'Kids / Boys styling', description: 'Playful, comfortable & tailored boys’ clothing, footwear & accessories' },
   { label: 'Kids / Girls styling', description: 'Playful dresses, coordinated sets, footwear & festive wear' },
-  { label: 'Kids / Children’s styling (Unisex)', description: 'Versatile, comfortable & age-appropriate children’s outfits' },
-  { label: 'Androgynous styling', description: 'Clean lines, fluid proportions & versatile essentials' },
-  { label: 'A mix of all three' },
 ];
 
 export const kidsGenderOptions: SelectOption[] = [
