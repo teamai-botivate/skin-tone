@@ -313,6 +313,10 @@ async function main() {
   assert.equal(view?.looks?.length, 5);
   assert.deepEqual([...(view?.readyLookIds ?? [])].sort(), ["look-01", "look-02", "look-03", "look-04", "look-05"]);
   assert.ok(view?.looks?.every((l) => l.imageUrl.startsWith("/replace-with-generated/")), "Status payload carries no image data");
+  assert.ok(
+    view?.looks?.every((l) => l.styleIntent?.effectiveOccasion === "fixture occasion" && l.styleIntent?.themeOrAesthetic === "fixture theme"),
+    "The reviewed styling brief is stored with every look, so a recovered job renders with it too",
+  );
   const image = await getGenerationJobImageForUser(job.id, "look-03", user);
   assert.equal(image, `data:image/jpeg;base64,${Buffer.from("img:look-03").toString("base64")}`, "The real generated image is stored and served");
   assert.equal((await rawJob(job.id))?.input_json, null, "The user's photo is dropped once the job finishes");

@@ -132,10 +132,18 @@ export function getProductIdentityKey(productTitle: string, brand: string): stri
 
   const normBrand = (brand || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
 
+  // Audience words and the brand (already in the key) are not identifying: store titles read
+  // "<Brand> Men <Colour> <Type>", so keeping them made every same-brand, same-colour men's
+  // product share one key and the first (possibly wrong-category) candidate hid the rest.
   const significantTokens = normTitle
     .split(" ")
-    .filter((w) => w.length > 2 && !["with", "and", "for", "the", "women", "mens"].includes(w))
-    .slice(0, 4)
+    .filter(
+      (w) =>
+        w.length > 2 &&
+        w !== normBrand &&
+        !["with", "and", "for", "the", "women", "womens", "men", "mens", "unisex", "boys", "girls", "kids"].includes(w),
+    )
+    .slice(0, 6)
     .join("-");
 
   return `${normBrand}:${significantTokens}`;
@@ -158,6 +166,86 @@ const HAND_DRAPE_RE =
 export function stripHandDrapeTerms(text: string): string {
   return text.replace(HAND_DRAPE_RE, " ").replace(/\s+/g, " ").replace(/[\s,;-]+$/, "").trim();
 }
+
+/**
+ * "Dress" as a garment, as opposed to the formal qualifier in menswear names: "dress shirt",
+ * "dress shoes", "dress trousers", "dress watch". Only the garment is women's-wear evidence.
+ */
+const DRESS_GARMENT_RE =
+  /\bdress(?:es)?\b(?![\s-]*(?:shirts?|shoes?|trousers?|pants?|watch(?:es)?|socks?|belts?|boots?|sandals?|loafers?|code))/i;
+
+export function mentionsDressGarment(text: string): boolean {
+  return DRESS_GARMENT_RE.test(text);
+}
+
+/** Who a product is listed for, as far as its own words (title or URL slug) say. */
+export type ProductAudience = "men" | "women" | "unisex" | "boys" | "girls" | "kids" | "unknown";
+
+const AUDIENCE_MEN_RE = /\b(?:men|mens|men's|menswear|male|males|gents|gent's|gentleman|gentlemen|for\s+him)\b/;
+const AUDIENCE_WOMEN_RE = /\b(?:women|womens|women's|womenswear|woman|ladies|lady|female|females|for\s+her)\b/;
+const AUDIENCE_BOYS_RE = /\b(?:boys?|boy's)\b/;
+const AUDIENCE_GIRLS_RE = /\b(?:girls?|girl's)\b/;
+// "baby pink" / "baby blue" are colours, not an audience
+const AUDIENCE_KIDS_RE = /\b(?:kids?|kid's|children|child|infants?|toddlers?|junior|baby(?!\s*(?:pink|blue)))\b/;
+
+function normalizeAudienceText(text: string): string {
+  return (text || "")
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    // URL slugs and paths: "roadster-men-navy-shirt" -> "roadster men navy shirt"
+    .replace(/[-_/+.=?&]/g, " ");
+}
+
+/**
+ * Classifies a product's audience from its own wording. Gender words are matched as whole
+ * words ("women" never counts as "men"), a product naming both men and women (or "unisex")
+ * is unisex, and a product naming only a child audience is kids'. Nothing is inferred from
+ * the garment type, occasion or style.
+ */
+export function classifyProductAudience(text: string): ProductAudience {
+  const t = normalizeAudienceText(text);
+  const men = AUDIENCE_MEN_RE.test(t);
+  const women = AUDIENCE_WOMEN_RE.test(t);
+  if (/\bunisex\b/.test(t) || (men && women)) return "unisex";
+  if (men) return "men";
+  if (women) return "women";
+  const boys = AUDIENCE_BOYS_RE.test(t);
+  const girls = AUDIENCE_GIRLS_RE.test(t);
+  if (boys && !girls) return "boys";
+  if (girls && !boys) return "girls";
+  if (boys || girls || AUDIENCE_KIDS_RE.test(t)) return "kids";
+  return "unknown";
+}
+
+/**
+ * Audience of a candidate from its title and its URL, judged separately. The title is the
+ * primary evidence; the URL slug decides only when the title is silent. A title and URL
+ * that name different adult audiences are a conflict (usually a wrong or redirected page).
+ */
+export function assessProductAudience(
+  title: string,
+  url: string,
+): { audience: ProductAudience | "conflict"; source: "title" | "url" | "none" } {
+  let urlPath = url || "";
+  try {
+    urlPath = new URL(url).pathname;
+  } catch {}
+  const fromTitle = classifyProductAudience(title);
+  const fromUrl = classifyProductAudience(urlPath);
+  if (
+    (fromTitle === "men" && fromUrl === "women") ||
+    (fromTitle === "women" && fromUrl === "men")
+  ) {
+    return { audience: "conflict", source: "title" };
+  }
+  if (fromTitle !== "unknown") return { audience: fromTitle, source: "title" };
+  if (fromUrl !== "unknown") return { audience: fromUrl, source: "url" };
+  return { audience: "unknown", source: "none" };
+}
+
+/** Garment words that only exist in women's-wear; never a men's product, whatever its title says. */
+const WOMENSWEAR_GARMENT_RE =
+  /\b(lehenga|lehengas|saree|sarees|sari|saris|blouse|blouses|kurti|kurtis|gown|gowns|skirt|skirts|heels|stiletto|stilettos|bra|bras|lingerie|choli|anarkali)\b/i;
 
 export function cleanOutfitGarmentTitle(title: string, targetGender?: string): string {
   if (!title) return targetGender === "boys" ? "Boys Outfit" : targetGender === "men" ? "Men's Outfit" : "Dress";
@@ -314,14 +402,31 @@ export function checkProductConsistency(
       };
     }
   } else if (persona === "man") {
-    const strippedOfMen = fullCheckText
-      .replace(/\b(men|mens|men's|male|gents|gentlemen)\b/gi, "");
-
-    const hasWomenToken = /\b(women|womens|women's|female|ladies|woman|girls|girl|lehenga|saree|sari|blouse|kurti|dress|gown|skirt|heels|stiletto)\b/i.test(strippedOfMen);
-    if (hasWomenToken) {
+    // Gender is judged from the product's own title and URL (independently of category),
+    // never from the garment type: "Dress Shirt", "Dress Shoes" and "Dress Watch" are
+    // menswear, and a title saying "Men" is not enough on its own (category checks follow).
+    const { audience } = assessProductAudience(`${productName || ""} ${citationTitle || ""}`, urlStr);
+    if (audience === "women" || audience === "conflict") {
       return {
         isConsistent: false,
-        reason: `Gender mismatch: Product '${productName}' contains women's apparel keywords for a male styling profile (${urlStr})`,
+        reason:
+          audience === "women"
+            ? `Gender mismatch: Product '${productName}' is listed for women, not men (${urlStr})`
+            : `Gender mismatch: Product '${productName}' title and URL name different audiences (${urlStr})`,
+      };
+    }
+    if (audience === "boys" || audience === "girls" || audience === "kids") {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Product '${productName}' is kidswear (${audience}), not adult menswear (${urlStr})`,
+      };
+    }
+
+    const strippedOfMen = normalizeAudienceText(fullCheckText).replace(/\b(men|mens|men's|male|gents|gentlemen)\b/gi, "");
+    if (WOMENSWEAR_GARMENT_RE.test(strippedOfMen) || mentionsDressGarment(strippedOfMen)) {
+      return {
+        isConsistent: false,
+        reason: `Gender mismatch: Product '${productName}' is a women's garment type for a male styling profile (${urlStr})`,
       };
     }
 
@@ -345,8 +450,27 @@ export function checkProductConsistency(
         reason: `Subcategory is Blazer, but item does not match blazer type: ${productName} (${urlStr})`,
       };
     }
+  } else if (subcat === "suit") {
+    // A suit is sold as one product (jacket + trousers), so trouser words are expected here.
+    const isSuit = /\b(suits?|tuxedos?|\d\s*-?\s*piece|two-piece|three-piece)\b/i.test(cleanName);
+    const isWrongType = /\b(jumpsuit|tracksuit|swimsuit|dress|gown|saree|skirt|shoes?|heels?|bag|t-?shirt)\b/i.test(cleanName);
+    if (!isSuit || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Suit, but item does not match suit type: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (subcat === "ethnic_bottom") {
+    const isEthnicBottom = /\b(dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|churidars?|salwars?|patiala|jodhpurs|breeches)\b/i.test(cleanName);
+    const isWrongType = /\b(kurtas?|kurtis?|shirts?|blazers?|jackets?|sarees?|dress|gown|shoes?|bags?)\b/i.test(cleanName);
+    if (!isEthnicBottom || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is an ethnic bottom (dhoti / pyjama / churidar), but item does not match: ${productName} (${urlStr})`,
+      };
+    }
   } else if (subcat ? subcat === "trousers" : (cleanName.includes("trouser") || cleanName.includes("pant"))) {
-    const isTrouser = /\b(trouser|trousers|pant|pants|slacks|chinos|culottes|wide-leg|palazzo|jeans|denim)\b/i.test(cleanName);
+    const isTrouser = /\b(trouser|trousers|pant|pants|slacks|chinos|culottes|wide-leg|palazzo|jeans|denim|joggers?|cargos?|trackpants)\b/i.test(cleanName);
     const isUpperGarment = /(?<![tT]-)\b(shirt|shirts|t-?shirts?|tees?|kurta|kurti|blouse|camisole|blazer|jacket)\b/i.test(cleanName);
     const isWrongType = isUpperGarment || (/\b(shorts?|bermudas?|dress|gown|saree|skirt|shoe|heel|bag)\b/i.test(cleanName) && !isTrouser);
     if (!isTrouser || isWrongType) {
@@ -442,8 +566,12 @@ export function checkProductConsistency(
         reason: `Subcategory is Saree, but item does not match saree type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat ? subcat === "kurta" : (cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani"))) {
-    const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|kurta\s*set|anarkali|angrakha|bandhgala)\b/i.test(fullCheckText);
+  } else if (
+    subcat
+      ? subcat === "kurta" || subcat === "sherwani"
+      : cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani")
+  ) {
+    const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|sherwanis|kurta\s*set|anarkali|angrakha|bandhgala|achkan|jodhpuri|pathani)\b/i.test(fullCheckText);
     const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag)\b/i.test(cleanName) && !isKurta;
     if (!isKurta || isWrongType) {
       return {
@@ -573,7 +701,7 @@ export function checkProductConsistency(
       };
     }
 
-    const isApparelOrBag = /\b(dress|dresses|gown|gowns|saree|sari|saris|sarees|kurta|kurtas|kurti|kurtis|lehenga|blazer|blazers|suit|suits|t-shirt|tshirt|shirt|shirts|jeans|trouser|trousers|pant|pants|skirt|skirts|jumpsuit|co-ord|coord|bag|bags|duffel|duffle|luggage|briefcase|handbag|handbags|tote|totes|clutch|purse|purses|backpack|lipstick|foundation|earring|necklace|bracelet)\b/i.test(
+    const isApparelOrBag = mentionsDressGarment(productAndPathText) || /\b(gown|gowns|saree|sari|saris|sarees|kurta|kurtas|kurti|kurtis|lehenga|blazer|blazers|suit|suits|t-shirt|tshirt|shirt|shirts|jeans|trouser|trousers|pant|pants|skirt|skirts|jumpsuit|co-ord|coord|bag|bags|duffel|duffle|luggage|briefcase|handbag|handbags|tote|totes|clutch|purse|purses|backpack|lipstick|foundation|earring|necklace|bracelet)\b/i.test(
       productAndPathText,
     );
     if (isApparelOrBag) {
@@ -636,7 +764,7 @@ export function checkProductConsistency(
 
   // 7. ACCESSORIES: Subcategory & Identity Consistency
   if (category === "accessories") {
-    const isApparelOrShoeOrMakeup = /\b(dress|gown|saree|sari|kurta|kurti|lehenga|blazer|suit|t-shirt|tshirt|jeans|trouser|trousers|pant|pants|skirt|jumpsuit|shoe|shoes|heel|heels|sandal|sandals|sneaker|sneakers|boot|boots|loafer|loafers|footwear|lipstick|foundation|concealer|compact|powder|mascara|eyeliner)\b/i.test(
+    const isApparelOrShoeOrMakeup = mentionsDressGarment(productAndPathText) || /\b(gown|saree|sari|kurta|kurti|lehenga|blazer|suit|t-shirt|tshirt|jeans|trouser|trousers|pant|pants|skirt|jumpsuit|shoe|shoes|heel|heels|sandal|sandals|sneaker|sneakers|boot|boots|loafer|loafers|footwear|lipstick|foundation|concealer|compact|powder|mascara|eyeliner)\b/i.test(
       productAndPathText,
     );
     if (isApparelOrShoeOrMakeup) {
@@ -729,7 +857,8 @@ export function checkProductConsistency(
   // 8. JEWELLERY (Earrings, necklaces, bracelets, cuffs, bangles - NEVER clothing, shoes, bags, or makeup)
   if (category === "jewellery") {
     if (
-      /\b(t-shirt|tshirt|shirt|dress|gown|saree|kurta|blazer|suit|jeans|trouser|pant|skirt|shoe|shoes|heel|heels|sandal|sandals|sneaker|boot|loafer|footwear|bag|handbag|tote|purse|clutch|lipstick|foundation|concealer|compact|mascara|eyeliner)\b/i.test(
+      mentionsDressGarment(productAndPathText) ||
+      /\b(t-shirt|tshirt|shirt|gown|saree|kurta|blazer|suit|jeans|trouser|pant|skirt|shoe|shoes|heel|heels|sandal|sandals|sneaker|boot|loafer|footwear|bag|handbag|tote|purse|clutch|lipstick|foundation|concealer|compact|mascara|eyeliner)\b/i.test(
         productAndPathText,
       )
     ) {
@@ -2573,6 +2702,93 @@ export function extractDynamicLookAccessories(
  * saree + blouse, lehenga + choli) are each decomposed into their own requirement spec,
  * while one-piece garments (dresses, jumpsuits) remain unified.
  */
+/**
+ * Menswear garments the generic (women's-first) classifier gets wrong: a men's "Outfit"
+ * piece is a kurta set, sherwani or suit, not a dress; a dhoti or churidar is not trousers;
+ * "Dress Shirt" is a shirt. Returns null when the generic rules already apply.
+ */
+export function classifyMenGarment(
+  name: string,
+  pieceCategory = "",
+): { type: "layer" | "top" | "bottom" | "one_piece"; subcat: string } | null {
+  const n = (name || "").toLowerCase();
+  const c = (pieceCategory || "").toLowerCase();
+  if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/.test(n) && !/\b(jacket|waistcoat|vest)\b/.test(n)) {
+    return { type: "one_piece", subcat: "sherwani" };
+  }
+  if (/\b(kurtas?|pathani)\b/.test(n)) {
+    return { type: c.includes("outfit") || /\b(set|pyjamas?|pajamas?|churidars?|dhoti)\b/.test(n) ? "one_piece" : "top", subcat: "kurta" };
+  }
+  if (/\b(suits?|tuxedos?)\b/.test(n) && !/\b(jacket|blazer|tracksuits?|swimsuits?|jumpsuits?)\b/.test(n)) {
+    return { type: "one_piece", subcat: "suit" };
+  }
+  if (/\b(dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|churidars?|salwars?|patiala|jodhpurs)\b/.test(n)) {
+    return { type: "bottom", subcat: "ethnic_bottom" };
+  }
+  if (/\bco-?ords?\b/.test(n)) return { type: "one_piece", subcat: "men_outfit" };
+  return null;
+}
+
+/** Noun that names each men's outfit subcategory, added to a query only when the title lacks it. */
+const MEN_SUBCAT_NOUNS: Record<string, { present: RegExp; noun: string }> = {
+  shirt: { present: /\b(shirts?|polos?|henleys?|button-downs?)\b/i, noun: "shirt" },
+  top: { present: /\b(t-?shirts?|tees?|polos?|henleys?|tops?|sweaters?|sweatshirts?|hoodies?|vests?)\b/i, noun: "t-shirt" },
+  inner_top: { present: /\b(t-?shirts?|tees?|vests?|tops?|shirts?)\b/i, noun: "t-shirt" },
+  trousers: { present: /\b(trousers?|pants?|chinos?|jeans|joggers?|cargos?|slacks)\b/i, noun: "trousers" },
+  shorts: { present: /\b(shorts?|bermudas?)\b/i, noun: "shorts" },
+  blazer: { present: /\b(blazers?)\b/i, noun: "blazer" },
+  jacket: { present: /\b(jackets?|coats?|overshirts?|waistcoats?|vests?|cardigans?|shrugs?|bombers?|overcoats?)\b/i, noun: "jacket" },
+  kurta: { present: /\b(kurtas?|pathani)\b/i, noun: "kurta" },
+  sherwani: { present: /\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i, noun: "sherwani" },
+  suit: { present: /\b(suits?|tuxedos?)\b/i, noun: "suit" },
+};
+
+// Longer forms first, so "Men's" is removed whole rather than leaving a stray "'s"
+const MEN_AUDIENCE_WORDS_RE = /\b(?:for\s+)?(?:men['’]s|menswear|mens|men|males?|gents|gentlemen)(?![\w'’])/gi;
+// Planning filler that describes the styling, not the product a store lists
+const QUERY_FILLER_RE = /\b(?:matching|curated|coordinated|coordinating|complementary|complementing)\b/gi;
+
+/**
+ * A natural men's retailer query from the garment the look actually names: gender once,
+ * the garment's own colour/fabric/fit/style words, and the garment noun only when the
+ * title does not already say it. No store names, no generic padding.
+ */
+export function buildMenGarmentQuery(title: string, subcat: string, color?: string): string {
+  const base = (title || "")
+    .replace(MEN_AUDIENCE_WORDS_RE, " ")
+    .replace(QUERY_FILLER_RE, " ")
+    .replace(/[\/|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const terms = ["men"];
+  const cleanColor = (color || "").replace(MEN_AUDIENCE_WORDS_RE, " ").trim();
+  // A real colour (short, not the whole title) is added only when the title does not carry it
+  if (cleanColor && cleanColor.split(/\s+/).length <= 3 && !base.toLowerCase().includes(cleanColor.toLowerCase())) {
+    terms.push(cleanColor);
+  }
+  terms.push(base);
+  const nounRule = MEN_SUBCAT_NOUNS[subcat];
+  if (nounRule && !nounRule.present.test(base)) terms.push(nounRule.noun);
+  return normalizeAudienceQuery(terms.join(" "), "men");
+}
+
+/**
+ * Keeps exactly one audience word at the front of a query and drops repeated words, e.g.
+ * "men Men's Classic watch analog watch" -> "men Classic watch analog".
+ */
+export function normalizeAudienceQuery(query: string, audience: "men"): string {
+  const stripped = (query || "").replace(MEN_AUDIENCE_WORDS_RE, " ");
+  const seen = new Set<string>([audience]);
+  const words: string[] = [audience];
+  for (const w of stripped.split(/\s+/)) {
+    const key = w.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    words.push(w);
+  }
+  return words.join(" ");
+}
+
 export function decomposeOutfitGarments(
   look: LookRecommendation,
   profile: SkinTuneProfile,
@@ -2627,8 +2843,12 @@ export function decomposeOutfitGarments(
     /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|joggers?|culottes?)\b/i.test(t);
   const isTop = (t: string) =>
     /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie)\b/i.test(t);
+  const isMen = targetGender === "men";
+  // For men, "dress" only counts as the garment, never the "dress shirt / dress trousers" qualifier.
   const isOnePiece = (t: string) =>
-    /\b(dress|dresses|saree|sari|saris|sarees|jumpsuit|jumpsuits|romper|rompers|playsuit|gown|gowns|anarkali)\b/i.test(t);
+    isMen
+      ? mentionsDressGarment(t) || /\b(saree|sari|saris|sarees|jumpsuit|jumpsuits|romper|rompers|playsuit|gown|gowns|anarkali)\b/i.test(t)
+      : /\b(dress|dresses|saree|sari|saris|sarees|jumpsuit|jumpsuits|romper|rompers|playsuit|gown|gowns|anarkali)\b/i.test(t);
 
   // 1. If structured pieces exist in look.pieces with distinct components
   if (apparelPieces.length >= 2) {
@@ -2637,8 +2857,12 @@ export function decomposeOutfitGarments(
       const n = (p.name || "").trim();
       let type: "layer" | "top" | "bottom" | "one_piece" = "top";
       let subcat = "top";
+      const menGarment = isMen ? classifyMenGarment(n, c) : null;
 
-      if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
+      if (menGarment) {
+        type = menGarment.type;
+        subcat = menGarment.subcat;
+      } else if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
         type = "top";
         subcat = "inner_top";
       } else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) {
@@ -2653,11 +2877,15 @@ export function decomposeOutfitGarments(
         else if (/\bskirt\b/i.test(n)) subcat = "skirt";
         else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) subcat = "lehenga";
         else subcat = "trousers";
-      } else if (c.includes("outfit") || isOnePiece(n)) {
+      } else if (
+        isMen
+          ? isOnePiece(n) || (c.includes("outfit") && !isTop(n) && !isBottom(n))
+          : c.includes("outfit") || isOnePiece(n)
+      ) {
         type = "one_piece";
         if (/\b(saree|sari)\b/i.test(n)) subcat = "saree";
         else if (/\b(jumpsuit|romper)\b/i.test(n)) subcat = "jumpsuit";
-        else subcat = "dress";
+        else subcat = isMen ? "men_outfit" : "dress";
       } else {
         type = "top";
         if (/\b(t-?shirts?|tees?)\b/i.test(n)) subcat = "top";
@@ -2741,7 +2969,13 @@ export function decomposeOutfitGarments(
         const cleanClause = cleanOutfitGarmentTitle(clause, targetGender);
         if (!cleanClause || cleanClause.length < 3) continue;
 
-        if (isLayer(cleanClause) && !foundTypes.has("layer")) {
+        const menClauseGarment = isMen ? classifyMenGarment(cleanClause) : null;
+        if (menClauseGarment) {
+          if (!foundTypes.has(menClauseGarment.type)) {
+            foundTypes.add(menClauseGarment.type);
+            detectedGarments.push({ type: menClauseGarment.type, subcat: menClauseGarment.subcat, rawTitle: cleanClause });
+          }
+        } else if (isLayer(cleanClause) && !foundTypes.has("layer")) {
           foundTypes.add("layer");
           detectedGarments.push({
             type: "layer",
@@ -2773,7 +3007,7 @@ export function decomposeOutfitGarments(
           });
         } else if (isOnePiece(cleanClause) && !foundTypes.has("one_piece")) {
           foundTypes.add("one_piece");
-          let subcat = "dress";
+          let subcat = isMen ? "men_outfit" : "dress";
           if (/\b(jumpsuit|romper|playsuit)\b/i.test(cleanClause)) subcat = "jumpsuit";
           detectedGarments.push({
             type: "one_piece",
@@ -2788,7 +3022,7 @@ export function decomposeOutfitGarments(
         if (isOnePiece(lowerText)) {
           detectedGarments.push({
             type: "one_piece",
-            subcat: /\b(jumpsuit|romper)\b/i.test(lowerText) ? "jumpsuit" : "dress",
+            subcat: /\b(jumpsuit|romper)\b/i.test(lowerText) ? "jumpsuit" : isMen ? "men_outfit" : "dress",
             rawTitle: outfitText,
           });
         } else {
@@ -2908,14 +3142,19 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
     else if (g.subcat === "dress") itemQueryKeyword = "dress";
 
-    const searchTerms = [
-      targetGender,
-      color,
-      itemQueryKeyword,
-      ...preferredRetailers.slice(0, 3),
-    ]
-      .filter(Boolean)
-      .join(" ");
+    // Men's queries are built from the garment's own name (type, colour, fabric, fit, style)
+    // with "men" exactly once; the generic women's-first keywords ("dress", "tailored
+    // trousers pants", "festive kurta set") are not appended to them.
+    const searchTerms = isMen
+      ? buildMenGarmentQuery(rawClean, g.subcat, g.color)
+      : [
+          targetGender,
+          color,
+          itemQueryKeyword,
+          ...preferredRetailers.slice(0, 3),
+        ]
+          .filter(Boolean)
+          .join(" ");
 
     specs.push({
       category: "outfit",
@@ -3231,7 +3470,13 @@ export function planRequirementSpecs(
             materialHint = "Sterling silver / 18K gold plated / minimalist chain";
           }
         } else if (item.type === "bracelet") {
-          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+          if (persona === "man" || targetGender === "men") {
+            // Men's wristwear is searched as the look names it (kada, leather bracelet, chain
+            // bracelet...), never swapped for women's kundan bangles or bangle stacks.
+            styleReq = `${item.title} for men, coordinating with the outfit's metal tones`;
+            searchQuery = `men ${item.title}${/\b(kadas?|bracelets?|cuffs?|bands?)\b/i.test(item.title) ? "" : " bracelet"}`;
+            materialHint = item.material || "Stainless steel / sterling silver / leather";
+          } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
             styleReq = isGarbaOrNavratri
               ? "Stack of textured oxidised silver bangles with delicate ghungroos"
               : "Traditional gold-plated kundan openable kada pair or festive bangle stack";
@@ -3373,7 +3618,15 @@ export function planRequirementSpecs(
           accQuery = `${targetGender} ${dominantHumanColor} ${item.title} laptop bag briefcase Myntra AJIO Tata CLiQ`;
         } else if (item.type === "bag") {
           if (persona === "man" || targetGender === "men") {
-            if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            // The bag the look names (messenger, briefcase, backpack, duffle...) is what is
+            // searched; the occasion only shapes the styling note, never the product type.
+            const hasBagNoun = /\b(bags?|briefcases?|backpacks?|duffle|duffel|satchels?|totes?|wallets?|pouch)\b/i.test(item.title);
+            if (item.title && hasBagNoun) {
+              accStyle = isOfficeOrFormal
+                ? `${item.title} with a structured, professional finish`
+                : `${item.title} coordinating with the outfit`;
+              accQuery = `men ${item.title}`;
+            } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
               accStyle = `Rich raw silk stole or pocket square coordinating with festive kurta`;
               accQuery = `men ${dominantHumanColor} silk stole pocket square Myntra AJIO`;
             } else if (isOfficeOrFormal) {
@@ -3529,6 +3782,14 @@ export function planRequirementSpecs(
   if (applicableCategories.includes("makeup") && (persona === "woman" || persona === "man")) {
     const makeupSpecs = buildPersonalizedMakeupSpecs(look, profile, persona);
     specs.push(...makeupSpecs);
+  }
+
+  // Men's footwear/jewellery/accessory queries join "men" with item titles that often say
+  // "Men's" again ("men Men's Classic watch ... watch"); keep the audience word exactly once.
+  if (targetGender === "men") {
+    for (const s of specs) {
+      if (s.targetGender === "men" && s.category !== "makeup") s.searchQuery = normalizeAudienceQuery(s.searchQuery, "men");
+    }
   }
 
   return specs;
@@ -6399,14 +6660,7 @@ export interface CandidateRejection {
 
 /** Audience a product title or URL is aimed at, as far as its own words say. */
 export function detectAudience(text: string): string {
-  const t = text.toLowerCase();
-  if (/\b(boys?|boy's)\b/.test(t)) return "boys";
-  if (/\b(girls?|girl's)\b/.test(t)) return "girls";
-  if (/\b(kids?|children|infants?|toddlers?)\b/.test(t)) return "kids";
-  if (/\b(women|womens|women's|ladies|woman|female)\b/.test(t)) return "women";
-  if (/\b(men|mens|men's|gents|male)\b/.test(t)) return "men";
-  if (/\bunisex\b/.test(t)) return "unisex";
-  return "unknown";
+  return classifyProductAudience(text);
 }
 
 const GARMENT_TYPE_RE =
@@ -6522,7 +6776,12 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
   const discoveryQuery = buildDiscoveryQuery(spec);
   const rejections: CandidateRejection[] = [];
   const reject = (r: Omit<CandidateRejection, "category">) => {
-    const entry: CandidateRejection = { category: spec.category, ...r };
+    const entry: CandidateRejection = {
+      category: spec.category,
+      detectedGender: assessProductAudience(r.extractedTitle ?? "", r.url).audience,
+      detectedType: detectProductType(`${r.extractedTitle ?? ""} ${r.url}`),
+      ...r,
+    };
     rejections.push(entry);
     logger.warn({ item: spec.itemTitle, ...entry }, "Product candidate rejected");
   };
@@ -6806,7 +7065,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
                   type: "input_text",
                   text: `Search for real, purchasable, currently available products in India for: ${discoveryQuery}.
 Strictly adhere to:
-1. Target gender: ${spec.targetGender || "unisex"}.
+1. Target gender: ${spec.targetGender || "unisex"}.${
+                    spec.targetGender === "men"
+                      ? " Only products the retailer lists for men (men's section; titles usually say Men, Men's or Mens). Never women's, girls' or kids' products. Unisex products only if the item is genuinely unisex."
+                      : ""
+                  }
 2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}. Every product must be this exact kind of item.${
                     spec.category === "footwear" && spec.itemSubcategory && FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]
                       ? ` Stores list it as ${FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]}; search all of these names, keep the recommended colour and style, and never substitute a different footwear type.`
@@ -7132,6 +7395,7 @@ Strictly adhere to:
       profile.occasion,
       cand.modelAuthored ? undefined : cand.shade,
       spec.targetGender,
+      spec.itemTitle,
     );
     if (!consistency.isConsistent) {
       rejectCandidate({
@@ -7223,6 +7487,7 @@ Strictly adhere to:
       profile.occasion,
       candShade,
       spec.targetGender,
+      spec.itemTitle,
     );
     if (!postConsistency.isConsistent) {
       rejectCandidate({
@@ -7236,6 +7501,7 @@ Strictly adhere to:
     }
 
     const finalImageUrl = imageUrl || undefined;
+    const productAudience = assessProductAudience(finalTitle, cand.url).audience;
 
     const urlType = determineUrlType(cand.url);
     const computedTier = cand.modelAuthored ? assignPriceTier(finalPrice, budgetLimit) : cand.tier || assignPriceTier(finalPrice, budgetLimit);
@@ -7297,7 +7563,9 @@ Strictly adhere to:
       shade: candShade,
       color: spec.dominantColor,
       itemType: spec.itemSubcategory || spec.itemTitle,
-      targetGender: spec.targetGender,
+      // A men's (or women's) requirement can be met by a genuinely unisex product; it is
+      // labelled as unisex rather than presented as gender-specific.
+      targetGender: productAudience === "unisex" ? "unisex" : spec.targetGender,
       style: profile.style?.[0] || "Contemporary",
       occasion: profile.occasion || "Special Event",
       material: candMaterial,

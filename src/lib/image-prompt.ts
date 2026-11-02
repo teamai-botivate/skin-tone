@@ -16,6 +16,26 @@ export type StylingAddendum = {
   flatteringDirection: string;
 };
 
+/**
+ * The reviewed styling brief behind a look, as one line of context for image generation.
+ * Empty when the look carries none (looks from older sessions). It is deliberately framed as
+ * background: the look's own outfit, garments, footwear, jewellery and accessories decide what
+ * is rendered, and the intent may only help the render express the same aesthetic and occasion.
+ */
+export function formatStyleIntent(look: Pick<LookRecommendation, "styleIntent">): string {
+  const intent = look.styleIntent;
+  if (!intent) return "";
+  const facts = [
+    intent.effectiveOccasion ? `occasion: ${intent.effectiveOccasion}` : "",
+    intent.themeOrAesthetic ? `aesthetic: ${intent.themeOrAesthetic}` : "",
+    intent.styleDirection ? `style direction: ${intent.styleDirection}` : "",
+    intent.mustInclude?.length ? `the person asked for: ${intent.mustInclude.join("; ")}` : "",
+    intent.mustAvoid?.length ? `the person asked to avoid: ${intent.mustAvoid.join("; ")}` : "",
+  ].filter(Boolean);
+  if (!facts.length) return "";
+  return `REVIEWED STYLING INTENT (background only — the outfit, garment breakdown, colour, footwear, jewellery and accessories stated above are authoritative and must be rendered exactly as given; use this only so the mood, posture and setting express the same aesthetic and occasion): ${facts.join(". ")}.`;
+}
+
 export function buildMinimalPoseFallback(): string {
   return "Compose this as one natural, well-lit, coherent photograph appropriate to the occasion and outfit.";
 }
@@ -48,7 +68,7 @@ export function buildLookEditPrompt(
       : ctx.isKids
         ? `DEMOGRAPHIC INTEGRITY: The subject is a young child (age: ${profile.ageGroup || "child"}). The generated photo MUST depict an age-appropriate child in comfortable kidswear. Strictly NO adult clothing or mature styling.`
         : ctx.isMan
-          ? `DEMOGRAPHIC INTEGRITY: The subject is an adult man. Style in men's tailoring and clothing.`
+          ? `DEMOGRAPHIC INTEGRITY: The subject is an adult man. Style in sophisticated, well-proportioned menswear. Strictly masculine tailoring, natural masculine grooming, correct shoulder posture, and authentic garment drape (proper sleeve length, natural chest drape, and clean trouser break at the footwear). Strictly NO women's clothing, NO feminine silhouettes, and NO feminine jewellery or accessories.`
           : `DEMOGRAPHIC INTEGRITY: The subject is an adult woman. Style in women's fashion.`;
 
   const garbaInstruction = isGarba
@@ -113,6 +133,7 @@ export function buildLookEditPrompt(
       ? `Garment breakdown — render exactly these clothing pieces together as this one outfit, with no substitutions: ${garmentBreakdown.join("; ")}.`
       : "",
     `Colour direction: ${look.outfitColor}`,
+    formatStyleIntent(look),
     `Footwear: ${look.footwear}. The footwear must be fully and clearly visible on their feet grounded in this head-to-toe shot.`,
     `Jewellery: ${look.jewellery}. The jewellery must tastefully and visibly adorn the subject, harmonizing completely with the outfit and occasion.`,
     `Accessories: ${look.accessories}`,

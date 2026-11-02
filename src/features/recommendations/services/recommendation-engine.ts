@@ -1265,8 +1265,9 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
     ];
   }
 
-  // 2. Office / Formal Suits
-  if (isOffice) {
+  // 2. Office / Formal Suits (this look is womenswear: camisole, pumps, studs; men are never
+  // given it, they fall through to the men's branch below)
+  if (isOffice && !isMan) {
     return [
       {
         id: 'office-look-01',
@@ -1781,6 +1782,13 @@ export const getLookRecommendations = async (
   if (profile.customStyleNotes?.trim()) {
     throw new Error(
       `${failureReason} Your custom styling request needs live AI styling, so no pre-made looks were substituted. Please try again.`,
+    );
+  }
+  // Men's looks are never substituted with pre-made outfits: a fixed list cannot reflect the
+  // man's occasion, aesthetic, build, fit or colours, so a clear retry is more honest.
+  if (getStylingContext(profile).isMan) {
+    throw new Error(
+      `${failureReason} Men's styling needs live AI styling, so no pre-made looks were substituted. Please try again.`,
     );
   }
   return generateFallbackLooks(profile);

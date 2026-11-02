@@ -39,6 +39,18 @@ export const LookPieceSchema = z.object({
   detail: z.string().optional().default(''),
 });
 
+// The reviewed styling brief behind a look batch, reduced to what image generation can use as
+// context. Carried on each look so it travels through every existing look contract (the
+// recommendations response, a job's stored looks, image requests) without a new one.
+export const StyleIntentSchema = z.object({
+  effectiveOccasion: z.string().optional().default(''),
+  themeOrAesthetic: z.string().optional().default(''),
+  styleDirection: z.string().optional().default(''),
+  mustInclude: z.array(z.string()).optional().default([]),
+  mustAvoid: z.array(z.string()).optional().default([]),
+});
+export type StyleIntent = z.infer<typeof StyleIntentSchema>;
+
 export const LookRecommendationSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -59,6 +71,7 @@ export const LookRecommendationSchema = z.object({
   confidence: z.number().optional().default(90),
   imageUrl: z.string().optional().default(''),
   applicableCategories: z.array(z.string()).optional().default([]),
+  styleIntent: StyleIntentSchema.optional(),
 });
 export type LookRecommendation = z.infer<typeof LookRecommendationSchema>;
 

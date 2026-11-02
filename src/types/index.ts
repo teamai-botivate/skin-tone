@@ -73,6 +73,14 @@ export type LookRecommendation = {
   confidence: number;
   imageUrl: string;
   applicableCategories?: string[];
+  /** Reviewed styling brief behind this look's batch; image-generation context only, never overrides the look itself. */
+  styleIntent?: {
+    effectiveOccasion?: string;
+    themeOrAesthetic?: string;
+    styleDirection?: string;
+    mustInclude?: string[];
+    mustAvoid?: string[];
+  };
 };
 
 export type ProductCategory =

@@ -4,6 +4,7 @@ import {
   LookRecommendationSchema,
   type LookRecommendation,
   type SkinTuneProfile,
+  type StyleIntent,
 } from "@/lib/skintune-schemas";
 import { RECOMMENDATION_MODEL, type OpenAIRequestOptions } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
@@ -44,6 +45,33 @@ SAREE EXPERTISE (applies whenever the brief's sareeAesthetic is not "not_request
 - Match fabric weight and richness to the effective occasion's formality: rich zari silks and heirloom weaves for grand ceremonies; breathable handloom cotton, Chanderi or Maheshwari for daily wear; follow the user's stated fabric or comfort needs above all.
 - Make the 5 saree looks genuinely different from each other: vary the weave or construction, regional origin, drape, blouse design and silhouette — not just the colour.
 - For every saree look: 'outfit' names the saree type, fabric and weave or origin, the draping style, and the blouse design (and any jacket, cape or layer). In pieces, the saree is an "Outfit" piece whose name is the saree itself (type, fabric, weave — never the drape) and whose detail gives origin, border / motifs and the drape; the blouse is a "Top" piece; a jacket or cape is a "Layer"; a belt goes in 'accessories'. The note and reasoning explain colour and occasion suitability and how to style it; jewellery and footwear must suit that saree and drape.
+
+MENSWEAR STYLING EXPERTISE (applies only when the audience is an adult man):
+- Menswear is a discipline of silhouette, proportion, cut, fabric weight, texture and coordinated formality. Choose every garment from THIS person's brief (request, effective occasion, aesthetic, build, fit, colours, climate); never fall back on a default formula such as shirt + chinos + loafers in different colours.
+- DYNAMIC AESTHETIC UNIVERSES — interpret the requested aesthetic through its principles, then choose the garments yourself (these describe qualities, not outfits to copy):
+  * Minimal: clean lines, restrained tonal palettes, no unnecessary detail, quiet hardware.
+  * Smart Casual: relaxed tailoring and refined texture; polished without full suiting.
+  * Formal / Business: structured tailoring, crisp shirting, refined leather footwear, the highest formality the brief calls for.
+  * Streetwear: relaxed or boxy proportions, utility details, layered casual pieces, sneaker-led footwear.
+  * Old Money: understated heritage quality, natural fibres, muted classic colour, no visible logos.
+  * Warm-weather leisure: breathable natural fabrics, open collars, light relaxed shapes.
+  * Indian traditional & festive menswear: authentic garments and textiles for the brief's cultural context, from everyday traditional to ceremonial; Indo-Western fusion only when the brief's style direction is fusion.
+  * Any other aesthetic the user names: work out its principles the same way; never map it onto one of the above.
+- HEAD-TO-TOE OUTFIT COHESION:
+  * Each look has ONE clear styling direction: top, bottom, any layer, footwear and accessories share the same formality level and aesthetic, with coordinated colours, patterns, fabric weights and fit.
+  * Footwear follows the outfit's formality and silhouette (refined leather for tailoring, traditional footwear for traditional garments, sneakers or casual shoes for casual and street looks).
+  * Accessories and jewellery appear only when they genuinely serve the look; "None" is a valid answer. When present, their formality and metals match the outfit (strap and belt leathers coordinate with footwear).
+  * Layers are balanced: heavy outerwear over suitably light base layers; never bulk forced under slim tailoring.
+- PROPORTIONS, BODY BUILD & FIT ADAPTATION (only from what the user provided; never assume a build or fit):
+  * Broader frames: vertical lines, softer shoulders, straight rather than clinging cuts.
+  * Slimmer frames: texture and considered layering add dimension; avoid both tent-like volume and skin-tight cuts.
+  * Fuller frames: clean drape from the natural waist, tonal or vertical colour, matte fabrics.
+  * Athletic builds: room through the chest and thighs with a clean, tapered line.
+  * Honour the stated fit preference (fitted, regular, relaxed, oversized) in every garment without changing the brief's formality.
+  * Use the age group only to calibrate formality and proportion, never to impose stereotypes.
+- BATCH VARIETY ACROSS THE 5 LOOKS:
+  * NEVER generate 5 repetitive variations of "shirt + chino trousers + loafers".
+  * Vary the 5 looks within the brief by silhouette, garment family, layering strategy, fabric and texture, and footwear, choosing whichever variations this brief genuinely supports. There is no fixed slot or template per look; never introduce a garment the brief or occasion does not support just to create variety.
 
 AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
 - Dress the person strictly for the stated audience, gender and age group.
@@ -219,11 +247,12 @@ export const REVIEW_SYSTEM_PROMPT = `You are LetStyle's styling quality reviewer
 
 1. Build the checklist ONCE in "requirements": every explicit requirement or exclusion in the user's own request (split compound requests into separate items, e.g. "full sleeves", "ankle length", "no slits"), plus brief mustInclude/mustAvoid items ONLY if they are grounded in something the user actually provided (request, colours, restrictions, non-conflicting selections) — skip items that are merely the stylist's own garment or styling ideas — plus the effective occasion and the style direction. The user's own words outrank the brief; selected options that conflict with the user's request are NOT requirements. Do not invent requirements (no colour-matching or comfort preferences the user did not state).
    When the brief's sareeAesthetic is not "not_requested", add one requirement for it: "traditional" = an authentic traditional saree or regional weave, traditionally worn (no western or fusion outfit); "contemporary" = a modern saree construction or innovative drape (pre-draped, ruffle, pant-style, dhoti-style, belted, cape, jacket or cowl); "traditional_with_modern_touch" = an authentic traditional saree or weave AND a visible contemporary element (modern blouse, jacket or cape, belt, or updated drape). A saree look that names a weave but no drape, or calls a drape a weave, does not satisfy it.
+   When styling men, check menswear styling cohesion and aesthetic fidelity: ensure footwear and accessories match the outfit formality (no running shoes with formal suits; no women's jewellery, potli bags or clutches; no belts over kurtas or ethnic tunics); and ensure the aesthetic and occasion the user actually asked for are genuinely reflected in the garments and footwear, with each look having one coherent formality level.
 2. For each look, check EVERY requirement against the garments actually named in the look's outfit and pieces: satisfied = true only if the look clearly meets it; quote the deciding words in "evidence". A different garment than requested (e.g. a length, cut or fabric other than the one specified) is NOT satisfied.
 3. audienceAppropriate: every garment suits the stated audience, gender and age group.
 4. titleGarmentsInOutfit: every garment named in the title or note also appears in the 'outfit' field.
 5. outfitNamesAllClothingPieces: the 'outfit' field names every clothing piece (Top/Bottom/Layer/Outfit categories) listed in pieces.
-6. batchVariety (once, for all 5 looks): variedBeyondColour = true only if the looks differ in more than colour — e.g. silhouette, garment type, fabric or weave, construction, drape, or blouse/top design. Five near-identical garments in different colours is false; quote the deciding differences (or their absence) in "evidence".
+6. batchVariety (once, for all 5 looks): variedBeyondColour = true only if the looks differ in more than colour — e.g. silhouette, garment type, fabric or weave, construction, drape, or blouse/top design. Five near-identical garments in different colours (or for men, repeating identical shirt-and-chinos variations across the looks) is false; quote the deciding differences (or their absence) in "evidence".
 Output JSON matching the schema.`;
 
 const ReviewSchema = z.object({
@@ -285,6 +314,33 @@ const REVIEW_JSON_SCHEMA = {
   required: ["requirements", "reviews", "batchVariety"],
   additionalProperties: false,
 } as const;
+
+const INTENT_TEXT_MAX = 240;
+const INTENT_LIST_MAX = 8;
+const clipText = (s: string) => (s || "").replace(/\s+/g, " ").trim().slice(0, INTENT_TEXT_MAX);
+
+/**
+ * The reviewed brief reduced to what image generation can use as context: the effective
+ * occasion, theme/aesthetic and style direction, plus the user's own requirements and
+ * exclusions. Free-text reasoning and conflict notes are dropped, and text is bounded so a
+ * long brief can never bloat an image request.
+ */
+export function toStyleIntent(brief: StyleBrief): StyleIntent {
+  const list = (xs: string[]) => xs.map(clipText).filter(Boolean).slice(0, INTENT_LIST_MAX);
+  return {
+    effectiveOccasion: clipText(brief.effectiveOccasion),
+    themeOrAesthetic: clipText(brief.themeOrAesthetic),
+    styleDirection: brief.styleDirection,
+    mustInclude: list(brief.mustInclude),
+    mustAvoid: list(brief.mustAvoid),
+  };
+}
+
+/** Attaches the reviewed brief's intent to every look of the batch; the looks themselves are unchanged. */
+export function attachStyleIntent<T extends object>(looks: T[], brief: StyleBrief): Array<T & { styleIntent: StyleIntent }> {
+  const styleIntent = toStyleIntent(brief);
+  return looks.map((look) => ({ ...look, styleIntent }));
+}
 
 export type GeneratedLook = Omit<LookRecommendation, "imageUrl">;
 

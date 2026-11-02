@@ -129,13 +129,17 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
 
   // 3. Adult Men
   const strippedOfWomen = pronouns.replace(/\b(women|womens|women's|female|woman)\b/gi, "");
+  // Natural variants: Men, Men's / Men’s, Mens, Male, Gents, Him (he/him/his)
   const isMan =
     rawGender === "men" ||
     rawGender === "man" ||
     rawGender === "male" ||
+    rawGender === "mens" ||
+    rawGender === "gents" ||
     strippedOfWomen.includes("men") ||
     pronouns.includes("male") ||
-    pronouns.includes("he/him");
+    pronouns.includes("he/him") ||
+    /\b(he|him|his|gents?)\b/.test(strippedOfWomen);
 
   if (isMan) {
     return {

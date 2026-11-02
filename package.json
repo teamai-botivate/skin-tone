@@ -13,6 +13,9 @@
     "db:migrate": "node scripts/migrate.mjs",
     "test": "npx tsx scripts/test-product-matching.mjs",
     "test:jobs": "npx tsx tests/background-generation-jobs.test.ts",
+    "test:mens": "npx tsx tests/mens-product-recommendations.test.ts",
+    "test:mens-styling": "npx tsx tests/mens-styling-intelligence.test.ts",
+    "test:mens-ai": "npx tsx tests/mens-ai-pipeline-integrity.test.ts",
     "bench:generation": "npx tsx scripts/benchmark-generation-pipeline.ts"
   },
   "dependencies": {

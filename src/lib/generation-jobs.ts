@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { logger } from "./logger";
 import { getOpenAIClient } from "./openai-client";
-import { generateLookRecommendations } from "./recommendation-prompt";
+import { attachStyleIntent, generateLookRecommendations } from "./recommendation-prompt";
 import {
   buildLookImagePrompt,
   getPrimaryRenderError,
@@ -646,7 +646,8 @@ export async function runGenerationJob(
             generateLookRecommendations(getOpenAIClient(), profile, { signal }),
           );
           if (result.looks.length !== 5) throw new Error(`Expected 5 looks, received ${result.looks.length}`);
-          looks = result.looks.map((look) => ({ ...look, imageUrl: PENDING_IMAGE_URL }));
+          // The reviewed brief is stored with the looks, so a recovered job renders with it too
+          looks = attachStyleIntent(result.looks, result.styleBrief).map((look) => ({ ...look, imageUrl: PENDING_IMAGE_URL }));
         } catch (err) {
           if (err instanceof LeaseLostError || err instanceof BudgetExhaustedError) throw err;
           lastErr = err;

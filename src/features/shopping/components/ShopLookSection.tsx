@@ -285,6 +285,14 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                 <span>{product.shade}</span>
               </span>
             )}
+            {product.targetGender === 'unisex' && (
+              <span
+                data-testid={`badge-unisex-${product.id}`}
+                className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-secondary/40 px-2 py-0.5 text-[11px] font-semibold text-foreground"
+              >
+                Unisex
+              </span>
+            )}
           </div>
 
           {/* Price & Availability */}
