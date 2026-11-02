@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   icons: {
     icon: '/favicon.svg',
   },
+  // Installable web app — required for Web Push on iOS/iPadOS (Home Screen apps only).
+  manifest: '/manifest.webmanifest',
 };
 
 export default function RootLayout({

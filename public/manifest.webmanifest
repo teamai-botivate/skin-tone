@@ -1,0 +1,17 @@
+{
+  "name": "LetStyle — AI-Powered Personal Color & Styling",
+  "short_name": "LetStyle",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FAF5EE",
+  "theme_color": "#194A49",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

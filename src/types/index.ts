@@ -110,6 +110,7 @@ export type ProductResult = {
   description?: string;
   imageUrl?: string;
   productUrl: string;
+  fallbackSearchUrl?: string;
   urlType?: 'exact_product' | 'search_result';
   isVerified?: boolean;
   matchScore?: number;
@@ -125,6 +126,8 @@ export type ProductGroup = {
   recommendedItemTitle: string;
   stylingRequirement: string;
   products: ProductResult[];
+  /** Store search pages for this item, offered when no product could be verified. */
+  retailerSearchLinks?: { retailer: string; url: string }[];
 };
 
 export type ProductRecommendationsRequest = {
@@ -135,7 +138,18 @@ export type ProductRecommendationsRequest = {
 
 export type KeyDiagnostic = {
   provider: string;
-  status: 'ok' | 'missing_key' | 'invalid_key' | 'rate_limited' | 'timeout' | 'degraded' | 'error';
+  status:
+    | 'ok'
+    | 'missing_key'
+    | 'invalid_key'
+    | 'rate_limited'
+    | 'timeout'
+    | 'degraded'
+    | 'error'
+    // Request-level failures between the browser and the LetStyle server
+    | 'network_error'
+    | 'unauthorized'
+    | 'http_error';
   keyName?: string;
   message: string;
   suggestedFix?: string;

@@ -5,7 +5,7 @@ import {
   type LookRecommendation,
   type SkinTuneProfile,
 } from "@/lib/skintune-schemas";
-import { RECOMMENDATION_MODEL } from "@/lib/openai-client";
+import { RECOMMENDATION_MODEL, type OpenAIRequestOptions } from "@/lib/openai-client";
 import { logger } from "@/lib/logger";
 import { getStylingContext } from "@/lib/styling-context";
 
@@ -25,10 +25,25 @@ STEP 1 — INTERPRET THE REQUEST (fill "styleBrief" before writing any look):
 - Decide the style direction (traditional, western, fusion, mixed, or other) from the user's actual intent and the genuine cultural context of the effective occasion. Do not default to any tradition the user's intent does not support, and do not exclude one the user asked for or that the occasion genuinely calls for. Explain the choice in "styleDirectionReasoning".
 - List in "mustInclude" and "mustAvoid" ONLY requirements and exclusions the user actually expressed (in their request, colours, restrictions, or non-conflicting selections) — e.g. a stated theme, fabric, comfort need, garment, colour, or exclusion. Never list your own styling ideas or specific garment choices there; those belong in the looks, where they can vary.
 
+- Set "sareeAesthetic" ONLY from what the user asked for: "traditional" when they want a traditional saree, "contemporary" when they want a modern / pre-draped / innovative saree, "traditional_with_modern_touch" when they want a traditional saree updated with modern elements, and "not_requested" when the request is not about sarees. If they ask for a saree without saying which, choose from their style worlds, impression and occasion and explain it in "styleDirectionReasoning".
+
 STEP 2 — GENERATE 5 LOOKS THAT FOLLOW THE BRIEF:
 - Every look must satisfy every "mustInclude" item and none of the "mustAvoid" items, and genuinely express the brief's theme and style direction in its garments (silhouette, fabric, print, detailing) — not just in its title.
 - Choose garments using your own fashion and cultural knowledge for this exact person, occasion and theme. Be culturally authentic whenever the brief's style direction is traditional or fusion.
-- Vary the 5 looks within the brief (silhouette, textile, detailing, energy) — never by abandoning the brief.
+- Vary the 5 looks within the brief (silhouette, textile, detailing, energy) — never by abandoning the brief. Five looks that differ only in colour are a failure.
+
+SAREE EXPERTISE (applies whenever the brief's sareeAesthetic is not "not_requested"):
+- Know the saree itself — WHAT it is (weave, fabric, regional origin, construction) — and treat it separately from HOW it is draped. A weave is never a drape and a drape is never a weave: a Kanjeevaram can be worn in a Nivi or a Bengali drape; a Bengali drape can be done with a Tant, a Banarasi or a plain silk.
+  * Traditional weaves and regional sarees: Banarasi (Varanasi brocade, zari), Kanjeevaram / Kanchipuram (heavy mulberry silk, contrast korvai borders), Paithani (Maharashtra, peacock / lotus pallu), Patola (Gujarat double ikat), Chanderi (sheer silk-cotton, buttis), Maheshwari (Madhya Pradesh, reversible borders), Bandhani (tie-dye, Gujarat / Rajasthan), Sambalpuri (Odisha ikat), Tant (Bengal handloom cotton), Gadwal (cotton body with silk border and pallu), Kasavu (Kerala off-white with gold border), and other traditional silk, cotton and handloom sarees.
+  * Contemporary saree constructions: pre-draped / ready-to-wear, pre-stitched, ruffle, concept, pant-style, dhoti-style, cowl drape, cape-style, belted, jacket-style, and contemporary fusion sarees.
+  * Draping styles: Nivi, Bengali, Gujarati, Maharashtrian (Nauvari), dhoti drape, butterfly, seedha pallu, pant-style, contemporary cowl drape, and pre-stitched drapes.
+- Honour the requested aesthetic exactly:
+  * traditional: authentic traditional sarees and regional weaves, traditionally draped, with classic blouses. A contemporary element is allowed only if the look still reads traditional. Never fill the looks with western or fusion outfits.
+  * contemporary: lead with modern constructions — pre-draped, ruffle, pant-style, dhoti-style, belted, cape, jacket or cowl drapes and innovative drapes — with modern blouses (corset, structured, sheer, halter).
+  * traditional_with_modern_touch: an authentic traditional saree or weave combined with a contemporary element — a modern blouse, jacket or cape, a belt, or an updated drape — so both sides are visible in every look.
+- Match fabric weight and richness to the effective occasion's formality: rich zari silks and heirloom weaves for grand ceremonies; breathable handloom cotton, Chanderi or Maheshwari for daily wear; follow the user's stated fabric or comfort needs above all.
+- Make the 5 saree looks genuinely different from each other: vary the weave or construction, regional origin, drape, blouse design and silhouette — not just the colour.
+- For every saree look: 'outfit' names the saree type, fabric and weave or origin, the draping style, and the blouse design (and any jacket, cape or layer). In pieces, the saree is an "Outfit" piece whose name is the saree itself (type, fabric, weave — never the drape) and whose detail gives origin, border / motifs and the drape; the blouse is a "Top" piece; a jacket or cape is a "Layer"; a belt goes in 'accessories'. The note and reasoning explain colour and occasion suitability and how to style it; jewellery and footwear must suit that saree and drape.
 
 AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
 - Dress the person strictly for the stated audience, gender and age group.
@@ -103,12 +118,17 @@ PREFERENCES & LIMITS:
 Fill "styleBrief" first by interpreting all of the above, then return exactly 5 complete-look recommendations that follow it, as JSON.`;
 }
 
+export const SAREE_AESTHETICS = ["traditional", "contemporary", "traditional_with_modern_touch", "not_requested"] as const;
+
 const StyleBriefSchema = z.object({
   effectiveOccasion: z.string(),
   occasionReasoning: z.string(),
   themeOrAesthetic: z.string(),
   styleDirection: z.enum(["traditional", "western", "fusion", "mixed", "other"]),
   styleDirectionReasoning: z.string(),
+  // The model always returns it (strict schema); the default only keeps older
+  // outputs parseable.
+  sareeAesthetic: z.enum(SAREE_AESTHETICS).default("not_requested"),
   mustInclude: z.array(z.string()),
   mustAvoid: z.array(z.string()),
   resolvedConflicts: z.array(z.string()),
@@ -128,13 +148,14 @@ const STYLE_BRIEF_JSON_SCHEMA = {
     themeOrAesthetic: { type: "string" },
     styleDirection: { type: "string", enum: ["traditional", "western", "fusion", "mixed", "other"] },
     styleDirectionReasoning: { type: "string" },
+    sareeAesthetic: { type: "string", enum: [...SAREE_AESTHETICS] },
     mustInclude: { type: "array", items: { type: "string" } },
     mustAvoid: { type: "array", items: { type: "string" } },
     resolvedConflicts: { type: "array", items: { type: "string" } },
   },
   required: [
     "effectiveOccasion", "occasionReasoning", "themeOrAesthetic", "styleDirection",
-    "styleDirectionReasoning", "mustInclude", "mustAvoid", "resolvedConflicts",
+    "styleDirectionReasoning", "sareeAesthetic", "mustInclude", "mustAvoid", "resolvedConflicts",
   ],
   additionalProperties: false,
 } as const;
@@ -197,10 +218,12 @@ const RESPONSE_JSON_SCHEMA = {
 export const REVIEW_SYSTEM_PROMPT = `You are LetStyle's styling quality reviewer. You receive a user's profile (including their own free-text styling request), the style brief a stylist derived from it, and 5 proposed looks. Audit each look against an explicit checklist — be literal and evidence-based, not a matter of taste.
 
 1. Build the checklist ONCE in "requirements": every explicit requirement or exclusion in the user's own request (split compound requests into separate items, e.g. "full sleeves", "ankle length", "no slits"), plus brief mustInclude/mustAvoid items ONLY if they are grounded in something the user actually provided (request, colours, restrictions, non-conflicting selections) — skip items that are merely the stylist's own garment or styling ideas — plus the effective occasion and the style direction. The user's own words outrank the brief; selected options that conflict with the user's request are NOT requirements. Do not invent requirements (no colour-matching or comfort preferences the user did not state).
+   When the brief's sareeAesthetic is not "not_requested", add one requirement for it: "traditional" = an authentic traditional saree or regional weave, traditionally worn (no western or fusion outfit); "contemporary" = a modern saree construction or innovative drape (pre-draped, ruffle, pant-style, dhoti-style, belted, cape, jacket or cowl); "traditional_with_modern_touch" = an authentic traditional saree or weave AND a visible contemporary element (modern blouse, jacket or cape, belt, or updated drape). A saree look that names a weave but no drape, or calls a drape a weave, does not satisfy it.
 2. For each look, check EVERY requirement against the garments actually named in the look's outfit and pieces: satisfied = true only if the look clearly meets it; quote the deciding words in "evidence". A different garment than requested (e.g. a length, cut or fabric other than the one specified) is NOT satisfied.
 3. audienceAppropriate: every garment suits the stated audience, gender and age group.
 4. titleGarmentsInOutfit: every garment named in the title or note also appears in the 'outfit' field.
 5. outfitNamesAllClothingPieces: the 'outfit' field names every clothing piece (Top/Bottom/Layer/Outfit categories) listed in pieces.
+6. batchVariety (once, for all 5 looks): variedBeyondColour = true only if the looks differ in more than colour — e.g. silhouette, garment type, fabric or weave, construction, drape, or blouse/top design. Five near-identical garments in different colours is false; quote the deciding differences (or their absence) in "evidence".
 Output JSON matching the schema.`;
 
 const ReviewSchema = z.object({
@@ -214,6 +237,8 @@ const ReviewSchema = z.object({
       outfitNamesAllClothingPieces: z.boolean(),
     }),
   ),
+  // Required from the model (strict schema); optional here so older outputs still parse.
+  batchVariety: z.object({ variedBeyondColour: z.boolean(), evidence: z.string() }).optional(),
 });
 
 const REVIEW_JSON_SCHEMA = {
@@ -247,8 +272,17 @@ const REVIEW_JSON_SCHEMA = {
         additionalProperties: false,
       },
     },
+    batchVariety: {
+      type: "object",
+      properties: {
+        variedBeyondColour: { type: "boolean" },
+        evidence: { type: "string" },
+      },
+      required: ["variedBeyondColour", "evidence"],
+      additionalProperties: false,
+    },
   },
-  required: ["requirements", "reviews"],
+  required: ["requirements", "reviews", "batchVariety"],
   additionalProperties: false,
 } as const;
 
@@ -281,6 +315,7 @@ export async function reviewLooks(
   profile: SkinTuneProfile,
   styleBrief: StyleBrief,
   looks: GeneratedLook[],
+  requestOptions?: OpenAIRequestOptions,
 ): Promise<string[]> {
   const completion = await openai.chat.completions.create({
     model: RECOMMENDATION_MODEL,
@@ -295,12 +330,12 @@ export async function reviewLooks(
       type: "json_schema",
       json_schema: { name: "skintune_look_review", strict: true, schema: REVIEW_JSON_SCHEMA },
     },
-  });
+  }, requestOptions);
   const raw = completion.choices[0]?.message?.content;
   if (!raw) throw new Error("Reviewer returned no content");
-  const { reviews } = ReviewSchema.parse(JSON.parse(raw));
+  const { reviews, batchVariety } = ReviewSchema.parse(JSON.parse(raw));
   // Pass/fail is decided from the structured checks only, never from free-form remarks
-  return reviews.flatMap((r) => {
+  const issues = reviews.flatMap((r) => {
     const issues = r.requirementChecks
       .filter((c) => !c.satisfied)
       .map((c) => `${r.lookId}: does not satisfy "${c.requirement}" (${c.evidence})`);
@@ -309,6 +344,10 @@ export async function reviewLooks(
     if (!r.outfitNamesAllClothingPieces) issues.push(`${r.lookId}: outfit field does not name every clothing piece`);
     return issues;
   });
+  if (batchVariety && !batchVariety.variedBeyondColour) {
+    issues.push(`all looks: the 5 looks differ only in colour — vary silhouette, fabric/weave, construction, drape or top design (${batchVariety.evidence})`);
+  }
+  return issues;
 }
 
 /**
@@ -319,6 +358,8 @@ export async function reviewLooks(
 export async function generateLookRecommendations(
   openai: OpenAI,
   profile: SkinTuneProfile,
+  /** Forwarded to every provider call (the background job runner passes a deadline signal). */
+  requestOptions?: OpenAIRequestOptions,
 ): Promise<GenerationResult> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -333,7 +374,7 @@ export async function generateLookRecommendations(
         type: "json_schema",
         json_schema: { name: "skintune_recommendations", strict: true, schema: RESPONSE_JSON_SCHEMA },
       },
-    });
+    }, requestOptions);
     const raw = completion.choices[0]?.message?.content;
     if (!raw) throw new Error("Model returned no content");
     const parsed = ModelOutputSchema.parse(JSON.parse(raw));
@@ -342,7 +383,7 @@ export async function generateLookRecommendations(
 
   const safeReview = async (brief: StyleBrief, looks: GeneratedLook[]) => {
     try {
-      return await reviewLooks(openai, profile, brief, looks);
+      return await reviewLooks(openai, profile, brief, looks, requestOptions);
     } catch (err) {
       logger.warn({ err }, "Look review failed; accepting the generated looks unreviewed");
       return [];

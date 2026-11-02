@@ -107,6 +107,7 @@ export const ProductResultSchema = z.object({
   description: z.string().optional(),
   imageUrl: z.string().optional(),
   productUrl: z.string().url(),
+  fallbackSearchUrl: z.string().optional(),
   urlType: z.enum(["exact_product", "search_result"]).default("exact_product"),
   isVerified: z.boolean().optional(),
   matchScore: z.number().min(0).max(100).optional(),
@@ -123,20 +124,24 @@ export const ProductGroupSchema = z.object({
   recommendedItemTitle: z.string(),
   stylingRequirement: z.string(),
   products: z.array(ProductResultSchema),
+  // Store search pages for this item, offered when no product could be verified.
+  // These are searches on the store, never presented as specific products.
+  retailerSearchLinks: z.array(z.object({ retailer: z.string(), url: z.string() })).optional(),
 });
 export type ProductGroup = z.infer<typeof ProductGroupSchema>;
 
 export const ProductRecommendationsRequestSchema = z.object({
   look: LookRecommendationSchema,
   profile: SkinTuneProfileSchema,
-  category: z.enum(["outfit", "makeup", "jewellery", "accessories", "footwear", "all"]).optional(),
+  // "footwear-accessories" is the combined UI tab; searchProductsForLook handles it
+  category: z.enum(["outfit", "makeup", "jewellery", "accessories", "footwear", "footwear-accessories", "all"]).optional(),
   forceRefresh: z.boolean().optional(),
 });
 export type ProductRecommendationsRequest = z.infer<typeof ProductRecommendationsRequestSchema>;
 
 export const KeyDiagnosticSchema = z.object({
   provider: z.string(),
-  status: z.enum(["ok", "missing_key", "invalid_key", "rate_limited", "timeout", "degraded", "error"]),
+  status: z.enum(["ok", "missing_key", "invalid_key", "rate_limited", "timeout", "degraded", "error", "network_error", "unauthorized", "http_error"]),
   keyName: z.string().optional(),
   message: z.string(),
   suggestedFix: z.string().optional(),

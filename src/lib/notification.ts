@@ -1,6 +1,7 @@
 'use client';
 
 import { toast } from 'sonner';
+import { ensurePushSubscription, requestPushPermission } from './client-push';
 
 let sharedAudioCtx: AudioContext | null = null;
 
@@ -103,18 +104,20 @@ export function playNotificationSound() {
 }
 
 /**
- * Requests browser desktop notification permissions if supported.
+ * Requests notification permission (prompts only while undecided) and, once
+ * granted, registers this device for server-sent push notifications so a
+ * finished generation can be announced even when LetStyle is closed.
+ * Call from a click handler where possible: browsers suppress or block
+ * permission prompts that aren't triggered by a user gesture.
  */
 export function requestNotificationPermission() {
-  if (typeof window !== 'undefined' && 'Notification' in window) {
-    try {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
-      }
-    } catch {
+  requestPushPermission()
+    .then((permission) => {
+      if (permission === 'granted') return ensurePushSubscription();
+    })
+    .catch(() => {
       // Ignore unsupported browser contexts
-    }
-  }
+    });
 }
 
 /**
@@ -124,9 +127,12 @@ export function requestNotificationPermission() {
 export function notifyLooksGenerated({
   title = 'Your looks are ready! ✨',
   description = 'Your 5 personalized outfits have been styled and generated.',
+  tag,
 }: {
   title?: string;
   description?: string;
+  /** Shared with the server push for the same job so the OS never shows both. */
+  tag?: string;
 } = {}) {
   // 1. Play crystal-clear audio chime
   playNotificationSound();
@@ -153,6 +159,7 @@ export function notifyLooksGenerated({
       new Notification(title, {
         body: description,
         icon: '/favicon.svg',
+        tag,
       });
     } catch {
       // Browser notification dispatch failure handled gracefully

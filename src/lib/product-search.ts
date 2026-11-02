@@ -91,6 +91,7 @@ import {
   getProductEffectivePrice,
   compareProductsByPriceAscending,
   sortProductsByPriceAscending,
+  buildFallbackSearchUrl,
 } from "./retailer-urls";
 
 export {
@@ -108,6 +109,7 @@ export {
   getProductEffectivePrice,
   compareProductsByPriceAscending,
   sortProductsByPriceAscending,
+  buildFallbackSearchUrl,
 };
 
 
@@ -144,6 +146,19 @@ export function getProductIdentityKey(productTitle: string, brand: string): stri
  * Strips any footwear, shoe, heel, or handbag/bag mentions from an outfit garment title.
  * Prevents contaminated LLM output like "Dress and heeled shoes" from turning the outfit search into a shoe/bag search.
  */
+/**
+ * Ways of wrapping an unstitched saree. They describe how a saree is WORN, not what is
+ * sold, so they never belong in a product search ("Kanjeevaram silk saree in a Nivi drape"
+ * is sold as a Kanjeevaram silk saree). Constructions stores do sell — pre-draped,
+ * pre-stitched, pant-style, dhoti-style, cowl, ruffle — are not matched and stay.
+ */
+const HAND_DRAPE_RE =
+  /\s*\b(?:(?:in|with|styled\s+in|worn\s+in|draped\s+in)\s+)?(?:(?:an?|the)\s+)?(?:nivi|bengali|gujarati|maharashtrian|butterfly|seedha|ulta)[\s-]*(?:style[\s-]*)?(?:drape[ds]?|draping|pallu)\b|\s*\b(?:in\s+(?:an?\s+)?)?nivi\b/gi;
+
+export function stripHandDrapeTerms(text: string): string {
+  return text.replace(HAND_DRAPE_RE, " ").replace(/\s+/g, " ").replace(/[\s,;-]+$/, "").trim();
+}
+
 export function cleanOutfitGarmentTitle(title: string, targetGender?: string): string {
   if (!title) return targetGender === "boys" ? "Boys Outfit" : targetGender === "men" ? "Men's Outfit" : "Dress";
   let cleaned = title
@@ -176,6 +191,21 @@ export function cleanOutfitGarmentTitle(title: string, targetGender?: string): s
  * 5. Category cross-contamination (e.g. footwear showing in outfit, electronics in footwear).
  * 6. Broken or empty search URLs (e.g. /search/ with undefined query).
  */
+/**
+ * Garment styles that define an upper-body item more precisely than its generic noun, and
+ * that stores sell under several nouns ("Henley Shirt", "Henley Neck T-Shirt", "Henley
+ * Top"). When a requirement names one, the style must match; the noun need not.
+ */
+const DISTINCT_TOP_STYLES: Array<{ name: string; pattern: RegExp }> = [
+  { name: "henley", pattern: /\bhenley\b/i },
+  // "U.S. Polo Assn" / "Polo Club" are brands, not the garment
+  { name: "polo", pattern: /\bpolo\b(?![\s.-]*(?:assn|association|club))/i },
+];
+
+function requiredTopStyles(requiredItemTitle?: string) {
+  return requiredItemTitle ? DISTINCT_TOP_STYLES.filter((s) => s.pattern.test(requiredItemTitle)) : [];
+}
+
 export function checkProductConsistency(
   productName: string,
   brand: string,
@@ -190,6 +220,8 @@ export function checkProductConsistency(
   expectedOccasion?: string,
   expectedShade?: string,
   targetGender?: string,
+  /** The recommended item's own title (e.g. "Men's Cream Henley Shirt"), for style-level matching. */
+  requiredItemTitle?: string,
 ): { isConsistent: boolean; reason?: string } {
   const fullCheckText = `${productName || ""} ${urlStr || ""} ${citationTitle || ""}`.toLowerCase();
   const cleanName = (productName || "").toLowerCase();
@@ -331,6 +363,27 @@ export function checkProductConsistency(
       return {
         isConsistent: false,
         reason: `Subcategory is Shorts, but item does not match shorts type: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (
+    (subcat === "shirt" || subcat === "top" || subcat === "inner_top") &&
+    requiredTopStyles(requiredItemTitle).length > 0
+  ) {
+    // The requirement names a distinct garment style (e.g. a henley). That style is what
+    // must match; stores list the same garment as a shirt, t-shirt, tee or top.
+    const missing = requiredTopStyles(requiredItemTitle).filter((s) => !s.pattern.test(fullCheckText));
+    if (missing.length > 0) {
+      return {
+        isConsistent: false,
+        reason: `Requirement is a ${missing.map((s) => s.name).join("/")}, but item is not: ${productName} (${urlStr})`,
+      };
+    }
+    const isUpperGarment = /\b(shirts?|t-?shirts?|tshirts?|tees?|tops?|henley|polo)\b/i.test(cleanName);
+    const isWrongType = /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt|dress|gown|saree|kurta|blazer|jacket|coat|shoe|bag)\b/i.test(cleanName);
+    if (!isUpperGarment || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Requirement is a ${requiredTopStyles(requiredItemTitle).map((s) => s.name).join("/")} top, but item is a different garment: ${productName} (${urlStr})`,
       };
     }
   } else if (subcat ? subcat === "shirt" : (cleanName.includes("shirt") && !cleanName.includes("t-shirt") && !cleanName.includes("tshirt"))) {
@@ -559,7 +612,8 @@ export function checkProductConsistency(
         };
       }
     } else if (subcat ? subcat === "heels" : cleanName.includes("heel")) {
-      const isHeel = /\b(heels?|pumps?|stilettos?|kitten\s*heels?|block\s*heels?|wedges?)\b/i.test(fullCheckText);
+      // "Heeled Sandals" / "Heeled Mules" are the usual retailer titles for heels.
+      const isHeel = /\b(heels?|heeled|pumps?|stilettos?|kitten\s*heels?|block\s*heels?|wedges?)\b/i.test(fullCheckText);
       const isWrongFoot = /\b(sneakers?|boots?|loafers?|oxfords?|mojaris?|slides?)\b/i.test(cleanName) && !isHeel;
       if (!isHeel || isWrongFoot) {
         return {
@@ -568,7 +622,8 @@ export function checkProductConsistency(
         };
       }
     } else if (subcat ? (subcat === "mojaris" || subcat === "juttis") : (cleanName.includes("mojari") || cleanName.includes("jutti"))) {
-      const isMojari = /\b(mojaris?|juttis?|kolhapuris?|ethnic\s*shoes?|traditional\s*footwear)\b/i.test(fullCheckText);
+      // Nagra / khussa are the same footwear under regional names; generic "ethnic flats" are not.
+      const isMojari = /\b(mojaris?|juttis?|kolhapuris?|nagras?|khussas?|ethnic\s*shoes?|traditional\s*footwear)\b/i.test(fullCheckText);
       const isWrongFoot = /\b(sneakers?|running\s*shoes?|heels?|boots?|oxfords?|slides?)\b/i.test(cleanName) && !isMojari;
       if (!isMojari || isWrongFoot) {
         return {
@@ -971,6 +1026,79 @@ export function validatePriceMatch(
  * Verifies and fetches current live product details (price, image, availability, name)
  * directly from the destination product page HTML.
  */
+const decodeHtmlEntities = (s: string) =>
+  s
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Reads an Amazon product detail page. Amazon serves no schema.org JSON-LD or og: tags,
+ * so without this a reachable, genuine Amazon product page could never verify. Every
+ * value comes from the product's own elements: the title (#productTitle), the main buy-box
+ * price block (corePriceDisplay / corePrice), the byline brand, the main image and the
+ * availability block. Prices elsewhere on the page (other offers, sponsored items) are ignored.
+ */
+export function parseAmazonProductPage(html: string): {
+  productName?: string;
+  brand?: string;
+  price?: number;
+  originalPrice?: number;
+  imageUrl?: string;
+  unavailable?: boolean;
+} {
+  const titleMatch = html.match(/<span[^>]*\bid="productTitle"[^>]*>([\s\S]*?)<\/span>/i);
+  const productName = titleMatch ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, "")) : undefined;
+  if (!productName) return {};
+
+  // The buy-box price block only; it is the price shown for this exact product.
+  let price: number | undefined;
+  let originalPrice: number | undefined;
+  const priceBlockStart = html.search(/id="(?:corePriceDisplay_desktop_feature_div|corePrice_desktop|corePrice_feature_div)"/i);
+  if (priceBlockStart !== -1) {
+    const block = html.slice(priceBlockStart, priceBlockStart + 6000);
+    const whole = block.match(/class="a-price-whole">([\d,]+)/i);
+    if (whole) price = parseInrAmount(whole[1]);
+    // "M.R.P.: ₹1,999" is rendered as a struck-through a-price with data-a-strike
+    const mrp = block.match(/data-a-strike="true"[\s\S]{0,400}?<span class="a-offscreen">\s*(?:₹|&#8377;)?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (mrp) originalPrice = parseInrAmount(mrp[1]);
+  }
+
+  // The id appears on a wrapper and on the link itself; the link holds the text.
+  const bylineText = [...html.matchAll(/id="bylineInfo"[^>]*>([^<]*)</gi)]
+    .map((m) => decodeHtmlEntities(m[1]))
+    .find(Boolean);
+  let brand: string | undefined;
+  if (bylineText) {
+    const byline = bylineText;
+    brand =
+      byline.match(/^Visit the (.+?) Store$/i)?.[1] ??
+      byline.match(/^Brand:\s*(.+)$/i)?.[1] ??
+      undefined;
+  }
+
+  const imageMatch = html.match(/data-old-hires="(https:\/\/[^"]+)"/i) || html.match(/"hiRes":"(https:\/\/[^"]+)"/i);
+  const imageUrl = imageMatch?.[1];
+
+  const availabilityStart = html.search(/<div[^>]*\bid="availability"/i);
+  const availabilityText =
+    availabilityStart === -1 ? "" : html.slice(availabilityStart, availabilityStart + 2000).replace(/<[^>]+>/g, " ");
+  const unavailable = /currently unavailable|out of stock/i.test(availabilityText);
+
+  return {
+    productName,
+    brand,
+    price: price && price > 0 ? Math.round(price) : undefined,
+    originalPrice: originalPrice && originalPrice > 0 ? Math.round(originalPrice) : undefined,
+    imageUrl,
+    unavailable,
+  };
+}
+
 export async function verifyProductPage(urlStr: string): Promise<{
   success: boolean;
   retailerRestricted?: boolean;
@@ -984,29 +1112,57 @@ export async function verifyProductPage(urlStr: string): Promise<{
   finalUrl?: string;
   priceVerified?: boolean;
   reason?: string;
+  /** HTTP status of the product page request, when one completed (for diagnostics). */
+  httpStatus?: number;
 }> {
-  try {
-    const res = await fetch(urlStr, {
+  const requestPage = () =>
+    fetch(urlStr, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      signal: AbortSignal.timeout(3500),
+      // Large retailer pages (Amazon product pages are ~2 MB) regularly need more than 3.5s.
+      signal: AbortSignal.timeout(6000),
     });
+  try {
+    let res = await requestPage();
 
-    if (res.status === 403 || res.status === 429 || res.status === 503) {
+    // Rate-limited requests (429) get a single polite retry if retry-after is small.
+    // HTTP 503 (Varnish/service unavailable) is a server/CDN state; do not retry aggressively.
+    // Without a Retry-After header (common for a short burst limit), wait 800ms once.
+    if (res.status === 429) {
+      const header = res.headers.get("retry-after");
+      const retryAfter = header === null ? NaN : Number(header);
+      if (header === null || (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 2)) {
+        await new Promise((r) => setTimeout(r, header === null ? 800 : retryAfter * 1000));
+        res = await requestPage();
+      }
+    }
+
+    if (res.status === 503) {
+      return {
+        success: false,
+        retailerRestricted: true,
+        reason: "Retailer service temporarily unavailable (HTTP 503 Varnish/CDN)",
+        finalUrl: urlStr,
+        httpStatus: 503,
+      };
+    }
+
+    if (res.status === 403 || res.status === 429) {
       return {
         success: false,
         retailerRestricted: true,
         reason: `Retailer automated access restricted (HTTP ${res.status} bot protection)`,
         finalUrl: urlStr,
+        httpStatus: res.status,
       };
     }
 
     if (!res.ok) {
-      return { success: false, reason: `HTTP status ${res.status}` };
+      return { success: false, reason: `HTTP status ${res.status}`, httpStatus: res.status };
     }
 
     const finalUrl = res.url || urlStr;
@@ -1021,14 +1177,14 @@ export async function verifyProductPage(urlStr: string): Promise<{
 
         // Redirected to homepage or generic search
         if (finalPath === "/" || finalPath === "" || finalPath === "/search" || finalPath === "/search/") {
-          return { success: false, reason: `Retailer redirected to generic homepage/search: ${finalUrl}` };
+          return { success: false, reason: `Retailer redirected to generic homepage/search: ${finalUrl}`, httpStatus: res.status };
         }
 
         // Redirected from ethnic/women apparel to men's or electronics
         const isOrigEthnicOrWomen = origPath.includes("lehenga") || origPath.includes("chaniya") || origPath.includes("saree") || origPath.includes("women");
         const isFinalUnrelated = finalPath.includes("/men-") || finalPath.includes("electronics") || finalPath.includes("mobile") || finalPath.includes("gadget");
         if (isOrigEthnicOrWomen && isFinalUnrelated) {
-          return { success: false, reason: `Retailer redirected to unrelated department: ${finalUrl}` };
+          return { success: false, reason: `Retailer redirected to unrelated department: ${finalUrl}`, httpStatus: res.status };
         }
       } catch { }
     }
@@ -1047,6 +1203,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
         retailerRestricted: true,
         reason: "Retailer automated access challenge detected",
         finalUrl: urlStr,
+        httpStatus: res.status,
       };
     }
 
@@ -1058,7 +1215,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
       html.includes("This product is no longer available") ||
       html.includes("Item has been discontinued")
     ) {
-      return { success: false, reason: "Product page indicates item no longer available or 404" };
+      return { success: false, reason: "Product page indicates item no longer available or 404", httpStatus: res.status };
     }
 
     let price: number | undefined;
@@ -1068,24 +1225,31 @@ export async function verifyProductPage(urlStr: string): Promise<{
     let imageUrl: string | undefined;
     let productName: string | undefined;
     let brand: string | undefined;
+    // Set only by structured, product-specific data (schema.org Product, Myntra pdpData,
+    // Amazon's product title). A category/listing page has a title and an og:image too,
+    // so those alone must never make a page count as a verified product.
+    let hasProductEvidence = false;
 
-    // 1. JSON-LD check (schema.org/Product)
-    const jsonLdMatches = html.match(
-      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
+    // 1. JSON-LD check (schema.org/Product). Attribute order/quoting varies by site
+    // (e.g. `<script type='application/ld+json' data-...>`), so match the tag loosely.
+    const jsonLdBodies = [...html.matchAll(/<script\b[^>]*\btype\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)].map(
+      (m) => m[1].trim(),
     );
-    if (jsonLdMatches) {
-      for (const m of jsonLdMatches) {
-        const raw = m
-          .replace(/<script type="application\/ld\+json">/i, "")
-          .replace(/<\/script>/i, "")
-          .trim();
+    if (jsonLdBodies.length > 0) {
+      for (const raw of jsonLdBodies) {
         try {
           const parsed = JSON.parse(raw);
-          const candidates = [parsed];
-          if (Array.isArray(parsed["@graph"])) candidates.push(...parsed["@graph"]);
+          const candidates: any[] = Array.isArray(parsed) ? [...parsed] : [parsed];
+          for (const node of [...candidates]) {
+            if (node && Array.isArray(node["@graph"])) candidates.push(...node["@graph"]);
+          }
 
           for (const item of candidates) {
-            if (item["@type"] === "Product" || item.offers) {
+            if (!item || typeof item !== "object") continue;
+            const types = ([] as unknown[]).concat(item["@type"] ?? []).map((t) => String(t));
+            const isProductNode = types.includes("Product") || types.includes("ProductGroup");
+            if (isProductNode) hasProductEvidence = true;
+            if (isProductNode || item.offers) {
               if (item.name) productName = productName || item.name;
               if (item.brand) {
                 brand =
@@ -1143,6 +1307,7 @@ export async function verifyProductPage(urlStr: string): Promise<{
           const myx = JSON.parse(myxMatch[1]);
           const pdp = myx?.pdpData;
           if (pdp) {
+            hasProductEvidence = true;
             if (pdp.price?.discounted) price = Math.round(pdp.price.discounted);
             else if (pdp.price?.mrp) price = Math.round(pdp.price.mrp);
             if (pdp.price?.mrp && pdp.price?.mrp > (price || 0)) originalPrice = Math.round(pdp.price.mrp);
@@ -1160,8 +1325,27 @@ export async function verifyProductPage(urlStr: string): Promise<{
       }
     }
 
-    // 3. Fallback to OpenGraph and regex patterns
-    if (!price) {
+    // 2b. Amazon product pages carry no JSON-LD or og: tags; read their own product markup.
+    let isAmazonPage = false;
+    try {
+      isAmazonPage = /(^|\.)amazon\.(in|com)$/.test(new URL(finalUrl).hostname);
+    } catch { }
+    if (isAmazonPage) {
+      const amazon = parseAmazonProductPage(html);
+      if (amazon.productName) {
+        hasProductEvidence = true;
+        productName = productName || amazon.productName;
+        brand = brand || amazon.brand;
+        imageUrl = imageUrl || amazon.imageUrl;
+        if (!price && amazon.price) price = amazon.price;
+        if (!originalPrice && amazon.originalPrice && amazon.originalPrice > (price || 0)) originalPrice = amazon.originalPrice;
+        if (amazon.unavailable) availability = "Out of Stock";
+      }
+    }
+
+    // 3. Fallback to OpenGraph and regex patterns. Amazon pages are handled above: their
+    // markup contains many unrelated "price" values (other sellers, sponsored items).
+    if (!price && !isAmazonPage) {
       const priceMeta =
         html.match(/"discountedPrice":\s*(\d+)/i) ||
         html.match(/"price":\s*"?([\d,]+(?:\.\d+)?)"?/i) ||
@@ -1213,11 +1397,14 @@ export async function verifyProductPage(urlStr: string): Promise<{
         brand,
         finalUrl,
         priceVerified: true,
+        httpStatus: res.status,
       };
     }
 
-    // Scenario 11: If product exists but price cannot be verified, return without fabricating a price
-    if (productName || imageUrl) {
+    // Scenario 11: If product exists but price cannot be verified, return without fabricating a price.
+    // Only structured product data counts as "product exists" — a category or listing page
+    // also has an og:title and og:image, and must not be presented as a verified product.
+    if (hasProductEvidence && (productName || imageUrl)) {
       return {
         success: true,
         price: undefined,
@@ -1230,12 +1417,16 @@ export async function verifyProductPage(urlStr: string): Promise<{
         finalUrl,
         priceVerified: false,
         reason: "Price unavailable on destination product page",
+        httpStatus: res.status,
       };
     }
 
     return {
       success: false,
-      reason: "Could not find reliable product details or price on destination page",
+      reason: productName || imageUrl
+        ? "Page has no structured product data (likely a category/listing page or client-rendered page)"
+        : "Could not find reliable product details or price on destination page",
+      httpStatus: res.status,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -2511,16 +2702,32 @@ export function decomposeOutfitGarments(
         rawTitle: `Matching ${dominantHumanColor} Embroidered Choli Blouse`,
       });
     } else if (isSaree) {
+      // Use the saree and blouse the look actually describes (a Tant cotton saree must not
+      // be searched as silk); generic titles only when the outfit text names neither.
+      // Garments come from the outfit field alone — outfitText also has the look's title
+      // appended without a separator, which would glue onto the last garment clause.
+      const clauses = (look.outfit || outfitText)
+        .split(/[,;]|\b(?:paired\s+with|styled\s+with|teamed\s+with|worn\s+with|with|and)\b/i)
+        .map((s) => s.trim().replace(/^[,.\s]+|[,.\s]+$/g, ""))
+        .filter((s) => s.length > 2);
+      const sareeClause = clauses.find((c) => /\b(saree|sari)\b/i.test(c));
+      const topClause = clauses.find(
+        (c) => !/\b(saree|sari)\b/i.test(c) && /\b(blouse|choli|corset|bustier|crop\s*top|bralette|jacket|cape)\b/i.test(c),
+      );
       detectedGarments.push({
         type: "one_piece",
         subcat: "saree",
-        rawTitle: `${dominantHumanColor} Silk Saree`,
+        rawTitle: sareeClause ? stripHandDrapeTerms(sareeClause) : `${dominantHumanColor} Saree`,
       });
-      detectedGarments.push({
-        type: "top",
-        subcat: "inner_top",
-        rawTitle: `Matching ${dominantHumanColor} Embroidered Saree Blouse`,
-      });
+      if (topClause && /\b(jacket|cape)\b/i.test(topClause)) {
+        detectedGarments.push({ type: "layer", subcat: "jacket", rawTitle: topClause });
+      } else {
+        detectedGarments.push({
+          type: "top",
+          subcat: "inner_top",
+          rawTitle: topClause || `Matching ${dominantHumanColor} Saree Blouse`,
+        });
+      }
     } else {
       // Split by clause connectors: commas, semicolons, "with", "paired with", "styled with", "and", "over", "worn with"
       const rawClauses = outfitText
@@ -2662,7 +2869,10 @@ export function decomposeOutfitGarments(
 
   // Convert each detected garment into a fully realized RequirementSpec
   for (const g of detectedGarments) {
-    const rawClean = cleanOutfitGarmentTitle(g.rawTitle, targetGender);
+    const rawClean =
+      g.subcat === "saree"
+        ? stripHandDrapeTerms(cleanOutfitGarmentTitle(g.rawTitle, targetGender))
+        : cleanOutfitGarmentTitle(g.rawTitle, targetGender);
     const color = g.color || resolveHumanColor(rawClean, dominantHumanColor);
 
     // Format human-friendly title with proper demographic prefix
@@ -2690,7 +2900,9 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "top") itemQueryKeyword = rawClean.toLowerCase().includes("tee") || rawClean.toLowerCase().includes("t-shirt") ? "t-shirt tee" : "top";
     else if (g.subcat === "trousers") itemQueryKeyword = "tailored trousers pants";
     else if (g.subcat === "blazer") itemQueryKeyword = "tailored formal blazer";
-    else if (g.subcat === "saree") itemQueryKeyword = rawClean.toLowerCase().includes("silk") || outfitText.toLowerCase().includes("silk") ? "silk saree" : "saree";
+    // The saree's own name carries its weave, fabric and construction; a silk blouse
+    // elsewhere in the outfit must not turn a cotton saree into a "silk saree" search.
+    else if (g.subcat === "saree") itemQueryKeyword = /\b(saree|sari)s?\b/i.test(rawClean) ? "" : "saree";
     else if (g.subcat === "lehenga") itemQueryKeyword = "chaniya choli lehenga set";
     else if (g.subcat === "inner_top") itemQueryKeyword = rawClean.toLowerCase().includes("choli") || rawClean.toLowerCase().includes("blouse") ? "embroidered choli blouse" : "formal inner top camisole";
     else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
@@ -2701,7 +2913,9 @@ export function decomposeOutfitGarments(
       color,
       itemQueryKeyword,
       ...preferredRetailers.slice(0, 3),
-    ].join(" ");
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     specs.push({
       category: "outfit",
@@ -2771,41 +2985,49 @@ export function detectFootwearSpec(
     allContext.includes("goa") ||
     allContext.includes("holiday");
 
-  // Detect footwear subcategory dynamically
-  let subcat = "sneakers";
-  let label = "Casual Sneakers";
+  // Detect footwear subcategory. The footwear the look actually names always wins; the
+  // occasion is only used to infer a type when the text names none. (Previously the
+  // occasion rules sat inside the keyword chain, so e.g. "Gleaming silver juttis" for a
+  // date became "heels": the search asked for heels and every real jutti then failed the
+  // heels check.) Ethnic types come first because they are the most specific: "jutti
+  // flats", "kolhapuri sandals" and "heeled juttis" are all juttis/mojaris.
+  const explicitFootwear: Array<{ pattern: RegExp; subcat: string; label: () => string }> = [
+    { pattern: /\b(mojaris?|juttis?|kolhapuris?|nagras?|khussas?)\b/i, subcat: "mojaris", label: () => "Handcrafted Ethnic Mojaris / Juttis" },
+    {
+      pattern: /\b(sandals?|slides?|sliders?|flip-flop[s]?|espadrilles?|slippers?)\b/i,
+      subcat: "sandals",
+      label: () => (/\bslides?\b/i.test(lowerFoot) ? "Slide Sandals" : "Comfort Sandals"),
+    },
+    { pattern: /\b(loafers?|moccasins?|boat\s*shoes?)\b/i, subcat: "loafers", label: () => "Smart Loafers" },
+    { pattern: /\b(oxfords?|derby|brogues?|formal\s*shoes?)\b/i, subcat: "formal_shoes", label: () => "Formal Derby / Oxford Shoes" },
+    {
+      pattern: /\b(heels?|heeled|pumps?|stilettos?|wedges?|kitten\s*heels?|block\s*heels?)\b/i,
+      subcat: "heels",
+      label: () => (/\bblock\b/i.test(lowerFoot) ? "Block Heels" : "Heeled Pumps / Sandals"),
+    },
+    { pattern: /\b(flats?|ballerinas?|ballet\s*flats?|mules?)\b/i, subcat: "flats", label: () => "Ballet Flats" },
+    { pattern: /\b(boots?|chelsea)\b/i, subcat: "boots", label: () => "Chelsea Boots" },
+    { pattern: /\b(sneakers?|trainers?|canvas\s*shoes?)\b/i, subcat: "sneakers", label: () => "Minimalist Sneakers / Shoes" },
+  ];
 
-  if (
-    /\b(sandals?|slides?|sliders?|flip-flop[s]?|espadrilles?|slippers?)\b/i.test(lowerFoot) ||
-    (isVacation && !/\b(sneaker|boot|oxford)\b/i.test(lowerFoot))
-  ) {
+  let subcat = "sneakers";
+  let label = "Minimalist Sneakers / Shoes";
+  const named = explicitFootwear.find((f) => f.pattern.test(lowerFoot));
+  if (named) {
+    subcat = named.subcat;
+    label = named.label();
+  } else if (isVacation) {
     subcat = "sandals";
-    label = /\bslides?\b/i.test(lowerFoot) ? "Slide Sandals" : "Comfort Sandals";
-  } else if (/\b(loafers?|moccasins?|boat\s*shoes?)\b/i.test(lowerFoot)) {
-    subcat = "loafers";
-    label = "Smart Loafers";
-  } else if (/\b(oxfords?|derby|brogues?|formal\s*shoes?)\b/i.test(lowerFoot) || (isOfficeOrFormal && (persona === "man" || ctx.isBoy))) {
+    label = "Comfort Sandals";
+  } else if (isOfficeOrFormal && (persona === "man" || ctx.isBoy)) {
     subcat = "formal_shoes";
     label = "Formal Derby / Oxford Shoes";
-  } else if (/\b(heels?|pumps?|stilettos?|wedges?|kitten\s*heels?|block\s*heels?)\b/i.test(lowerFoot) || (persona === "woman" && (isDateNight || isOfficeOrFormal))) {
+  } else if (persona === "woman" && (isDateNight || isOfficeOrFormal)) {
     subcat = "heels";
-    label = /\bblock\b/i.test(lowerFoot) ? "Block Heels" : "Heeled Pumps / Sandals";
-  } else if (/\b(flats?|ballerinas?|ballet\s*flats?|mules?)\b/i.test(lowerFoot)) {
-    subcat = "flats";
-    label = "Ballet Flats";
-  } else if (
-    /\b(mojaris?|juttis?|kolhapuris?)\b/i.test(lowerFoot) ||
-    isGarbaOrNavratri ||
-    isTraditionalOrFestive
-  ) {
+    label = "Heeled Pumps / Sandals";
+  } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
     subcat = "mojaris";
     label = "Handcrafted Ethnic Mojaris / Juttis";
-  } else if (/\b(boots?|chelsea)\b/i.test(lowerFoot)) {
-    subcat = "boots";
-    label = "Chelsea Boots";
-  } else {
-    subcat = "sneakers";
-    label = "Minimalist Sneakers / Shoes";
   }
 
   const footColor = resolveHumanColor(rawFootText, dominantHumanColor);
@@ -2825,13 +3047,25 @@ export function detectFootwearSpec(
     ? ["Myntra", "AJIO", "Amazon India", "Bata", "Tata CLiQ"]
     : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
 
+  // footColor can be the whole footwear phrase (e.g. "Gold block heels"), so repeated
+  // words are dropped rather than producing "women Gold block heels heels".
+  const seenFootTerms = new Set<string>();
   const footQuery = [
     targetGender,
     footColor,
-    subcat === "sandals" ? "sandals slides" : subcat === "mojaris" ? "ethnic mojaris juttis" : subcat,
+    subcat === "sandals" ? "sandals slides" : subcat === "mojaris" ? "ethnic mojaris juttis" : subcat.replace(/_/g, " "),
     preferredRetailers[0],
     preferredRetailers[1],
-  ].join(" ");
+  ]
+    .join(" ")
+    .split(/\s+/)
+    .filter((word) => {
+      const key = word.toLowerCase();
+      if (!key || seenFootTerms.has(key)) return false;
+      seenFootTerms.add(key);
+      return true;
+    })
+    .join(" ");
 
   return {
     category: "footwear",
@@ -3741,7 +3975,13 @@ export function getBenchmarkCandidatesForRequirement(
             retailer: "Nykaa Fashion",
             price: 4500,
             originalPrice: 5800,
-            url: `https://www.nykaafashion.com/fayon-kids-girls-festive-lehenga/p/3490123`,
+            url: buildRetailerSearchUrl("Nykaa Fashion", {
+              gender: "girls",
+              brand: "Fayon Kids",
+              productName: "Girls Handcrafted Mirror-Work Traditional Chaniya Choli",
+              color,
+              category: "outfit",
+            }),
             material: "Pure Raw Silk with Hand-Embroidered Mirrors",
           },
         ];
@@ -3775,7 +4015,13 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 6990,
           originalPrice: 9990,
-          url: `https://www.nykaafashion.com/kalki-fashion-${encodeURIComponent(color.toLowerCase())}-embroidered-lehenga-choli-set/p/1249012`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Kalki Fashion",
+            productName: `Vibrant ${color} Embroidered Silk Festive Chaniya Choli with Latkans`,
+            color,
+            category: "outfit",
+          }),
           material: "Raw Silk with Handcrafted Mirror Work",
         },
       ];
@@ -3954,7 +4200,13 @@ export function getBenchmarkCandidatesForRequirement(
             retailer: "Nykaa Fashion",
             price: 2499,
             originalPrice: 3500,
-            url: `https://www.nykaafashion.com/house-of-jamoti-${encodeURIComponent(color.toLowerCase())}-embroidered-blouse/p/3490123`,
+            url: buildRetailerSearchUrl("Nykaa Fashion", {
+              gender: "women",
+              brand: "House of Jamoti",
+              productName: `Handcrafted Raw Silk Heavy Embroidered Festive Blouse`,
+              color,
+              category: "outfit",
+            }),
             material: "Pure Silk with Intricate Resham Embroidery",
             shade: color,
           },
@@ -3991,7 +4243,12 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 1899,
           originalPrice: 2600,
-          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women silk satin camisole top")}`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Forever New",
+            productName: "Silk-Touch Draped V-Neck Formal Camisole",
+            category: "outfit",
+          }),
           material: "Lustrous Silk Blend",
           shade: "Warm Cream",
         },
@@ -4199,7 +4456,13 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 5900,
           originalPrice: 7900,
-          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent(`women ${color} ritu kumar kurta set`)}`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Ritu Kumar",
+            productName: `Hand-Block Printed Chanderi ${color} Kurta Set`,
+            color,
+            category: "outfit",
+          }),
           material: "Chanderi Silk with Intricate Embroidery",
         },
       ];
@@ -4225,7 +4488,13 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 2699,
           originalPrice: 5999,
-          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent(`women ${color} banarasi silk saree`)}`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Ishin",
+            productName: `Banarasi Jacquard ${color} Silk Saree`,
+            color,
+            category: "outfit",
+          }),
           material: "Banarasi Silk",
         },
         {
@@ -4406,7 +4675,12 @@ export function getBenchmarkCandidatesForRequirement(
             retailer: "Nykaa Fashion",
             price: 3800,
             originalPrice: 4500,
-            url: "https://www.nykaafashion.com/tribe-amrapali-silver-temple-bangle/p/2190345",
+            url: buildRetailerSearchUrl("Nykaa Fashion", {
+              gender: "women",
+              brand: "Tribe Amrapali",
+              productName: "925 Sterling Silver Intricate Temple Motif Bangle",
+              category: "jewellery",
+            }),
             material: "Hallmarked 925 Sterling Silver",
           },
         ];
@@ -4439,7 +4713,12 @@ export function getBenchmarkCandidatesForRequirement(
           brand: "Shaya by CaratLane",
           retailer: "Nykaa Fashion",
           price: 3400,
-          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women minimal gold cuff bracelet")}`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Shaya by CaratLane",
+            productName: "14K Gold-Plated Sculptural Geometric Cuff Bracelet",
+            category: "jewellery",
+          }),
           material: "925 Sterling Silver Gold Plated",
         },
       ];
@@ -4555,7 +4834,12 @@ export function getBenchmarkCandidatesForRequirement(
         retailer: "Nykaa Fashion",
         price: 499,
         originalPrice: 999,
-        url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women minimal geometric gold stud earrings")}`,
+        url: buildRetailerSearchUrl("Nykaa Fashion", {
+          gender: "women",
+          brand: "Voylla",
+          productName: "18K Gold-Plated Minimalist Geometric Stud Earrings",
+          category: "jewellery",
+        }),
         material: "18K Gold-Plated Alloy",
       },
       {
@@ -5197,7 +5481,12 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 2890,
           originalPrice: 3600,
-          url: "https://www.nykaafashion.com/aditi-sharma-designer-embroidered-potli/p/2390145",
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Aditi Sharma",
+            productName: "Designer Zardozi & Cutdana Handcrafted Silk Potli Bag",
+            category: "accessories",
+          }),
           material: "Heavy Hand-Embroidered Pure Silk with Crystal Latkans",
         },
       ];
@@ -5476,7 +5765,12 @@ export function getBenchmarkCandidatesForRequirement(
           retailer: "Nykaa Fashion",
           price: 3499,
           originalPrice: 4999,
-          url: `https://www.nykaafashion.com/search/result/?q=${encodeURIComponent("women miraggio structured laptop tote")}`,
+          url: buildRetailerSearchUrl("Nykaa Fashion", {
+            gender: "women",
+            brand: "Miraggio",
+            productName: "Structured Leather Laptop Work Tote Bag",
+            category: "accessories",
+          }),
           material: "High-Grade Vegan Leather",
         },
         {
@@ -6047,6 +6341,106 @@ export function parseWebSearchProductsJson(text: string): Array<Record<string, u
   return products;
 }
 
+const MARKETPLACE_NAME_RE = /\b(myntra|ajio|nykaa(?:\s*fashion)?|tata\s*cliq|amazon(?:\s*india)?|flipkart)\b/gi;
+
+/**
+ * The requirement's search query as product keywords only. Planned queries append store
+ * names and boolean "OR"s (e.g. "minimal gold stud earrings GIVA OR Myntra OR Nykaa"); web
+ * search engines treat those as literal keywords, which pulls in store home/category pages
+ * instead of product pages. Stores are targeted through domains/instructions instead.
+ * Brand names (GIVA, Titan, Zaveri Pearls…) are product attributes and are kept.
+ */
+export function buildDiscoveryQuery(spec: Pick<RequirementSpec, "searchQuery" | "itemTitle">): string {
+  const cleaned = spec.searchQuery
+    .replace(MARKETPLACE_NAME_RE, " ")
+    .replace(/\bOR\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || spec.itemTitle;
+}
+
+/**
+ * Names retailers use for the same footwear type, so discovery covers every way a store
+ * lists the item without changing what the item is (colour/style stay as recommended).
+ */
+const FOOTWEAR_ALTERNATIVE_NAMES: Record<string, string> = {
+  mojaris: "juttis, mojaris, kolhapuris, nagras or khussas (embellished/embroidered ethnic slip-ons)",
+  heels: "heels, heeled sandals, block heels, kitten heels, pumps or wedges",
+  sandals: "sandals, slides, flip-flops or espadrilles",
+  flats: "ballet flats, ballerinas or mules",
+  loafers: "loafers, moccasins or slip-ons",
+  formal_shoes: "derby, oxford or brogue formal shoes",
+  boots: "boots or chelsea boots",
+  sneakers: "sneakers, trainers or canvas shoes",
+};
+
+/** One discarded product candidate, logged so an empty category can be traced to its cause. */
+export interface CandidateRejection {
+  category: string;
+  provider: "tavily" | "openai_web_search" | "retailer_search";
+  /** Where the URL came from: a search index result/citation (or the store's own search), or only the model's text. */
+  urlSource: "search_index" | "model_text";
+  retailer: string;
+  url: string;
+  httpStatus?: number;
+  reason: string;
+  priceVerification: "verified" | "unverified" | "not_checked";
+  categoryValidation: "passed" | "failed" | "not_run";
+  categoryValidationDetail?: string;
+  /** Title the decision was based on (store page, store listing, search index or model). */
+  extractedTitle?: string;
+  // Filled in automatically when the rejection is recorded:
+  pageType?: "product_page" | "category_or_search_page" | "invalid_url";
+  detectedGender?: string;
+  detectedType?: string;
+  semanticMatch?: string;
+  failureClass?: "mismatch" | "search_or_category_page" | "inaccessible" | "temporary_error" | "missing_metadata" | "unsupported_store" | "excluded_colour";
+}
+
+/** Audience a product title or URL is aimed at, as far as its own words say. */
+export function detectAudience(text: string): string {
+  const t = text.toLowerCase();
+  if (/\b(boys?|boy's)\b/.test(t)) return "boys";
+  if (/\b(girls?|girl's)\b/.test(t)) return "girls";
+  if (/\b(kids?|children|infants?|toddlers?)\b/.test(t)) return "kids";
+  if (/\b(women|womens|women's|ladies|woman|female)\b/.test(t)) return "women";
+  if (/\b(men|mens|men's|gents|male)\b/.test(t)) return "men";
+  if (/\bunisex\b/.test(t)) return "unisex";
+  return "unknown";
+}
+
+const GARMENT_TYPE_RE =
+  /\b(henley|polo|t-?shirt|tshirt|tee|shirt|blouse|top|kurta|kurti|saree|sari|lehenga|dress|gown|jumpsuit|jeans|trousers?|chinos?|pants?|shorts|skirt|blazer|jacket|coat|heels?|heeled|sandals?|sneakers?|loafers?|juttis?|mojaris?|boots?|flats|earrings?|studs?|jhumkas?|necklace|pendant|bangles?|bracelet|ring|watch|bag|clutch|potli|belt|sunglasses|scarf|lipstick|foundation|concealer|compact|mascara|eyeliner|kajal|blush|highlighter)\b/i;
+
+/** The first garment / product-type word in a title, for diagnostics. */
+export function detectProductType(text: string): string {
+  return text.match(GARMENT_TYPE_RE)?.[1]?.toLowerCase() ?? "unknown";
+}
+
+function failureClassFor(r: CandidateRejection): NonNullable<CandidateRejection["failureClass"]> {
+  if (r.categoryValidation === "failed") return "mismatch";
+  if (/not an individual product page|listing page/i.test(r.reason)) return "search_or_category_page";
+  if (/not an approved retailer|malformed/i.test(r.reason)) return "unsupported_store";
+  if (/avoided colou?r/i.test(r.reason)) return "excluded_colour";
+  if (/temporarily unavailable|HTTP 5\d\d|timeout|network restriction/i.test(r.reason)) return "temporary_error";
+  if (/bot protection|access challenge/i.test(r.reason)) return "inaccessible";
+  if (/structured product data|reliable product details|price unavailable/i.test(r.reason)) return "missing_metadata";
+  return "mismatch";
+}
+
+/** Groups rejection reasons into the few causes worth telling the user about. */
+function classifyRejection(r: CandidateRejection): string {
+  if (r.categoryValidation === "failed") return "did not match the item, category or audience";
+  if (/not an individual product page/i.test(r.reason)) return "were category/search pages, not product pages";
+  if (/not an approved retailer|malformed/i.test(r.reason)) return "were not from a supported store";
+  if (/bot protection|access challenge|timeout|network restriction|temporarily unavailable/i.test(r.reason)) {
+    return "could not be checked because the store was unavailable or blocks automated access";
+  }
+  if (/404|no longer available|HTTP status|redirected/i.test(r.reason)) return "no longer exist or redirect elsewhere";
+  if (/avoided colou?r/i.test(r.reason)) return "use a colour you asked to avoid";
+  return "had no readable product details on the store page";
+}
+
 /**
  * Searches and verifies MULTIPLE real product alternatives across retailers and price points
  * for a single styling requirement.
@@ -6114,12 +6508,56 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     shade?: string;
     material?: string;
     imageUrl?: string;
-    // URL and details were written by the LLM rather than returned by a search index
+    // Details (title/price/image) were written by the LLM rather than read from a search index
     modelAuthored?: boolean;
+    provider: "tavily" | "openai_web_search";
+    // The URL itself was returned by a search index (Tavily result or a web_search citation),
+    // so it is known to exist even when the store blocks automated page verification.
+    fromSearchIndex: boolean;
   }> = [];
 
   const seenCanonicalUrls = new Set<string>();
   const seenIdentityKeys = new Set<string>();
+
+  const discoveryQuery = buildDiscoveryQuery(spec);
+  const rejections: CandidateRejection[] = [];
+  const reject = (r: Omit<CandidateRejection, "category">) => {
+    const entry: CandidateRejection = { category: spec.category, ...r };
+    rejections.push(entry);
+    logger.warn({ item: spec.itemTitle, ...entry }, "Product candidate rejected");
+  };
+
+  /**
+   * Accepts a discovered URL only if it is an individual product page on a supported store.
+   * Category, collection and search pages are rejected here: a listing page has a title and
+   * an image too, and must never be verified and shown as if it were one product.
+   */
+  const acceptProductUrl = (
+    rawUrl: string,
+    provider: CandidateRejection["provider"],
+    urlSource: CandidateRejection["urlSource"],
+  ): string | null => {
+    const clean = cleanUrl(rawUrl);
+    const retailer = getRetailerFromUrl(clean) || "Unknown";
+    if (!clean || !isValidProductUrl(clean)) {
+      reject({
+        provider, urlSource, retailer, url: rawUrl.slice(0, 200),
+        reason: "Not an approved retailer URL, or malformed/placeholder URL",
+        priceVerification: "not_checked", categoryValidation: "not_run",
+      });
+      return null;
+    }
+    const canonical = getCanonicalProductUrl(clean);
+    if (determineUrlType(canonical) !== "exact_product") {
+      reject({
+        provider, urlSource, retailer, url: canonical,
+        reason: "Not an individual product page (category, listing or search URL)",
+        priceVerification: "not_checked", categoryValidation: "not_run",
+      });
+      return null;
+    }
+    return canonical;
+  };
 
   // Records how each discovery stage fared, so an empty result can be traced to its cause
   const discovery = {
@@ -6138,7 +6576,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
   const tavilyHealth = getTavilyKeyDiagnostics();
   if (tavilyHealth.isConfigured) {
     try {
-      const tavilyQuery = `${spec.searchQuery} buy online india`;
+      const tavilyQuery = `${discoveryQuery} buy online india`;
 
       // Dynamically determine search domains based on occasion, style preferences, and budget
       const occasionLower = (profile.occasion || "").toLowerCase();
@@ -6166,6 +6604,9 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       if (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery") {
         searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
+      // Category specialists among the approved stores
+      if (spec.category === "jewellery") searchDomains.push("giva.co", "nykaafashion.com");
+      if (spec.category === "footwear") searchDomains.push("nykaafashion.com");
 
       const tavilyResp = await tavilySearch(tavilyQuery, 15, searchDomains);
       discovery.tavily = "ok";
@@ -6203,11 +6644,12 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       for (const res of tavilyResp.results || []) {
         if (candidateList.length >= 10) break;
 
-        if (!res.url || !isValidProductUrl(res.url)) {
+        const acceptedUrl = res.url ? acceptProductUrl(res.url, "tavily", "search_index") : null;
+        if (!acceptedUrl) {
           discovery.tavilyRejectedUrls.push(String(res.url ?? "").slice(0, 120));
         }
-        if (res.url && isValidProductUrl(res.url)) {
-          const canonicalUrl = getCanonicalProductUrl(res.url);
+        if (res.url && acceptedUrl) {
+          const canonicalUrl = acceptedUrl;
           const rawTitle = res.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
           const guessedBrand = rawTitle.split(" ")[0] || "Curated";
           const identityKey = getProductIdentityKey(rawTitle, guessedBrand);
@@ -6283,6 +6725,8 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             url: canonicalUrl,
             price: extractedPrice,
             imageUrl: candidateImage,
+            provider: "tavily",
+            fromSearchIndex: true,
           });
 
           candIdx++;
@@ -6360,13 +6804,18 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
               content: [
                 {
                   type: "input_text",
-                  text: `Search for real, purchasable, currently available products in India for: ${spec.searchQuery}.
+                  text: `Search for real, purchasable, currently available products in India for: ${discoveryQuery}.
 Strictly adhere to:
 1. Target gender: ${spec.targetGender || "unisex"}.
-2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}.
-3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in). Include products from more than one retailer when your search finds them.
-4. Return up to 8 products. Copy each product page URL exactly as it appears in your search results. Never invent, guess or complete product IDs or slugs; omit a product if you do not have its exact page URL.
-5. Use the product title exactly as listed by the retailer.`,
+2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}. Every product must be this exact kind of item.${
+                    spec.category === "footwear" && spec.itemSubcategory && FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]
+                      ? ` Stores list it as ${FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]}; search all of these names, keep the recommended colour and style, and never substitute a different footwear type.`
+                      : ""
+                  }
+3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in)${spec.category === "jewellery" ? ", GIVA (giva.co)" : ""}. Include products from more than one retailer when your search finds them.
+4. Every URL must be ONE product's own detail page, never a category, collection, brand, search or listing page. Product pages look like: Myntra .../<product id>/buy, Amazon /dp/<ASIN>, Nykaa and Nykaa Fashion .../p/<id>, AJIO .../p/<id>, Tata CLiQ .../p-mp<id>${spec.category === "jewellery" ? ", GIVA /products/<name>" : ""}.
+5. Return up to 8 products. Copy each product page URL exactly as it appears in your search results. Never invent, guess or complete product IDs or slugs; omit a product if you do not have its exact page URL.
+6. Use the product title exactly as listed by the retailer.`,
                 },
               ],
             },
@@ -6387,45 +6836,8 @@ Strictly adhere to:
       discovery.openai = "ok";
       discovery.openaiOutputChars = outputText.length;
 
-      if (outputText) {
-        try {
-          JSON.parse(outputText);
-        } catch (parseErr: unknown) {
-          // Recorded for tracing; complete product objects are still recovered below
-          discovery.openaiParseError = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        }
-        const parsedProducts = parseWebSearchProductsJson(outputText);
-        discovery.openaiProducts = parsedProducts.length;
-        for (const prod of parsedProducts) {
-          const rawPageUrl = typeof prod.pageUrl === "string" ? prod.pageUrl : "";
-          const cleanCandidateUrl = cleanUrl(rawPageUrl);
-          if (!cleanCandidateUrl || !isValidProductUrl(cleanCandidateUrl)) {
-            discovery.openaiRejectedUrls.push(rawPageUrl.slice(0, 120));
-            continue;
-          }
-          const canonicalUrl = getCanonicalProductUrl(cleanCandidateUrl);
-          const finalTitle = (typeof prod.title === "string" && prod.title.trim()) || spec.itemTitle;
-          const finalBrand = (typeof prod.brand === "string" && prod.brand.trim()) || finalTitle.split(" ")[0] || "Curated";
-          const identityKey = getProductIdentityKey(finalTitle, finalBrand);
-
-          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
-            seenCanonicalUrls.add(canonicalUrl);
-            seenIdentityKeys.add(identityKey);
-            const modelRetailer = typeof prod.retailer === "string" ? prod.retailer : "";
-            const derivedRetailer = getRetailerFromUrl(canonicalUrl) || modelRetailer || spec.preferredRetailers[0] || "Online Store";
-            candidateList.push({
-              tier: "mid",
-              productTitle: finalTitle,
-              brand: finalBrand,
-              retailer: derivedRetailer,
-              url: canonicalUrl,
-              modelAuthored: true,
-            });
-          }
-        }
-      }
-
-      // Extract search citations from tool annotations
+      // Extract search citations from tool annotations. These URLs were returned by the
+      // web_search tool itself, so unlike URLs the model writes out, they are known to exist.
       const citations: Array<{ title: string; url: string }> = [];
       for (const item of response.output || []) {
         if (item.type === "message" && item.content) {
@@ -6450,6 +6862,52 @@ Strictly adhere to:
       }
 
       discovery.citations = citations.length;
+      const citationByUrl = new Map<string, { title: string; url: string }>();
+      for (const cit of citations) {
+        if (cit.url) citationByUrl.set(getCanonicalProductUrl(cit.url), cit);
+      }
+
+      if (outputText) {
+        try {
+          JSON.parse(outputText);
+        } catch (parseErr: unknown) {
+          // Recorded for tracing; complete product objects are still recovered below
+          discovery.openaiParseError = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        }
+        const parsedProducts = parseWebSearchProductsJson(outputText);
+        discovery.openaiProducts = parsedProducts.length;
+        for (const prod of parsedProducts) {
+          const rawPageUrl = typeof prod.pageUrl === "string" ? prod.pageUrl : "";
+          const citation = rawPageUrl ? citationByUrl.get(getCanonicalProductUrl(rawPageUrl)) : undefined;
+          const canonicalUrl = acceptProductUrl(rawPageUrl, "openai_web_search", citation ? "search_index" : "model_text");
+          if (!canonicalUrl) {
+            discovery.openaiRejectedUrls.push(rawPageUrl.slice(0, 120));
+            continue;
+          }
+          // A cited page's own title (from the search index) is preferred over the model's wording
+          const citedTitle = citation?.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim();
+          const finalTitle = citedTitle || (typeof prod.title === "string" && prod.title.trim()) || spec.itemTitle;
+          const finalBrand = (typeof prod.brand === "string" && prod.brand.trim()) || finalTitle.split(" ")[0] || "Curated";
+          const identityKey = getProductIdentityKey(finalTitle, finalBrand);
+
+          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && candidateList.length < 12) {
+            seenCanonicalUrls.add(canonicalUrl);
+            seenIdentityKeys.add(identityKey);
+            const modelRetailer = typeof prod.retailer === "string" ? prod.retailer : "";
+            const derivedRetailer = getRetailerFromUrl(canonicalUrl) || modelRetailer || spec.preferredRetailers[0] || "Online Store";
+            candidateList.push({
+              tier: "mid",
+              productTitle: finalTitle,
+              brand: finalBrand,
+              retailer: derivedRetailer,
+              url: canonicalUrl,
+              modelAuthored: true,
+              provider: "openai_web_search",
+              fromSearchIndex: Boolean(citation),
+            });
+          }
+        }
+      }
 
       // Parse product blocks separated by '---'
       const blocks = outputText.split(/---|\bPRODUCT_START\b/i);
@@ -6511,8 +6969,12 @@ Strictly adhere to:
         }
 
         const cleanCandidateUrl = cleanUrl(rawUrl);
-        if (cleanCandidateUrl && isValidProductUrl(cleanCandidateUrl)) {
-          const canonicalUrl = getCanonicalProductUrl(cleanCandidateUrl);
+        // URLs already taken from the structured output above are skipped silently
+        const alreadySeen = cleanCandidateUrl && seenCanonicalUrls.has(getCanonicalProductUrl(cleanCandidateUrl));
+        const blockCanonicalUrl =
+          cleanCandidateUrl && !alreadySeen ? acceptProductUrl(cleanCandidateUrl, "openai_web_search", "model_text") : null;
+        if (blockCanonicalUrl) {
+          const canonicalUrl = blockCanonicalUrl;
           const finalTitle = productTitle || spec.itemTitle;
           const finalBrand = brand || finalTitle.split(" ")[0] || "Curated";
           const identityKey = getProductIdentityKey(finalTitle, finalBrand);
@@ -6534,6 +6996,8 @@ Strictly adhere to:
               shade: shade || undefined,
               material: material || undefined,
               modelAuthored: true,
+              provider: "openai_web_search",
+              fromSearchIndex: false,
             });
           }
         }
@@ -6543,12 +7007,15 @@ Strictly adhere to:
       if (candidateList.length < 4 && citations.length > 0) {
         for (const cit of citations) {
           if (candidateList.length >= 12) break;
-          const canonicalUrl = getCanonicalProductUrl(cit.url);
+          if (seenCanonicalUrls.has(getCanonicalProductUrl(cit.url))) continue;
+          const acceptedCitationUrl = acceptProductUrl(cit.url, "openai_web_search", "search_index");
+          if (!acceptedCitationUrl) continue;
+          const canonicalUrl = acceptedCitationUrl;
           const citTitle = cit.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
           const citBrand = citTitle.split(" ")[0] || "Curated";
           const identityKey = getProductIdentityKey(citTitle, citBrand);
 
-          if (!seenCanonicalUrls.has(canonicalUrl) && !seenIdentityKeys.has(identityKey) && isValidProductUrl(cit.url)) {
+          if (!seenIdentityKeys.has(identityKey)) {
             seenCanonicalUrls.add(canonicalUrl);
             seenIdentityKeys.add(identityKey);
             const parsedHost = new URL(cit.url).hostname.replace(/^www\./, "").split(".")[0];
@@ -6582,6 +7049,8 @@ Strictly adhere to:
               brand: citBrand,
               retailer: derivedRetailer,
               url: canonicalUrl,
+              provider: "openai_web_search",
+              fromSearchIndex: true,
             });
           }
         }
@@ -6638,7 +7107,16 @@ Strictly adhere to:
           ? "child"
           : undefined;
 
-  const verifiedPromises = candidateList.map(async (cand, candIdx): Promise<ProductResult | null> => {
+  const verifiedPromises = candidateList.map(async (cand): Promise<ProductResult | null> => {
+    const rejectCandidate = (r: Pick<CandidateRejection, "reason" | "priceVerification" | "categoryValidation"> & Partial<CandidateRejection>) =>
+      reject({
+        provider: cand.provider,
+        urlSource: cand.fromSearchIndex ? "search_index" : "model_text",
+        retailer: cand.retailer,
+        url: cand.url,
+        ...r,
+      });
+
     // Consistency check with strict gender, subcategory, color, price sanity, image, and occasion verification
     const consistency = checkProductConsistency(
       cand.productTitle,
@@ -6656,16 +7134,22 @@ Strictly adhere to:
       spec.targetGender,
     );
     if (!consistency.isConsistent) {
-      logger.warn(
-        { productTitle: cand.productTitle, url: cand.url, reason: consistency.reason },
-        "Candidate product failed consistency check between displayed title, URL, image, or occasion",
-      );
+      rejectCandidate({
+        reason: `Failed category/audience validation before page check: ${cand.productTitle}`,
+        priceVerification: "not_checked",
+        categoryValidation: "failed",
+        categoryValidationDetail: consistency.reason,
+      });
       return null;
     }
 
     // Avoided colors check
     if (violatesAvoidedColors(cand.productTitle, cand.shade, colorsAvoidList)) {
-      logger.info({ productTitle: cand.productTitle }, "Dropping product clashing with user's avoided colors");
+      rejectCandidate({
+        reason: `Uses an avoided colour: ${cand.productTitle}`,
+        priceVerification: "not_checked",
+        categoryValidation: "passed",
+      });
       return null;
     }
 
@@ -6683,13 +7167,18 @@ Strictly adhere to:
 
     // Fast page verification on destination product page
     const pageData = await verifyProductPage(cand.url);
-    if (cand.modelAuthored && !pageData.success) {
-      // A URL written by the model (not returned by a search index) is only trusted once its
-      // page has actually been fetched; a bot-blocked page cannot confirm the product exists.
-      logger.info(
-        { url: cand.url, reason: pageData.reason },
-        "Dropping OpenAI-suggested candidate: retailer product page could not be verified",
-      );
+    if (!pageData.success && !(pageData.retailerRestricted && cand.fromSearchIndex)) {
+      // Rejected: the page is gone/invalid, or it could not be checked and the URL is known
+      // only from the model's own text. A URL the model wrote out is trusted only once its
+      // page has actually been read; a bot-blocked page cannot confirm the product exists.
+      rejectCandidate({
+        reason: pageData.retailerRestricted
+          ? `${pageData.reason} — URL not confirmed by a search index, so it cannot be shown unverified`
+          : pageData.reason || "Product page could not be verified",
+        httpStatus: pageData.httpStatus,
+        priceVerification: "unverified",
+        categoryValidation: "passed",
+      });
       return null;
     }
     if (pageData.success) {
@@ -6705,17 +7194,18 @@ Strictly adhere to:
         finalTitle = pageData.productName;
       }
       if (pageData.brand) finalBrand = pageData.brand;
-    } else if (pageData.retailerRestricted) {
-      // Retailer bot protection (HTTP 403 / 429) e.g. AJIO Akamai protection
-      // URL is a genuine exact product page from search provider, but server automated fetch was blocked.
-      // Retain search data, but do NOT falsely claim priceVerified or productVerified
+    } else {
+      // Retailer bot protection (HTTP 403 / 429 / 503 / challenge / timeout) on a URL that a
+      // search index returned (Tavily result or web_search citation): the product page exists
+      // but could not be read automatically. Retain the search data, but do NOT claim
+      // priceVerified or productVerified (the card shows "Check store price", no verified badge).
       priceVerified = false;
       productVerified = false;
       availability = undefined;
-    } else {
-      // HTTP 404, discontinued, or invalid redirect -> reject candidate!
-      logger.info({ url: cand.url, reason: pageData.reason }, "Dropping product candidate: page returned 404, discontinued, or invalid redirect");
-      return null;
+      logger.info(
+        { item: spec.itemTitle, category: spec.category, url: cand.url, provider: cand.provider, httpStatus: pageData.httpStatus, reason: pageData.reason },
+        "Keeping search-index product as unverified: retailer blocks automated page checks",
+      );
     }
 
     // Post-verification consistency check on resolved data
@@ -6735,10 +7225,13 @@ Strictly adhere to:
       spec.targetGender,
     );
     if (!postConsistency.isConsistent) {
-      logger.warn(
-        { productTitle: finalTitle, url: cand.url, reason: postConsistency.reason },
-        "Candidate product failed post-page verification consistency check",
-      );
+      rejectCandidate({
+        reason: `Failed category/audience validation on the store's own product data: ${finalTitle}`,
+        httpStatus: pageData.httpStatus,
+        priceVerification: priceVerified ? "verified" : "unverified",
+        categoryValidation: "failed",
+        categoryValidationDetail: postConsistency.reason,
+      });
       return null;
     }
 
@@ -6773,6 +7266,18 @@ Strictly adhere to:
       ? `${symbol}${finalOriginalPrice.toLocaleString("en-IN")}`
       : undefined;
 
+    const fallbackSearchUrl = buildFallbackSearchUrl(
+      {
+        retailer: finalRetailer,
+        brand: finalBrand,
+        productName: finalTitle,
+        category: spec.category,
+        subcategory: spec.itemTitle,
+        color: candShade || cand.shade || spec.dominantColor,
+      },
+      candidatePersona,
+    );
+
     return {
       id: `prod-${spec.category}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       category: spec.category,
@@ -6798,6 +7303,7 @@ Strictly adhere to:
       material: candMaterial,
       imageUrl: finalImageUrl,
       productUrl: cand.url,
+      fallbackSearchUrl,
       urlType,
       isVerified: priceVerified && productVerified,
       matchScore,
@@ -6814,11 +7320,24 @@ Strictly adhere to:
 
   // When Tavily is down and the OpenAI fallback finds nothing verifiable, say so explicitly
   // instead of leaving only the Tavily error to explain the empty group.
+  const rejectionSummary = (() => {
+    const counts = new Map<string, number>();
+    for (const r of rejections) counts.set(classifyRejection(r), (counts.get(classifyRejection(r)) ?? 0) + 1);
+    return [...counts.entries()].map(([cause, n]) => `${n} ${cause}`).join("; ");
+  })();
+
+  if (verifiedProducts.length === 0 && rejections.length > 0) {
+    logger.warn(
+      { item: spec.itemTitle, category: spec.category, discovery, rejected: rejections.length, rejectionSummary },
+      "No verified products for requirement; every candidate was rejected",
+    );
+  }
+
   if (
     discovery.tavily !== "ok" &&
     discovery.openai === "ok" &&
     verifiedProducts.length === 0 &&
-    !diagnosticsTracker.some((d) => d.provider === "openai_web_search")
+    !diagnosticsTracker.some((d) => d.provider === "openai_web_search" && d.message.includes(`"${spec.itemTitle}"`))
   ) {
     logger.warn({ spec: spec.itemTitle, discovery }, "OpenAI web search fallback produced no verified products");
     diagnosticsTracker.push({
@@ -6826,8 +7345,9 @@ Strictly adhere to:
       status: "ok",
       message:
         `OpenAI web search fallback ran for "${spec.itemTitle}" and suggested ${discovery.openaiProducts} product(s), ` +
-        `but none could be confirmed on the retailer's product page.`,
-      suggestedFix: "Refresh to search again, or check other categories. Unverifiable suggestions are not shown.",
+        `but none could be confirmed on the retailer's product page` +
+        (rejectionSummary ? ` (${rejectionSummary}).` : "."),
+      suggestedFix: "Refresh to search again, or use the store search links for this item. Unverifiable suggestions are not shown.",
     });
   }
 
@@ -6928,6 +7448,22 @@ export async function searchProductsForLook(
         recommendedItemTitle: spec.itemTitle,
         stylingRequirement: spec.stylingRequirement,
         products: prods,
+        // Nothing verifiable: offer a direct search on the item's preferred stores instead.
+        // Built from the item's own gender/category/colour; these are store search pages,
+        // never presented as specific products.
+        retailerSearchLinks:
+          prods.length === 0
+            ? spec.preferredRetailers.slice(0, 4).map((retailer) => ({
+                retailer,
+                url: buildRetailerSearchUrl(retailer, {
+                  productName: spec.itemTitle,
+                  category: spec.category,
+                  subcategory: spec.itemSubcategory?.replace(/_/g, " "),
+                  gender: spec.targetGender,
+                  color: spec.dominantColor,
+                }),
+              }))
+            : undefined,
       };
     });
 

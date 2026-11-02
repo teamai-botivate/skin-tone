@@ -171,7 +171,8 @@ const weddingSpecs = planRequirementSpecs(weddingLook, { occasion: "Wedding Rece
 
 const weddingOutfitSpec = weddingSpecs.find((s) => s.itemSubcategory === "saree");
 assert.ok(weddingOutfitSpec, "Wedding look must recommend silk saree or lehenga");
-assert.ok(weddingOutfitSpec.searchQuery.includes("silk saree"), "Search query must target silk saree");
+assert.ok(/silk saree/i.test(weddingOutfitSpec.searchQuery), "Search query must target silk saree");
+assert.ok(/banarasi/i.test(weddingOutfitSpec.searchQuery), "Search query keeps the recommended weave");
 
 const weddingJewellerySpec = weddingSpecs.find((s) => s.itemSubcategory === "earrings");
 assert.ok(weddingJewellerySpec && (weddingJewellerySpec.itemTitle.toLowerCase().includes("kundan") || weddingJewellerySpec.stylingRequirement.toLowerCase().includes("kundan") || weddingJewellerySpec.stylingRequirement.toLowerCase().includes("jhumka")),

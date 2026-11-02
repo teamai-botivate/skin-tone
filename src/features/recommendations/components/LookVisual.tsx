@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react';
 import type { LookRecommendation } from '@/types';
 import { Sparkles, RefreshCw, Clock3, Bell } from 'lucide-react';
 import { warmAudioContext, requestNotificationPermission } from '@/lib/notification';
+import { getPushSupport } from '@/lib/client-push';
+
+function backgroundNoticeText(): string {
+  const support = getPushSupport();
+  if (support === 'ios-needs-install') {
+    return 'Keep this page open, or add LetStyle to your Home Screen to get notified when your looks are ready';
+  }
+  if (support === 'supported' && Notification.permission === 'granted') {
+    return "Feel free to switch apps — we'll send you a notification as soon as your looks are ready";
+  }
+  return 'A sound notification will alert you as soon as your photos are ready';
+}
 
 export const hasRealImage = (url: string) => Boolean(url) && !url.startsWith('/replace-with-generated/');
 
@@ -89,10 +101,15 @@ export function Generating({
 } = {}) {
   const [active, setActive] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [noticeText, setNoticeText] = useState('A sound notification will alert you as soon as your photos are ready');
 
   useEffect(() => {
     warmAudioContext();
     requestNotificationPermission();
+    setNoticeText(backgroundNoticeText());
+    // Permission may be granted moments after mount (prompt shown on the Generate click).
+    const timer = window.setTimeout(() => setNoticeText(backgroundNoticeText()), 4000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -194,7 +211,7 @@ export function Generating({
         </p>
         <div className="mt-4 flex items-center gap-2 text-xs text-[#194A49]/85 bg-[#FAF5EE] border border-[#B08A70]/30 rounded-full px-3.5 py-1.5 w-fit shadow-xs">
           <Bell size={13} className="text-[#194A49]" />
-          <span>A sound notification will alert you as soon as your photos are ready</span>
+          <span>{noticeText}</span>
         </div>
       </div>
     </div>

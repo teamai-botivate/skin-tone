@@ -12,6 +12,7 @@ export const PERSONALIZATION_STORAGE_KEYS = [
   'letstyle-saved-looks',
   'letstyle-feedback',
   'letstyle-avatar-versions',
+  'letstyle-active-generation-job',
   'skintune-profile',
   'skintune-saved-looks',
   'skintune-feedback',

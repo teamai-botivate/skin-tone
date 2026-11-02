@@ -19,6 +19,16 @@ function cleanEnv(val?: string): string {
  * Lazily-constructed singleton OpenAI client.
  * Strictly reads server-side OPENAI_API_KEY.
  */
+/**
+ * Per-request options forwarded to every provider call. The background job
+ * runner passes an AbortSignal so one slow call can never outlive its step
+ * deadline (or the serverless execution window); the HTTP route passes none.
+ */
+export interface OpenAIRequestOptions {
+  signal?: AbortSignal;
+  timeout?: number;
+}
+
 export function getOpenAIClient(): OpenAI {
   if (client) return client;
   const rawKey = process.env["OPENAI_API_KEY"];

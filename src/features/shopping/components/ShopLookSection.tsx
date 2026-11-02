@@ -30,6 +30,7 @@ import {
   getSafeProductUrl,
   isValidProductUrl,
   compareProductsByPriceAscending,
+  buildFallbackSearchUrl,
 } from '@/lib/retailer-urls';
 
 
@@ -144,6 +145,12 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     products: group.products.slice().sort(compareProductsByPriceAscending),
   }));
 
+  // A failure of the request itself (no response, timeout, signed out, server error),
+  // as opposed to a provider/key problem reported by the server.
+  const requestFailure = diagnostics.find(
+    (d) => d.provider === 'network' || d.provider === 'auth' || d.status === 'http_error',
+  );
+
   // Calculate available categories for tabs
   const availableTabs: { id: string; label: string; icon: string }[] = [
     { id: 'all', label: 'All Finds', icon: '🛍️' },
@@ -185,6 +192,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
   const renderProductCard = (product: ProductResult) => {
     const isExactProduct = product.urlType === 'exact_product' && isValidProductUrl(product.productUrl || '');
     const safeUrl = getSafeProductUrl(product, persona);
+    const fallbackSearchUrl = product.fallbackSearchUrl || buildFallbackSearchUrl(product, persona);
 
     return (
       <article
@@ -318,7 +326,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
         </div>
 
         {/* Shop CTA: opens verified real product URL or safe search landing in new tab */}
-        <div className="mt-5 border-t border-border/60 pt-4">
+        <div className="mt-5 space-y-2 border-t border-border/60 pt-4">
           <a
             href={safeUrl}
             target="_blank"
@@ -331,6 +339,20 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
               : `Search on ${product.retailer}`}
             <ExternalLink size={13} />
           </a>
+
+          {/* Secondary fallback search link when exact product page is temporarily unavailable or blocked */}
+          {isExactProduct && fallbackSearchUrl && (
+            <a
+              href={fallbackSearchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={`link-fallback-search-${product.id}`}
+              className="focus-ring inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border/80 bg-secondary/40 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            >
+              Search this product on {product.retailer}
+              <ExternalLink size={11} />
+            </a>
+          )}
         </div>
       </article>
     );
@@ -467,6 +489,23 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                     <p className="mt-1 text-xs text-muted-foreground">
                       We ensure only genuine, age-appropriate, and style-relevant pieces are shown. You can refresh products or search directly on supported stores.
                     </p>
+                    {group.retailerSearchLinks && group.retailerSearchLinks.length > 0 && (
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        {group.retailerSearchLinks.map((link) => (
+                          <a
+                            key={link.retailer}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid={`link-store-search-${link.retailer}`}
+                            className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:border-primary/50"
+                          >
+                            Search on {link.retailer}
+                            <ExternalLink size={11} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -512,9 +551,17 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             </h3>
 
             <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">
-              {status === 'unavailable'
-                ? 'We could not fetch live retailer links from Myntra, Nykaa, or Ajio. Below is the diagnostic report detailing which API key was used and the root cause.'
-                : 'Try selecting "All Finds" or refreshing the search to see pieces across other categories.'}
+              {status !== 'unavailable'
+                ? 'Try selecting "All Finds" or refreshing the search to see pieces across other categories.'
+                : requestFailure?.status === 'network_error'
+                  ? 'The request never reached the LetStyle server, so no stores were searched. Details below.'
+                  : requestFailure?.status === 'timeout'
+                    ? 'The LetStyle server took too long to answer, so no products were loaded. Details below.'
+                    : requestFailure?.status === 'unauthorized'
+                      ? 'You need to be signed in to load product links. Details below.'
+                      : requestFailure?.status === 'http_error'
+                        ? 'The LetStyle server returned an error for this request. Details below.'
+                        : 'We could not fetch live retailer links from Myntra, Nykaa, or Ajio. Below is the diagnostic report detailing which API key was used and the root cause.'}
             </p>
           </div>
 
@@ -536,9 +583,9 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                       🔑 {diag.keyName || diag.provider.toUpperCase()}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${diag.status === 'invalid_key'
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${diag.status === 'invalid_key' || diag.status === 'network_error' || diag.status === 'http_error'
                         ? 'bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30'
-                        : diag.status === 'missing_key'
+                        : diag.status === 'missing_key' || diag.status === 'unauthorized'
                           ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
                           : diag.status === 'rate_limited'
                             ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30'
@@ -547,7 +594,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                               : 'bg-muted text-muted-foreground'
                         }`}
                     >
-                      {diag.status.replace('_', ' ')}
+                      {diag.status.replace(/_/g, ' ')}
                     </span>
                   </div>
 

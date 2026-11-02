@@ -49,6 +49,46 @@ CREATE TABLE IF NOT EXISTS auth_rate_limits (
   locked_until TEXT,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS generation_jobs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  input_json TEXT,
+  looks_json TEXT,
+  error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  lease_until TEXT,
+  lease_owner TEXT,
+  notified_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_user ON generation_jobs(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_generation_jobs_status ON generation_jobs(status, lease_until);
+
+CREATE TABLE IF NOT EXISTS generation_job_images (
+  job_id TEXT NOT NULL,
+  look_id TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (job_id, look_id)
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 `;
 
 export function getParsedSchemaStatements(): string[] {

@@ -5,3 +5,11 @@ export { Feedback } from './components/Feedback';
 export { getLookRecommendations } from './services/recommendation-engine';
 export { generateLookImages, refineLookImage, generateOneLookImage } from './services/image-generation';
 
+export {
+  startGenerationJob,
+  watchGenerationJob,
+  getActiveJobId,
+  setActiveJobId,
+  JobsUnavailableError,
+  JOB_POKE_EVENT,
+} from './services/generation-job';

@@ -1,6 +1,7 @@
 import { logger } from "../logger";
 import path from "node:path";
 import { getParsedSchemaStatements } from "./schema";
+import { retireIncompatibleFeatureTables } from "./migrations";
 
 export interface DatabaseClient {
   query<T = any>(sql: string, params?: any[]): Promise<T[]>;
@@ -33,6 +34,10 @@ declare global {
   var _letstyle_db_init_promise: Promise<void> | undefined;
   // eslint-disable-next-line no-var
   var _letstyle_memory_state: MemoryDbState | undefined;
+  // eslint-disable-next-line no-var
+  var _letstyle_db_schema_ready: boolean | undefined;
+  // eslint-disable-next-line no-var
+  var _letstyle_db_dialect: "sqlite" | "postgres" | "memory" | undefined;
 }
 
 function normalizeSqlForSqlite(sql: string): string {
@@ -412,11 +417,30 @@ function createMemoryClient(): DatabaseClient {
   return client;
 }
 
+/**
+ * Runs schema initialization once per process. A failed attempt is retried by the next
+ * caller: previously a failure was forgotten and later calls used the half-initialized
+ * database, so the real error resurfaced as unrelated "no such column" failures.
+ */
+async function ensureSchema(client: DatabaseClient): Promise<void> {
+  if (globalThis._letstyle_db_schema_ready) return;
+  if (!globalThis._letstyle_db_init_promise) {
+    const dialect = globalThis._letstyle_db_dialect ?? (getDatabaseConfig().isPostgres ? "postgres" : "sqlite");
+    globalThis._letstyle_db_init_promise = initializeSchema(client, dialect)
+      .then(() => {
+        globalThis._letstyle_db_schema_ready = true;
+      })
+      .catch((err) => {
+        globalThis._letstyle_db_init_promise = undefined;
+        throw err;
+      });
+  }
+  await globalThis._letstyle_db_init_promise;
+}
+
 export async function getDb(): Promise<DatabaseClient> {
   if (globalThis._letstyle_db) {
-    if (globalThis._letstyle_db_init_promise) {
-      await globalThis._letstyle_db_init_promise;
-    }
+    await ensureSchema(globalThis._letstyle_db);
     return globalThis._letstyle_db;
   }
 
@@ -426,6 +450,7 @@ export async function getDb(): Promise<DatabaseClient> {
   if (isPostgres) {
     logger.info("Connecting to PostgreSQL database");
     client = await createPostgresClient(url);
+    globalThis._letstyle_db_dialect = "postgres";
   } else {
     try {
       const sqlitePath =
@@ -435,28 +460,26 @@ export async function getDb(): Promise<DatabaseClient> {
           : path.resolve(process.cwd(), "letstyle.db"));
       logger.info({ sqlitePath }, "Using persistent SQLite database");
       client = await createSqliteClient(sqlitePath);
+      globalThis._letstyle_db_dialect = "sqlite";
     } catch (sqliteErr) {
       logger.warn({ sqliteErr }, "SQLite unavailable; falling back to in-memory store");
       client = createMemoryClient();
+      globalThis._letstyle_db_dialect = "memory";
     }
   }
 
   globalThis._letstyle_db = client;
-
-  if (!globalThis._letstyle_db_init_promise) {
-    globalThis._letstyle_db_init_promise = initializeSchema(client).catch((err) => {
-      globalThis._letstyle_db_init_promise = undefined;
-      throw err;
-    });
-  }
-
-  await globalThis._letstyle_db_init_promise;
-
+  await ensureSchema(client);
   return client;
 }
 
-async function initializeSchema(client: DatabaseClient): Promise<void> {
+async function initializeSchema(client: DatabaseClient, dialect: "sqlite" | "postgres" | "memory"): Promise<void> {
   try {
+    if (dialect !== "memory") {
+      // Tables left behind by an earlier, incompatible implementation would otherwise
+      // survive CREATE TABLE IF NOT EXISTS and break the statements below.
+      await retireIncompatibleFeatureTables(client, dialect);
+    }
     const statements = getParsedSchemaStatements();
     for (const statement of statements) {
       await client.exec(statement);

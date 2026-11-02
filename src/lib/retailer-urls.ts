@@ -5,7 +5,7 @@
  * - Myntra: Uses `<slug>?rawQuery=<query>` (NEVER `/search` which opens kids' clothing)
  * - AJIO: Uses `/search/?text=<query>` (NEVER empty `/search` which redirects to men's polo shirts)
  * - Nykaa: Uses `nykaa.com/search/result/?q=<query>` for beauty/makeup, and
- *          `nykaafashion.com/search/result/?q=<query>` for apparel/jewellery
+ *          `nykaafashion.com/catalogsearch/result/?q=<query>` for apparel/jewellery (never `/search` which triggers Varnish 503)
  * - Tata CLiQ: Uses `/search/?searchCategory=all&text=<query>`
  * - Amazon: Uses `/s?k=<query>`
  */
@@ -195,7 +195,8 @@ export function buildRetailerSearchUrl(
     }
   }
 
-  const cleanProductName = (params.productName || "");
+  // "Men's" -> "Men": otherwise punctuation stripping leaves a stray "s" token ("men s cream ...")
+  const cleanProductName = (params.productName || "").replace(/\b(men|women|boys|girls|kids)['’]s\b/gi, "$1");
   let filteredName = cleanProductName;
   if (isMan) {
     filteredName = filteredName.replace(/\b(women|womens|women's|female|ladies|woman|girls|girl)\b/gi, "").trim();
@@ -295,7 +296,7 @@ export function buildRetailerSearchUrl(
   // 4. Nykaa: Beauty items must go to nykaa.com; apparel goes to nykaafashion.com
   if (r.includes("nykaa")) {
     if (r.includes("fashion") || (!isMakeup && params.category !== "makeup")) {
-      return `https://www.nykaafashion.com/search/result/?q=${q}`;
+      return `https://www.nykaafashion.com/catalogsearch/result/?q=${q}`;
     }
     return `https://www.nykaa.com/search/result/?q=${q}`;
   }
@@ -423,8 +424,14 @@ export function isValidProductUrl(urlStr: string): boolean {
       return false;
     }
 
+    // 4b. Reject Nykaa Fashion's legacy /search/ path (served as a Varnish 503); its working
+    // search lives at /catalogsearch/result/
+    if (host.includes("nykaafashion.com") && pathname.startsWith("/search")) {
+      return false;
+    }
+
     // 5. Reject search URLs missing their required query parameters
-    if (pathname.includes("/search") || pathname === "/s" || pathname.startsWith("/s/")) {
+    if (pathname.includes("/search") || pathname.includes("/catalogsearch") || pathname === "/s" || pathname.startsWith("/s/")) {
       const text = parsed.searchParams.get("text") || parsed.searchParams.get("q") || parsed.searchParams.get("k");
       if (!text || text.trim().length < 2 || text === "undefined" || text === "null") {
         return false;
@@ -446,6 +453,22 @@ export function getCanonicalProductUrl(rawUrl: string): string {
   try {
     const u = new URL(cleaned);
     const host = u.hostname.replace(/^www\./, "").toLowerCase();
+
+    // Nykaa Fashion ("nykaafashion.com" does not contain "nykaa.com"): product pages are
+    // /<slug>/p/<id>; the legacy /search/ path 503s, so searches map to /catalogsearch/result/
+    if (host.includes("nykaafashion.com")) {
+      const pMatch = u.pathname.match(/(.*\/p\/\d+)/i);
+      if (pMatch) {
+        return `https://www.nykaafashion.com${pMatch[1]}`;
+      }
+      if (u.pathname.startsWith("/search") || u.pathname.startsWith("/catalogsearch")) {
+        const q = u.searchParams.get("q");
+        if (q && q.trim().length > 0 && q !== "undefined") {
+          return `https://www.nykaafashion.com/catalogsearch/result/?q=${encodeURIComponent(q.trim())}`;
+        }
+      }
+      return `${u.origin}${u.pathname}`;
+    }
 
     // Nykaa: /p/<id> or /<slug>/p/<id>
     if (host.includes("nykaa.com")) {
@@ -618,6 +641,14 @@ export function determineUrlType(urlStr: string): "exact_product" | "search_resu
     if (
       (host.includes("myntra.com") && path.includes("/buy") && /\/\d+\/buy/.test(path)) ||
       (host.includes("nykaa.com") && path.includes("/p/")) ||
+      // "nykaafashion.com" does not contain "nykaa.com", so it needs its own rule
+      (host.includes("nykaafashion.com") && /\/p\/\d+/.test(path)) ||
+      // Shopify storefronts: /products/<handle>
+      ((host.includes("giva.co") || host.includes("sugarcosmetics.com")) && /\/products\/[^/]+/.test(path)) ||
+      (host.includes("flipkart.com") && /\/p\/itm[a-z0-9]+/.test(path)) ||
+      (host.includes("meesho.com") && /\/p\/[a-z0-9]+/.test(path)) ||
+      (host.includes("etsy.com") && /\/listing\/\d+/.test(path)) ||
+      (host.includes("zara.com") && /-p\d{6,}\.html$/.test(path)) ||
       (host.includes("ajio.com") && path.includes("/p/")) ||
       (host.includes("amazon.in") && (path.includes("/dp/") || path.includes("/gp/product/"))) ||
       (host.includes("tatacliq.com") && path.includes("/p-")) ||
@@ -645,12 +676,12 @@ export function isUrlConsistentWithProduct(
   urlStr: string,
   productOrCategory:
     | {
-        productName?: string;
-        brand?: string;
-        category?: string;
-        subcategory?: string;
-        retailer?: string;
-      }
+      productName?: string;
+      brand?: string;
+      category?: string;
+      subcategory?: string;
+      retailer?: string;
+    }
     | string,
   personaOrSubcategory?: string,
 ): boolean {
@@ -782,6 +813,19 @@ export function getSafeProductUrl(
     return url;
   }
 
+  // Nykaa Fashion's legacy /search/ URLs 503; rewrite them to the working search, keeping
+  // the original query
+  if (url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname.toLowerCase().includes("nykaafashion.com") && u.pathname.startsWith("/search") && u.searchParams.get("q")) {
+        return getCanonicalProductUrl(url);
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
   // If already a valid, safe retailer search URL and consistent, keep it
   if (url && isConsistent && isValidProductUrl(url)) {
     try {
@@ -796,6 +840,7 @@ export function getSafeProductUrl(
         if (isRetMatch) {
           if (host.includes("ajio.com") && u.searchParams.get("text")) return url;
           if (host.includes("nykaa.com") && u.searchParams.get("q")) return url;
+          if (host.includes("nykaafashion.com") && u.pathname.startsWith("/catalogsearch") && u.searchParams.get("q")) return url;
           if (host.includes("tatacliq.com") && (u.searchParams.get("text") || u.searchParams.get("searchCategory"))) return url;
           if (host.includes("amazon") && u.searchParams.get("k")) return url;
           if (
@@ -822,6 +867,26 @@ export function getSafeProductUrl(
   }
 
   // Otherwise, construct an authentic live search URL strictly belonging to product.retailer
+  return buildFallbackSearchUrl(product, persona);
+}
+
+/**
+ * A search on the product's own retailer built from the product's real attributes (gender,
+ * brand, name, category, colour). Offered next to a direct product link as a fallback for
+ * when the store's product page is unavailable, and used by getSafeProductUrl when no
+ * trustworthy direct link exists. It is always a store search, never presented as a product.
+ */
+export function buildFallbackSearchUrl(
+  product: {
+    retailer: string;
+    brand?: string;
+    productName?: string;
+    category?: string;
+    subcategory?: string;
+    color?: string;
+  },
+  persona?: string,
+): string {
   return buildRetailerSearchUrl(product.retailer, {
     gender: persona,
     brand: product.brand,

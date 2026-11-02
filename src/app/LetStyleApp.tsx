@@ -7,7 +7,8 @@ import { clearPersonalizationStorage } from '@/lib/personalization-storage';
 import { getStylingContext, getGenerationFingerprint } from '@/lib/styling-context';
 import { extractErrorMessage } from '@/lib/safe-error';
 import { clearClientProductCache } from '@/features/shopping';
-import { notifyLooksGenerated, warmAudioContext } from '@/lib/notification';
+import { notifyLooksGenerated, warmAudioContext, requestNotificationPermission } from '@/lib/notification';
+import { registerServiceWorker, ensurePushSubscription } from '@/lib/client-push';
 import { LandingPage } from '@/features/landing';
 import { Home, Settings } from '@/features/settings';
 import {
@@ -38,6 +39,12 @@ import {
   getLookRecommendations,
   generateLookImages,
   hasRealImage,
+  startGenerationJob,
+  watchGenerationJob,
+  getActiveJobId,
+  setActiveJobId,
+  JobsUnavailableError,
+  JOB_POKE_EVENT,
 } from '@/features/recommendations';
 
 type Screen =
@@ -110,10 +117,16 @@ export function LetStyleApp() {
 
   const [generationTrigger, setGenerationTrigger] = useState(0);
   const generationRequestIdRef = useRef(0);
+  // Background job to pick up on the next 'generating' run instead of starting a new one.
+  const resumeJobIdRef = useRef<string | null>(null);
+  // Job the generating screen is currently showing.
+  const watchedJobIdRef = useRef<string | null>(null);
 
   // Centralized reset for all personalization state and browser caches
   const resetPersonalization = useCallback(() => {
     generationRequestIdRef.current += 1;
+    resumeJobIdRef.current = null;
+    watchedJobIdRef.current = null;
     setProfile(initialProfile);
     setGeneratedLooks([]);
     setLooksFingerprint(null);
@@ -240,6 +253,9 @@ export function LetStyleApp() {
 
     setGenerationTrigger((prev) => prev + 1);
     warmAudioContext();
+    // Ask while we still have the click's user gesture, so the user can be
+    // told when their looks are ready after leaving the app.
+    requestNotificationPermission();
 
     if (!user) {
       openAuthModal('signup', () => {
@@ -261,6 +277,7 @@ export function LetStyleApp() {
     setGenerationError(null);
 
     const requestId = ++generationRequestIdRef.current;
+    watchedJobIdRef.current = null;
     const currentFingerprint = getGenerationFingerprint(profile);
     const inputsUnchanged =
       looksFingerprint !== null &&
@@ -270,51 +287,80 @@ export function LetStyleApp() {
       generatedLooks.length === 5 &&
       generatedLooks.every((look) => hasRealImage(look.imageUrl));
 
-    const recsPromise = canReuseLooks
-      ? Promise.resolve(generatedLooks)
-      : getLookRecommendations(profile);
+    const isCurrent = () => active && generationRequestIdRef.current === requestId;
+    const onProgress = (partial: LookRecommendation[]) => {
+      if (isCurrent()) setGeneratedLooks(partial);
+    };
+    const context = {
+      occasion: profile.occasion,
+      details: profile.customStyleNotes || '',
+    };
 
-    recsPromise
-      .then((recommendations) => {
-        if (!active || generationRequestIdRef.current !== requestId) return;
-        refreshUser();
-        setGeneratedLooks(recommendations);
-        return generateLookImages(
-          recommendations,
-          profile,
-          {
-            occasion: profile.occasion,
-            details: profile.customStyleNotes || '',
-          },
-          {
-            onProgress: (partial) => {
-              if (active && generationRequestIdRef.current === requestId) {
-                setGeneratedLooks(partial);
-              }
-            },
-          },
-        );
-      })
-      .then((result) => {
-        if (active && result && generationRequestIdRef.current === requestId) {
+    // Previous in-page pipeline, kept only as a fallback for deployments
+    // where background jobs are unavailable. It stops if the tab is frozen.
+    const generateInPage = async () => {
+      const recommendations = await getLookRecommendations(profile);
+      if (!isCurrent()) return null;
+      refreshUser();
+      setGeneratedLooks(recommendations);
+      return await generateLookImages(recommendations, profile, context, { onProgress });
+    };
+
+    // Runs on the server, independent of this tab: switching apps, locking
+    // the phone or closing LetStyle doesn't interrupt it, and the result is
+    // announced by push notification (see src/lib/generation-jobs.ts).
+    const generateInBackground = async () => {
+      let jobId = resumeJobIdRef.current;
+      resumeJobIdRef.current = null;
+      if (!jobId) {
+        try {
+          jobId = await startGenerationJob(profile, context);
+        } catch (err) {
+          if (err instanceof JobsUnavailableError) {
+            console.warn('Background generation unavailable; generating in page:', err.message);
+            return { looks: await generateInPage(), jobId: null, finishedBeforeWatch: false };
+          }
+          throw err;
+        }
+      }
+      watchedJobIdRef.current = jobId;
+      setActiveJobId(jobId);
+      const watched = await watchGenerationJob(jobId, { onProgress, shouldStop: () => !isCurrent() });
+      return { looks: watched?.looks ?? null, jobId, finishedBeforeWatch: watched?.finishedBeforeWatch ?? false };
+    };
+
+    const run = canReuseLooks
+      ? Promise.resolve({ looks: generatedLooks, jobId: null, finishedBeforeWatch: true })
+      : generateInBackground();
+
+    run
+      .then(({ looks: result, jobId, finishedBeforeWatch }) => {
+        if (isCurrent() && result) {
           refreshUser();
           setGeneratedLooks(result);
           setLooksFingerprint(currentFingerprint);
           clearClientProductCache();
+          if (jobId) setActiveJobId(null);
 
           // Play sound and trigger notification as soon as photos are generated
-          notifyLooksGenerated({
-            title: 'Your personalized looks are ready! ✨',
-            description: '5 tailored outfits have been generated for you.',
-          });
+          // (skipped when reopening a job that finished while the user was away —
+          // the push notification already announced it).
+          if (!finishedBeforeWatch) {
+            notifyLooksGenerated({
+              title: 'Your personalized looks are ready! ✨',
+              description: '5 tailored outfits have been generated for you.',
+              tag: jobId ? `letstyle-job-${jobId}` : undefined,
+            });
+          }
 
           go('results');
         }
       })
       .catch((err) => {
-        if (active && generationRequestIdRef.current === requestId) {
+        if (isCurrent()) {
           refreshUser();
           console.error('Styling recommendation failed:', err);
+          if (watchedJobIdRef.current) setActiveJobId(null);
           setGenerationError(extractErrorMessage(err));
         }
       });
@@ -323,6 +369,56 @@ export function LetStyleApp() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, generationTrigger]);
+
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+
+  // Open a background job's progress/result: after a reload, a tab the
+  // browser discarded while the user was in another app, or a notification tap.
+  const openJob = (jobId: string) => {
+    if (watchedJobIdRef.current === jobId) {
+      if (screenRef.current !== 'generating') go('results');
+      return;
+    }
+    resumeJobIdRef.current = jobId;
+    generationRequestIdRef.current += 1;
+    setGenerationTrigger((prev) => prev + 1);
+    go('generating');
+  };
+  const openJobRef = useRef(openJob);
+  openJobRef.current = openJob;
+
+  useEffect(() => {
+    if (!mounted || !user) return;
+    // Keeps this device's push subscription attached to the signed-in user
+    // (no prompt here — permission is only requested from a click).
+    registerServiceWorker().then(() => ensurePushSubscription());
+
+    const url = new URL(window.location.href);
+    const jobFromUrl = url.searchParams.get('job');
+    if (jobFromUrl) {
+      url.searchParams.delete('job');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
+    const jobId = jobFromUrl || getActiveJobId();
+    if (jobId) openJobRef.current(jobId);
+  }, [mounted, user?.id]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null;
+      if (data?.type === 'letstyle:push') {
+        // A job finished while the page is on screen: check now rather than at the next poll.
+        window.dispatchEvent(new Event(JOB_POKE_EVENT));
+      } else if (data?.type === 'letstyle:open-job' && data.url) {
+        const jobId = new URL(data.url, window.location.origin).searchParams.get('job');
+        if (jobId) openJobRef.current(jobId);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
 
 
 
