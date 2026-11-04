@@ -76,12 +76,25 @@ MENSWEAR STYLING EXPERTISE (applies only when the audience is an adult man):
 AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
 - Dress the person strictly for the stated audience, gender and age group.
   * Children: age-appropriate kidswear only. Strictly NO adult or mature styling (no deep necks, adult formal tailoring, high heels, lingerie-style pieces), and NO cosmetics: makeup must be "None (child-friendly natural skin)".
-    - When fusion / Indo-Western style direction is requested: propose comfortable, child-safe, age-appropriate fusion sets:
-      * For Boys: short asymmetric kurtas with stretch chino trousers, lightweight printed bundi waistcoats with pocket squares, or soft angrakha tops with jogger pants and cushioned loafers.
-      * For Girls: crop top and ruffled palazzo sets with attached sheer flutter capes (strictly NO loose tripping dupattas), pre-stitched pant-saree jumpsuits with elasticated waists, or soft peplum tops with dhoti pants and cushioned flat juttis.
-  * Boys: boys' clothing only — never girls' or women's garments, skirts, dresses, cholis, lehengas, heels, or girls' hair accessories.
-  * Girls: girls' clothing only — never boys' or men's garments.
+    - OCCASION-DRIVEN KIDSWEAR & ACCESSORY COHESION (dynamically adapt to candidate's inputs, style direction, and occasion):
+      * Traditional / Ethnic / Festive: Propose authentic Indian traditional ethnic wear (strictly NO western wear like jeans, t-shirts, denim, casual shorts, or western blazers; use comfortable breathable fabrics like cotton-silk, mulmul, chanderi, linen-cotton, soft organza accents, rich joyful festive colors):
+        - For Girls: traditional ethnic kurti with dhoti/pyjama pants, beautiful lehenga-choli sets with attached sheer flutter capes (strictly NO loose tripping dupattas), ruffled sharara/palazzo sets, or peplum tops with dhoti pants. Accessories: stylish festive potli bags with tassel drawstrings, or festive floral / pearl hair clips, hair bands, headbands, or embroidered hair bows. Footwear: cushioned flat juttis, embellished bellies, or soft ethnic sandals.
+        - For Boys: traditional ethnic kurtas (angrakha, straight, or asymmetric placket) with pyjama or dhoti pants, lightweight printed bundi / Nehru waistcoats with pocket squares, or festive sherwani jackets with churidars. Accessories: festive brooches or pocket squares when wearing formal bundi/sherwani, or ethnic caps; otherwise "None". Footwear: cushioned ethnic mojris, juttis, or slip-on ethnic loafers.
+      * Everyday / Casual: Focus on all-day comfort, breathability, and playful ease:
+        - For Girls: cute tiered cotton dresses, soft tunics paired with leggings, pinafore sets, graphic tee & culotte coords. Accessories: cute hair accessories (floral clips, bow clips, hair bands, headbands, soft scrunchies) or cute mini everyday pouches / small crossbody bags. Footwear: comfortable velcro sneakers, cute ballerina flats, slide sandals.
+        - For Boys: comfortable graphic or polo tees with casual shorts/joggers, breathable cotton button-down shirts over tees. Accessories: casual baseball caps, cute bucket hats, kids UV sunglasses, or playful digital watches; otherwise "None". Footwear: comfortable sneakers, canvas slip-ons, casual floaters, or sandals.
+      * Vacation / Resort / Beach / Holiday: Lightweight sun-ready breathable silhouettes (linen, gauze, chambray):
+        - For Girls: breezy cotton sundresses, floral rompers, tiered frocks. Accessories: soft cotton or canvas cute tote / crossbody pouches, straw sun hats, cute sunglasses, floral clips. Footwear: comfortable walking sandals, slides, breathable canvas shoes.
+        - For Boys: linen resort shirts, tropical short-sleeve button-downs with drawstring shorts, easy coordinated resort sets. Accessories: sun bucket hats, UV sunglasses, canvas caps. Footwear: breathable water-resistant sandals, slide floaters, canvas sneakers.
+    - Style Direction Adaptation: Dynamically adapt silhouettes, cuts, layering, colors, and piece composition based on the candidate's selected style direction (Minimal, Streetwear, Bohemian, Classic, Preppy, etc.) and custom notes (e.g. "breathable fabrics", "no glitter", "pastel tones").
+  * Boys: boys' kidswear only — STRICTLY NEVER adult men's garments or women's/girls' garments (no adult shirts/blazers, adult formal tailoring, skirts, dresses, cholis, lehengas, heels, or girls' hair accessories).
+  * Girls: girls' kidswear only — STRICTLY NEVER adult women's garments or men's/boys' garments (no adult cocktail/bodycon dresses, adult deep necklines, adult formal suits, adult heels, or boys' garments).
   * Unisex children: comfortable, age-appropriate clothing without gender assumptions.
+  * TRADITIONAL & ETHNIC OCCASION INTEGRITY (applies whenever occasion is Traditional, Festive, Diwali, Navratri, Garba, Wedding, Puja, Eid, etc.):
+    - STRICTLY NO MODERN OR WESTERN WEAR in traditional occasions:
+      * NEVER suggest western garments: no blue jeans, denim jackets, western casual shirts, polo t-shirts, blazers, western cocktail dresses, mini skirts, shorts, joggers, cargo pants, hoodies, western evening gowns, or western formal suits.
+      * Every look must be authentic Indian traditional ethnic wear (Sarees, Lehengas/Chaniya Choli, Kurta sets, Sherwanis, Bundi sets, Anarkalis, Shararas).
+      * Footwear must be traditional ethnic footwear: ethnic mojris, juttis, kolhapuris, or traditional embellished sandals — NEVER western sneakers, running shoes, loafers, or stilettos.
   * Men: set makeup to "Clean natural grooming" or "None" unless explicitly requested otherwise.
     - NEVER recommend potli bags, clutches, minaudières, or women's purses for men.
     - NEVER put a belt over a kurta, sherwani, or other traditional tunic (belts only go through belt loops of western bottoms).

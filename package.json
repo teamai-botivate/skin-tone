@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",
     "test": "npx tsx scripts/test-product-matching.mjs",
+    "test:kids": "npx tsx tests/kids-occasion-styling-discovery.test.ts",
     "test:jobs": "npx tsx tests/background-generation-jobs.test.ts",
     "test:mens": "npx tsx tests/mens-product-recommendations.test.ts",
     "test:mens-styling": "npx tsx tests/mens-styling-intelligence.test.ts",

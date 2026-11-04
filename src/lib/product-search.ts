@@ -3,6 +3,7 @@ import { getOpenAIClient, RECOMMENDATION_MODEL, getOpenAIKeyDiagnostics } from "
 import { tavilySearch, getTavilyKeyDiagnostics, TavilySearchError } from "./tavily-client";
 import { logger } from "./logger";
 import { getStylingContext } from "./styling-context";
+export { getStylingContext };
 import { buildProductCacheFingerprint, PRODUCT_CACHE_VERSION } from "./product-cache-key";
 import type {
   LookRecommendation,
@@ -328,24 +329,38 @@ export function checkProductConsistency(
   const isBoy = genderLower === "boy" || genderLower === "boys" || (persona === "child" && genderLower !== "girls" && genderLower !== "girl" && (fullCheckText.includes("boy") || !genderLower));
   const isGirl = genderLower === "girl" || genderLower === "girls";
 
+  const isUnisexChild =
+    /\b(unisex|boys?\s*(?:and|&)\s*girls?|girls?\s*(?:and|&)\s*boys?)\b/i.test(fullCheckText);
+
   if (genderLower === "boys" || isBoy) {
     // For a boy child / boys styling:
     // Strip "boy" / "boys" tokens first to avoid self-filtering
     const strippedOfBoy = fullCheckText.replace(/\b(boy|boys|boy's)\b/gi, "");
-    const hasFemaleToken = /\b(women|womens|women's|female|ladies|woman|girls|girl|girl's|kurti|kurtis|saree|sari|lehenga|choli|chaniya|ghagra|blouse|anarkali|dupatta|heels?|stiletto|stilettos|skirt|gown|bra|lingerie|suit\s*set\s*with\s*dupatta)\b/i.test(strippedOfBoy);
-    if (hasFemaleToken) {
+    const hasFemaleToken =
+      !isUnisexChild &&
+      /\b(women|womens|women's|female|ladies|woman|girls|girl|girl's|kurti|kurtis|saree|sari|lehenga|choli|chaniya|ghagra|blouse|anarkali|heels?|stiletto|stilettos|skirt|gown|bra|lingerie|suit\s*set\s*with\s*dupatta)\b/i.test(
+        strippedOfBoy,
+      );
+    // Explicitly allow unisex children's wear, but reject exclusively female apparel
+    const isExclusivelyFemaleApparel =
+      /\b(kurti|kurtis|saree|sari|lehenga|choli|chaniya|ghagra|blouse|anarkali|heels?|stiletto|stilettos|skirt|gown|bra|lingerie|suit\s*set\s*with\s*dupatta)\b/i.test(
+        fullCheckText,
+      );
+
+    if (hasFemaleToken || isExclusivelyFemaleApparel) {
       return {
         isConsistent: false,
         reason: `Gender mismatch: Product '${productName}' contains female apparel keywords for boys styling (${urlStr})`,
       };
     }
 
-    // Never recommend mature adult men's specific items without child/boy qualifiers
-    const isAdultMenOnly = /\b(men-formal|mens-formal|men-clothing|mens-clothing|men-suits|mens-suit|gentlemen)\b/i.test(fullCheckText);
-    if (isAdultMenOnly && !/\b(boy|boys|kids|junior|children)\b/i.test(fullCheckText)) {
+    // Strictly NO adult men's products for boys kidswear without child/boy qualifiers
+    const hasBoyChildQualifier = /\b(boy|boys|boy's|kid|kids|child|children|junior|teen|toddler|baby)\b/i.test(fullCheckText);
+    const isAdultMenProduct = /\b(men|mens|men's|gents|gentlemen|male|menswear|men-formal|mens-formal|men-clothing|mens-clothing|men-suits|mens-suit|men-shoes|mens-shoes|men-footwear|mens-footwear|men-shirts|mens-shirts)\b/i.test(strippedOfBoy);
+    if (isAdultMenProduct && !hasBoyChildQualifier) {
       return {
         isConsistent: false,
-        reason: `Demographic mismatch: Product '${productName}' points to adult men's department instead of boys kidswear (${urlStr})`,
+        reason: `Demographic mismatch: Product '${productName}' is listed for adult men, not boys kidswear (${urlStr})`,
       };
     }
   }
@@ -353,11 +368,23 @@ export function checkProductConsistency(
   if (genderLower === "girls" || isGirl) {
     // For girls styling:
     const strippedOfGirl = fullCheckText.replace(/\b(girl|girls|girl's)\b/gi, "");
-    const hasMaleToken = /\b(men|mens|men's|boys|boy|boy's|gents|gentleman|gentlemen|male)\b/i.test(strippedOfGirl);
+    const hasMaleToken =
+      !isUnisexChild &&
+      /\b(men|mens|men's|boys|boy|boy's|gents|gentleman|gentlemen|male)\b/i.test(strippedOfGirl);
     if (hasMaleToken) {
       return {
         isConsistent: false,
         reason: `Gender mismatch: Product '${productName}' contains male apparel keywords for girls styling (${urlStr})`,
+      };
+    }
+
+    // Strictly NO adult women's products for girls kidswear without child/girl qualifiers
+    const hasGirlChildQualifier = /\b(girl|girls|girl's|kid|kids|child|children|junior|teen|toddler|baby)\b/i.test(fullCheckText);
+    const isAdultWomenProduct = /\b(women|womens|women's|woman|ladies|lady|female|womenswear|women-clothing|womens-clothing|women-dresses|womens-dresses|women-shoes|womens-shoes|women-footwear|womens-footwear|women-tops|womens-tops)\b/i.test(strippedOfGirl);
+    if (isAdultWomenProduct && !hasGirlChildQualifier) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Product '${productName}' is listed for adult women, not girls kidswear (${urlStr})`,
       };
     }
   }
@@ -377,6 +404,19 @@ export function checkProductConsistency(
       return {
         isConsistent: false,
         reason: `Demographic mismatch: Product '${productName}' is adult women's ethnic wear not suitable for children (${urlStr})`,
+      };
+    }
+
+    // Never return adult women's handbags / sling bags for young children
+    if (
+      category === "accessories" &&
+      /\b(handbag|handbags|sling\s*bag|shoulder\s*bag|tote|purse)\b/i.test(fullCheckText) &&
+      /\b(women|womens|women's|ladies)\b/i.test(fullCheckText) &&
+      !/\b(kids?|child|children|junior|toddler|baby)\b/i.test(fullCheckText)
+    ) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Product '${productName}' is adult women's handbag/sling bag not suitable for children (${urlStr})`,
       };
     }
   } else if (persona === "woman") {
@@ -461,8 +501,27 @@ export function checkProductConsistency(
       };
     }
   } else if (subcat === "ethnic_bottom") {
-    const isEthnicBottom = /\b(dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|churidars?|salwars?|patiala|jodhpurs|breeches)\b/i.test(cleanName);
-    const isWrongType = /\b(kurtas?|kurtis?|shirts?|blazers?|jackets?|sarees?|dress|gown|shoes?|bags?)\b/i.test(cleanName);
+    const isEthnicBottom = /\b(dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|churidars?|salwars?|patiala|jodhpurs|breeches)\b/i.test(fullCheckText);
+    const isChuridarReq = requiredItemTitle ? /\bchuridars?\b/i.test(requiredItemTitle) : false;
+    const hasChuridar = /\bchuridars?\b/i.test(fullCheckText);
+    if (isChuridarReq && !hasChuridar && !/\b(pyjamas?|pajamas?)\b/i.test(fullCheckText)) {
+      return {
+        isConsistent: false,
+        reason: `Requirement is Churidar, but item does not match churidar type: ${productName} (${urlStr})`,
+      };
+    }
+    // Reject complete full kurta sets being passed as standalone ethnic bottoms
+    const isFullKurtaSet = /\b(kurta\s*(?:(?:with|and|&)\s+)?(?:dhoti|pyjama|pajama|churidar)?\s*set|clothing\s*set|outfit\s*set)\b/i.test(cleanName);
+    if (isFullKurtaSet) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is ethnic bottom, but item is a complete kurta/clothing set: ${productName} (${urlStr})`,
+      };
+    }
+    // Allow pairing phrasing like "for Kurta", "with Kurta", "Kurta Bottom", "to pair with Kurta"
+    const isStandaloneUpper = /(?<!\b(?:for|to\s*pair\s*with|matching|with|and)\s+)\b(kurtas?|kurtis?|shirts?|blazers?|jackets?|sarees?|dress|gown)\b/i.test(cleanName) &&
+      !/\b(churidars?|pyjamas?|dhotis?|salwars?)\b/i.test(cleanName);
+    const isWrongType = isStandaloneUpper || /\b(shoes?|bags?|heels?)\b/i.test(cleanName);
     if (!isEthnicBottom || isWrongType) {
       return {
         isConsistent: false,
@@ -571,8 +630,16 @@ export function checkProductConsistency(
       ? subcat === "kurta" || subcat === "sherwani"
       : cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani")
   ) {
+    const isSherwaniReq = subcat === "sherwani" || (requiredItemTitle ? /\bsherwanis?\b/i.test(requiredItemTitle) : false);
+    const isSherwani = /\b(sherwanis?|achkans?|bandhgala|jodhpuri|indo-western\s*sherwani|sherwani\s*set)\b/i.test(fullCheckText);
     const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|sherwanis|kurta\s*set|anarkali|angrakha|bandhgala|achkan|jodhpuri|pathani)\b/i.test(fullCheckText);
-    const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag)\b/i.test(cleanName) && !isKurta;
+    const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag|kurti|saree|lehenga)\b/i.test(cleanName) && !isKurta;
+    if (isSherwaniReq && !isSherwani) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Sherwani, but item does not match ethnic sherwani type: ${productName} (${urlStr})`,
+      };
+    }
     if (!isKurta || isWrongType) {
       return {
         isConsistent: false,
@@ -713,21 +780,22 @@ export function checkProductConsistency(
 
     // Footwear subcategory consistency check
     if (subcat ? (subcat === "sandals" || subcat === "slides") : (cleanName.includes("sandal") || cleanName.includes("slide"))) {
-      const isSandal = /\b(sandal|sandals|slides?|sliders?|flip-flop[s]?|slippers?|espadrilles?|open-toe)\b/i.test(fullCheckText);
-      const isWrongFoot = /\b(sneakers?|boots?|running\s*shoes?|canvas\s*shoes?|oxfords?|stilettos?)\b/i.test(cleanName) && !isSandal;
+      const isSandal = /\b(sandal|sandals|slides?|sliders?|flip-flop[s]?|slippers?|espadrilles?|open-toe|floaters?|clogs?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|boots?|running\s*shoes?|oxfords?|stilettos?)\b/i.test(cleanName) && !isSandal;
       if (!isSandal || isWrongFoot) {
         return {
           isConsistent: false,
           reason: `Subcategory is Sandals / Slides, but item does not match sandal type: ${productName} (${urlStr})`,
         };
       }
-    } else if (subcat ? subcat === "sneakers" : cleanName.includes("sneaker")) {
-      const isSneaker = /\b(sneakers?|canvas\s*shoes?|trainers?|running\s*shoes?|skate\s*shoes?)\b/i.test(fullCheckText);
-      const isWrongFoot = /\b(heels?|sandals?|slides?|boots?|oxfords?|mojaris?|juttis?)\b/i.test(cleanName) && !isSneaker;
+    } else if (subcat ? (subcat === "sneakers" || subcat.includes("canvas")) : cleanName.includes("sneaker")) {
+      const isCanvasFootwear = /\bcanvas\b/i.test(fullCheckText) && !/\b(tote|bag|backpack|belt|wallet)\b/i.test(fullCheckText);
+      const isSneaker = isCanvasFootwear || /\b(sneakers?|trainers?|skate\s*shoes?|skate\b|running\s*shoes?|walking\s*shoes?|tennis\s*shoes?|court\s*shoes?|plimsolls?|low[- ]tops?|high[- ]tops?|athletic\s*shoes?|casual\s*shoes?|slip[- ]ons?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(heels?|stilettos?|sandals?|slides?|boots?|oxfords?|mojaris?|juttis?)\b/i.test(cleanName) && !isSneaker;
       if (!isSneaker || isWrongFoot) {
         return {
           isConsistent: false,
-          reason: `Subcategory is Sneakers, but item does not match sneaker type: ${productName} (${urlStr})`,
+          reason: `Subcategory is Sneakers / Canvas Shoes, but item does not match sneaker/canvas type: ${productName} (${urlStr})`,
         };
       }
     } else if (subcat ? subcat === "loafers" : cleanName.includes("loafer")) {
@@ -737,6 +805,33 @@ export function checkProductConsistency(
         return {
           isConsistent: false,
           reason: `Subcategory is Loafers, but item does not match loafer type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "formal_shoes" : (cleanName.includes("oxford") || cleanName.includes("derby") || cleanName.includes("brogue"))) {
+      const isFormal = /\b(oxfords?|derby|derbies|brogues?|formal\s*shoes?|monk\s*straps?|dress\s*shoes?|lace[- ]up\s*shoes?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|heels?|boots?|sandals?|slides?|mojaris?|juttis?|flip-flop)\b/i.test(cleanName) && !isFormal;
+      if (!isFormal || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Formal Shoes, but item does not match formal shoe type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "boots" : cleanName.includes("boot")) {
+      const isBoot = /\b(boots?|chelsea|chukka|ankle\s*boots?|combat\s*boots?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(sneakers?|heels?|sandals?|slides?|mojaris?|juttis?)\b/i.test(cleanName) && !isBoot;
+      if (!isBoot || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Boots, but item does not match boot type: ${productName} (${urlStr})`,
+        };
+      }
+    } else if (subcat ? subcat === "flats" : (cleanName.includes("flat") || cleanName.includes("ballerina"))) {
+      const isFlat = /\b(flats?|ballerinas?|ballet\s*flats?|mules?|bellies|belly\s*shoes?)\b/i.test(fullCheckText);
+      const isWrongFoot = /\b(heels?|stilettos?|boots?|sneakers?)\b/i.test(cleanName) && !isFlat;
+      if (!isFlat || isWrongFoot) {
+        return {
+          isConsistent: false,
+          reason: `Subcategory is Flats, but item does not match flats type: ${productName} (${urlStr})`,
         };
       }
     } else if (subcat ? subcat === "heels" : cleanName.includes("heel")) {
@@ -818,6 +913,22 @@ export function checkProductConsistency(
         return {
           isConsistent: false,
           reason: `Requirement is Clutch / Potli, but product is a laptop bag or large luggage: ${productName} (${urlStr})`,
+        };
+      }
+    }
+
+    // 7e. Hair Accessories Subcategory Matching
+    if (
+      subcat.includes("hair") ||
+      cleanName.includes("hair") ||
+      (requiredItemTitle && /\b(hair|clips?|pins?|bands?|headbands?|bows?|scrunchies?)\b/i.test(requiredItemTitle))
+    ) {
+      const isHairAcc = /\b(hair\s*accessories|hair\s*clips?|hair\s*pins?|hair\s*bands?|headbands?|hair\s*bows?|hair\s*ties?|scrunchies?|barrettes?|hair\s*ribbons?|floral\s*clips?|gajra\s*clips?|rubber\s*bands?|paranda)\b/i.test(fullCheckText);
+      const isBagOrBeltOrSunglasses = /\b(bag|bags|tote|purse|clutch|backpack|laptop|belt|sunglasses?)\b/i.test(cleanName);
+      if (!isHairAcc || isBagOrBeltOrSunglasses) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is Hair Accessories, but product is not hair accessories: ${productName} (${urlStr})`,
         };
       }
     }
@@ -976,16 +1087,44 @@ export function checkProductConsistency(
   // 12. OCCASION CONSISTENCY CHECK
   if (expectedOccasion) {
     const occLower = expectedOccasion.toLowerCase();
-    const isGarbaFestive = occLower.includes("garba") || occLower.includes("navratri") || occLower.includes("dandiya");
+    const isTraditionalOccasion =
+      occLower.includes("traditional") ||
+      occLower.includes("festive") ||
+      occLower.includes("ethnic") ||
+      occLower.includes("garba") ||
+      occLower.includes("navratri") ||
+      occLower.includes("dandiya") ||
+      occLower.includes("diwali") ||
+      occLower.includes("wedding") ||
+      occLower.includes("shaadi") ||
+      occLower.includes("sangeet") ||
+      occLower.includes("mehendi") ||
+      occLower.includes("haldi") ||
+      occLower.includes("reception") ||
+      occLower.includes("puja") ||
+      occLower.includes("pooja") ||
+      occLower.includes("eid");
     const isCorporateFormal = occLower.includes("office") || occLower.includes("corporate") || occLower.includes("work") || occLower.includes("interview");
 
-    if (isGarbaFestive) {
-      const isCorporateItem = /\b(office\s*blazer|formal\s*blazer|corporate|business\s*suit|office\s*trousers|formal\s*slacks)\b/i.test(fullCheckText);
-      if (isCorporateItem && !/\b(lehenga|chaniya|festive|traditional|kurta)\b/i.test(fullCheckText)) {
-        return {
-          isConsistent: false,
-          reason: `Occasion mismatch: Cannot recommend corporate office attire '${productName}' for Garba Night / Festive occasion`,
-        };
+    if (isTraditionalOccasion) {
+      if (category === "outfit") {
+        const isWesternGarment = /\b(jeans|denim|t-?shirts?|tees?|polo|sweatshirt|hoodie|blazer|western\s*suit|shorts|bermudas|cargo\s*pants?|trackpants?|joggers?|cocktail\s*dress|mini\s*dress|bodycon|pencil\s*skirt)\b/i.test(cleanName);
+        const isEthnicGarment = /\b(kurta|kurtas|kurti|kurtis|saree|sari|saris|sarees|lehenga|lehengas|chaniya|choli|ghagra|dhoti|dhotis|pyjama|pyjamas|pajama|pajamas|churidar|churidars|sherwani|sherwanis|bandhgala|achkan|angrakha|anarkali|sharara|festive|ethnic|traditional|indo-western|bundi|nehru\s*jacket)\b/i.test(fullCheckText);
+        if (isWesternGarment && !isEthnicGarment) {
+          return {
+            isConsistent: false,
+            reason: `Occasion mismatch: Cannot recommend modern western wear '${productName}' for a traditional/festive occasion`,
+          };
+        }
+      } else if (category === "footwear") {
+        const isWesternCasualShoe = /\b(sneakers?|running\s*shoes?|skate\s*shoes?|athletic\s*shoes?|oxfords?|brogues?)\b/i.test(cleanName);
+        const isEthnicShoe = /\b(mojaris?|juttis?|kolhapuris?|nagras?|khussas?|ethnic|traditional|embellished|embroidered)\b/i.test(fullCheckText);
+        if (isWesternCasualShoe && !isEthnicShoe) {
+          return {
+            isConsistent: false,
+            reason: `Occasion mismatch: Cannot recommend western casual/athletic shoes '${productName}' for a traditional/festive occasion`,
+          };
+        }
       }
     } else if (isCorporateFormal) {
       const isHeavyBridal = /\b(bridal\s*lehenga|wedding\s*lehenga|chaniya\s*choli|heavy\s*jhumka|temple\s*jewellery|bridal\s*choker)\b/i.test(fullCheckText);
@@ -2431,22 +2570,81 @@ function parseHexToRgb(hex: string): { r: number; g: number; b: number } | null 
   return null;
 }
 
+const GARMENT_NOUN_PATTERN =
+  /\b(churidar|sherwani|kurta|kurti|trousers?|pants?|shirts?|blazers?|jackets?|mojris?|shoes?|dresses?|tops?|bottoms?|suits?|sets?|lehenga|choli|saree|dupatta|stole|footwear|accessories)\b/i;
+
+const FASHION_COLOR_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  { name: "Off-White", re: /\b(off[\s-]*white)\b/i },
+  { name: "Royal Blue", re: /\b(royal[\s-]*blue)\b/i },
+  { name: "Navy Blue", re: /\b(navy[\s-]*blue|navy)\b/i },
+  { name: "Sky Blue", re: /\b(sky[\s-]*blue|powder[\s-]*blue|ice[\s-]*blue)\b/i },
+  { name: "Teal", re: /\bteal\b/i },
+  { name: "Turquoise", re: /\bturquoise\b/i },
+  { name: "Emerald Green", re: /\b(emerald[\s-]*green|emerald)\b/i },
+  { name: "Forest Green", re: /\b(forest[\s-]*green)\b/i },
+  { name: "Sage Green", re: /\b(sage[\s-]*green|sage)\b/i },
+  { name: "Olive Green", re: /\b(olive[\s-]*green|olive)\b/i },
+  { name: "Mint Green", re: /\b(mint[\s-]*green|mint)\b/i },
+  { name: "Hot Pink", re: /\b(hot[\s-]*pink|bright[\s-]*pink)\b/i },
+  { name: "Rani Pink", re: /\b(rani[\s-]*pink|deep[\s-]*pink)\b/i },
+  { name: "Blush Pink", re: /\b(blush[\s-]*pink|baby[\s-]*pink)\b/i },
+  { name: "Rose Pink", re: /\b(dusty[\s-]*rose|rose[\s-]*pink|rose)\b/i },
+  { name: "Magenta", re: /\b(magenta|fuchsia)\b/i },
+  { name: "Pink", re: /\bpink\b/i },
+  { name: "Maroon", re: /\b(maroon|burgundy|wine|crimson)\b/i },
+  { name: "Rust", re: /\b(rust|terracotta|brick[\s-]*red)\b/i },
+  { name: "Red", re: /\bred\b/i },
+  { name: "Mustard", re: /\b(mustard|marigold)\b/i },
+  { name: "Yellow", re: /\byellow\b/i },
+  { name: "Gold", re: /\b(gold|golden)\b/i },
+  { name: "Silver", re: /\bsilver\b/i },
+  { name: "Cream", re: /\b(cream|ivory|oat)\b/i },
+  { name: "Beige", re: /\b(beige|tan|khaki)\b/i },
+  { name: "Chocolate Brown", re: /\b(chocolate|cocoa|cedar)\b/i },
+  { name: "Brown", re: /\bbrown\b/i },
+  { name: "Charcoal", re: /\bcharcoal\b/i },
+  { name: "Slate", re: /\bslate\b/i },
+  { name: "Grey", re: /\b(grey|gray)\b/i },
+  { name: "Black", re: /\bblack\b/i },
+  { name: "White", re: /\bwhite\b/i },
+  { name: "Purple", re: /\b(purple|plum|lavender|violet)\b/i },
+  { name: "Green", re: /\bgreen\b/i },
+  { name: "Blue", re: /\bblue\b/i },
+];
+
+/**
+ * Extracts a recognizable fashion color name from a string of text,
+ * returning null if no fashion color keyword is present.
+ */
+export function extractColorFromText(text?: string): string | null {
+  if (!text) return null;
+  for (const { name, re } of FASHION_COLOR_PATTERNS) {
+    if (re.test(text)) return name;
+  }
+  return null;
+}
+
 /**
  * Resolves any hex code or cryptic color string into a clean, human-readable fashion color.
  * Eliminates raw hex strings (e.g. #4E3824) from polluting search queries and titles.
+ * Guarantees garment nouns (e.g. "Churidar", "Sherwani") are never treated as color names.
  */
 export function resolveHumanColor(colorInput?: string, context?: string): string {
   if (!colorInput && !context) return "Neutral";
 
   const raw = (colorInput || "").trim();
 
-  // If already a named human color without hex hashes
-  if (raw && !raw.includes("#") && raw.length > 2) {
+  // 1. If colorInput has a recognized color keyword, use it directly
+  const fromInput = extractColorFromText(raw);
+  if (fromInput) return fromInput;
+
+  // 2. If already a named human color without hex hashes and NOT a garment noun
+  if (raw && !raw.includes("#") && raw.length > 2 && !GARMENT_NOUN_PATTERN.test(raw)) {
     const cleaned = raw.replace(/\b(?:with|and|accents?|layer|shades?)\b.*$/i, "").trim();
-    if (cleaned.length > 2) return cleaned;
+    if (cleaned.length > 2 && !GARMENT_NOUN_PATTERN.test(cleaned)) return cleaned;
   }
 
-  // Check hex mapping
+  // 3. Check hex mapping
   const hexMatch = raw.match(/#[0-9a-fA-F]{3,6}/);
   if (hexMatch) {
     const lowerHex = hexMatch[0].toLowerCase();
@@ -2475,42 +2673,11 @@ export function resolveHumanColor(colorInput?: string, context?: string): string
     }
   }
 
-  // Check if context has human color names
-  const contextStr = `${colorInput || ""} ${context || ""}`.toLowerCase();
-
-  // Pinks & Magentas (Critical for user requests like Garba Night + Pink)
-  if (contextStr.includes("hot pink") || contextStr.includes("bright pink")) return "Hot Pink";
-  if (contextStr.includes("rani pink") || contextStr.includes("deep pink")) return "Rani Pink";
-  if (contextStr.includes("blush pink") || contextStr.includes("baby pink")) return "Blush Pink";
-  if (contextStr.includes("rose") || contextStr.includes("dusty rose")) return "Rose Pink";
-  if (contextStr.includes("magenta") || contextStr.includes("fuchsia")) return "Magenta";
-  if (contextStr.includes("pink")) return "Pink";
-
-  // Greens
-  if (contextStr.includes("emerald")) return "Emerald Green";
-  if (contextStr.includes("forest green")) return "Forest Green";
-  if (contextStr.includes("sage")) return "Sage Green";
-  if (contextStr.includes("olive")) return "Olive Green";
-  if (contextStr.includes("teal")) return "Teal";
-  if (contextStr.includes("green")) return "Green";
-
-  // Browns & Neutrals
-  if (contextStr.includes("chocolate") || contextStr.includes("cedar") || contextStr.includes("cocoa") || contextStr.includes("brown")) return "Chocolate Brown";
-  if (contextStr.includes("brick") || contextStr.includes("terracotta") || contextStr.includes("rust")) return "Terracotta";
-  if (contextStr.includes("marigold") || contextStr.includes("mustard")) return "Marigold";
-  if (contextStr.includes("navy")) return "Navy Blue";
-  if (contextStr.includes("royal blue")) return "Royal Blue";
-  if (contextStr.includes("blue")) return "Blue";
-  if (contextStr.includes("slate")) return "Slate";
-  if (contextStr.includes("charcoal")) return "Charcoal";
-  if (contextStr.includes("cream") || contextStr.includes("ivory") || contextStr.includes("oat")) return "Cream";
-  if (contextStr.includes("black")) return "Black";
-  if (contextStr.includes("white")) return "White";
-  if (contextStr.includes("gold")) return "Gold";
-  if (contextStr.includes("silver")) return "Silver";
-  if (contextStr.includes("maroon") || contextStr.includes("crimson") || contextStr.includes("burgundy")) return "Maroon";
-  if (contextStr.includes("red")) return "Red";
-  if (contextStr.includes("purple") || contextStr.includes("plum") || contextStr.includes("lavender")) return "Purple";
+  // 4. Check if context has human color names
+  if (context) {
+    const fromContext = extractColorFromText(context);
+    if (fromContext) return fromContext;
+  }
 
   return "Classic";
 }
@@ -2547,12 +2714,24 @@ export type DetectedAccessory = {
     | "potli"
     | "hat"
     | "laptop_bag"
+    | "hair_accessory"
     | "other_accessory";
   category: "jewellery" | "accessories";
   title: string;
   sourceDetail?: string;
   material?: string;
 };
+
+/**
+ * Detects whether an accessory specification text explicitly denotes "None", "No accessories",
+ * "None (child-friendly)", or an equivalent explicit non-recommendation.
+ */
+export function isExplicitlyNoneAccessory(text?: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return /^(?:none|no\s+accessories|nil|n\/a|not\s+applicable|none\s+needed|none\s+recommended)(?:\b|[\s\(\[\.\:\,\-\/])/i.test(trimmed);
+}
 
 /**
  * Dynamically identifies all accessories and jewellery visibly included, specified, or
@@ -2600,9 +2779,13 @@ export function extractDynamicLookAccessories(
     if (/\b(?:bangle|bangles|kada|kadas|bracelet|bracelets|cuff|cuffs|choodi|choodiyan|wristlet)\b/i.test(l)) {
       return { type: "bracelet", category: "jewellery" };
     }
-    if (/\b(?:maang tikka|tikka|mathapatti|matha patti|passa|borla|hairpin|paranda)\b/i.test(l)) {
+    if (/\b(?:maang tikka|tikka|mathapatti|matha patti|passa|borla)\b/i.test(l)) {
       if (isChild || isMan) return null;
       return { type: "maang_tikka", category: "jewellery" };
+    }
+    if (/\b(?:hair\s*accessories|hair\s*clips?|hair\s*pins?|hair\s*bands?|headbands?|hair\s*bows?|hair\s*ties?|scrunchies?|barrettes?|hair\s*ribbons?|floral\s*clips?|gajra\s*clips?|rubber\s*bands?|paranda)\b/i.test(l)) {
+      if (isMan) return null;
+      return { type: "hair_accessory", category: "accessories" };
     }
     if (/\b(?:sunglasses?|shades?|aviators?|wayfarers?|eyewear)\b/i.test(l)) {
       return { type: "sunglasses", category: "accessories" };
@@ -2618,7 +2801,7 @@ export function extractDynamicLookAccessories(
       return { type: "clutch", category: "accessories" };
     }
     if (/\b(?:potli|potlis|batwa)\b/i.test(l)) {
-      if (isChild || isMan) return null;
+      if (isMan) return null;
       return { type: "potli", category: "accessories" };
     }
     if (/\b(?:belt|belts|kamarbandh|waist belt)\b/i.test(l)) {
@@ -2653,7 +2836,8 @@ export function extractDynamicLookAccessories(
       c.includes("finish") ||
       c.includes("bag") ||
       c.includes("watch") ||
-      c.includes("belt")
+      c.includes("belt") ||
+      c.includes("hair")
     ) {
       const match = classifyPhrase(n);
       if (match && !seenTypes.has(match.type)) {
@@ -2673,7 +2857,12 @@ export function extractDynamicLookAccessories(
   const segments = combinedText
     .split(/[|,;&]|\band\b|\bwith\b/i)
     .map((s) => s.trim().replace(/^\*+|\*+$/g, ""))
-    .filter((s) => s.length > 2 && !/^(none|clean|minimal|natural|child-friendly)$/i.test(s));
+    .filter(
+      (s) =>
+        s.length > 2 &&
+        !isExplicitlyNoneAccessory(s) &&
+        !/^(none|clean|minimal|natural|child-friendly)$/i.test(s),
+    );
 
   for (const seg of segments) {
     const match = classifyPhrase(seg);
@@ -2714,7 +2903,7 @@ export function classifyMenGarment(
   const n = (name || "").toLowerCase();
   const c = (pieceCategory || "").toLowerCase();
   if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/.test(n) && !/\b(jacket|waistcoat|vest)\b/.test(n)) {
-    return { type: "one_piece", subcat: "sherwani" };
+    return { type: c.includes("top") ? "top" : "one_piece", subcat: "sherwani" };
   }
   if (/\b(kurtas?|pathani)\b/.test(n)) {
     return { type: c.includes("outfit") || /\b(set|pyjamas?|pajamas?|churidars?|dhoti)\b/.test(n) ? "one_piece" : "top", subcat: "kurta" };
@@ -2801,8 +2990,22 @@ export function decomposeOutfitGarments(
   const outfitText = `${look.outfit || ""} ${look.title || ""}`.trim();
   const lowerText = outfitText.toLowerCase();
 
+  const occ = (profile.occasion || "").toLowerCase();
+  const styles = (profile.style || []).map((s) => s.toLowerCase());
+  const allOccContext = `${occ} ${styles.join(" ")}`;
+  const isTraditionalOrFestive =
+    allOccContext.includes("festiv") ||
+    allOccContext.includes("tradition") ||
+    allOccContext.includes("ethnic") ||
+    allOccContext.includes("diwali") ||
+    allOccContext.includes("wedding") ||
+    allOccContext.includes("puja") ||
+    allOccContext.includes("pooja");
+
   const preferredRetailers = ctx.isKids
-    ? ["Myntra", "AJIO", "Amazon India", "FirstCry", "Tata CLiQ"]
+    ? isTraditionalOrFestive
+      ? ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India"]
+      : ["Myntra", "FirstCry", "AJIO", "Amazon India", "Nykaa Fashion"]
     : targetGender === "women"
       ? ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
       : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
@@ -2822,6 +3025,7 @@ export function decomposeOutfitGarments(
       c.includes("bag") ||
       c.includes("watch") ||
       c.includes("belt") ||
+      c.includes("hair") ||
       c.includes("sunglass")
     ) {
       return false;
@@ -2840,10 +3044,11 @@ export function decomposeOutfitGarments(
   const isLayer = (t: string) =>
     /\b(blazer|jacket|coat|shrug|cardigan|vest|waistcoat|nehru\s*jacket|overcoat|trench|bomber)\b/i.test(t);
   const isBottom = (t: string) =>
-    /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|joggers?|culottes?)\b/i.test(t);
+    /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|churidars?|joggers?|culottes?)\b/i.test(t);
   const isTop = (t: string) =>
-    /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie)\b/i.test(t);
+    /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie|sherwanis?|achkans?|bandhgala|jodhpuri)\b/i.test(t);
   const isMen = targetGender === "men";
+  const isBoy = ctx.isBoy || targetGender === "boys";
   // For men, "dress" only counts as the garment, never the "dress shirt / dress trousers" qualifier.
   const isOnePiece = (t: string) =>
     isMen
@@ -2857,11 +3062,11 @@ export function decomposeOutfitGarments(
       const n = (p.name || "").trim();
       let type: "layer" | "top" | "bottom" | "one_piece" = "top";
       let subcat = "top";
-      const menGarment = isMen ? classifyMenGarment(n, c) : null;
+      const masculineGarment = (isMen || isBoy) ? classifyMenGarment(n, c) : null;
 
-      if (menGarment) {
-        type = menGarment.type;
-        subcat = menGarment.subcat;
+      if (masculineGarment) {
+        type = masculineGarment.type;
+        subcat = masculineGarment.subcat;
       } else if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
         type = "top";
         subcat = "inner_top";
@@ -2876,6 +3081,7 @@ export function decomposeOutfitGarments(
         if (/\b(shorts?|bermudas?)\b/i.test(n)) subcat = "shorts";
         else if (/\bskirt\b/i.test(n)) subcat = "skirt";
         else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) subcat = "lehenga";
+        else if (/\b(churidars?|dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|salwars?|patiala|jodhpurs)\b/i.test(n)) subcat = "ethnic_bottom";
         else subcat = "trousers";
       } else if (
         isMen
@@ -2885,21 +3091,33 @@ export function decomposeOutfitGarments(
         type = "one_piece";
         if (/\b(saree|sari)\b/i.test(n)) subcat = "saree";
         else if (/\b(jumpsuit|romper)\b/i.test(n)) subcat = "jumpsuit";
-        else subcat = isMen ? "men_outfit" : "dress";
+        else if (/\b(sherwanis?|achkans?|bandhgala)\b/i.test(n)) subcat = "sherwani";
+        else subcat = isMen ? "men_outfit" : isBoy ? "boys_outfit" : "dress";
       } else {
         type = "top";
         if (/\b(t-?shirts?|tees?)\b/i.test(n)) subcat = "top";
         else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(n)) subcat = "shirt";
+        else if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i.test(n)) subcat = "sherwani";
         else if (/\b(kurta|kurti)\b/i.test(n)) subcat = "kurta";
         else if (/\b(choli|blouse)\b/i.test(n)) subcat = "inner_top";
         else subcat = "top";
       }
 
+      const rawPieceColor = (p as { color?: string }).color;
+      const cleanPieceColor =
+        rawPieceColor && !GARMENT_NOUN_PATTERN.test(rawPieceColor)
+          ? extractColorFromText(rawPieceColor) || rawPieceColor
+          : undefined;
+
       detectedGarments.push({
         type,
         subcat,
         rawTitle: n,
-        color: (p as { color?: string }).color,
+        color:
+          cleanPieceColor ||
+          extractColorFromText((p as { detail?: string }).detail) ||
+          extractColorFromText(n) ||
+          undefined,
       });
     }
   } else {
@@ -2969,11 +3187,11 @@ export function decomposeOutfitGarments(
         const cleanClause = cleanOutfitGarmentTitle(clause, targetGender);
         if (!cleanClause || cleanClause.length < 3) continue;
 
-        const menClauseGarment = isMen ? classifyMenGarment(cleanClause) : null;
-        if (menClauseGarment) {
-          if (!foundTypes.has(menClauseGarment.type)) {
-            foundTypes.add(menClauseGarment.type);
-            detectedGarments.push({ type: menClauseGarment.type, subcat: menClauseGarment.subcat, rawTitle: cleanClause });
+        const masculineClauseGarment = (isMen || isBoy) ? classifyMenGarment(cleanClause) : null;
+        if (masculineClauseGarment) {
+          if (!foundTypes.has(masculineClauseGarment.type)) {
+            foundTypes.add(masculineClauseGarment.type);
+            detectedGarments.push({ type: masculineClauseGarment.type, subcat: masculineClauseGarment.subcat, rawTitle: cleanClause });
           }
         } else if (isLayer(cleanClause) && !foundTypes.has("layer")) {
           foundTypes.add("layer");
@@ -2988,6 +3206,7 @@ export function decomposeOutfitGarments(
           if (/\b(shorts?|bermudas?)\b/i.test(cleanClause)) subcat = "shorts";
           else if (/\bskirt\b/i.test(cleanClause)) subcat = "skirt";
           else if (/\b(lehenga|chaniya|ghagra)\b/i.test(cleanClause)) subcat = "lehenga";
+          else if (/\b(churidars?|dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|salwars?|patiala|jodhpurs)\b/i.test(cleanClause)) subcat = "ethnic_bottom";
           detectedGarments.push({
             type: "bottom",
             subcat,
@@ -2998,6 +3217,7 @@ export function decomposeOutfitGarments(
           let subcat = "top";
           if (/\b(t-?shirts?|tees?)\b/i.test(cleanClause)) subcat = "top";
           else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(cleanClause)) subcat = "shirt";
+          else if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i.test(cleanClause)) subcat = "sherwani";
           else if (/\b(kurta|kurti)\b/i.test(cleanClause)) subcat = "kurta";
           else if (/\b(choli|blouse)\b/i.test(cleanClause)) subcat = "inner_top";
           detectedGarments.push({
@@ -3107,7 +3327,17 @@ export function decomposeOutfitGarments(
       g.subcat === "saree"
         ? stripHandDrapeTerms(cleanOutfitGarmentTitle(g.rawTitle, targetGender))
         : cleanOutfitGarmentTitle(g.rawTitle, targetGender);
-    const color = g.color || resolveHumanColor(rawClean, dominantHumanColor);
+    const isEthnicBottom = g.subcat === "ethnic_bottom";
+    let color = g.color;
+    if (!color || GARMENT_NOUN_PATTERN.test(color)) {
+      color = resolveHumanColor(rawClean, isEthnicBottom ? undefined : dominantHumanColor);
+    }
+    if (isEthnicBottom) {
+      const isNeutralEthnicColor = /\b(white|off-white|cream|ivory|beige|gold|black|maroon)\b/i.test(color || "");
+      if (!isNeutralEthnicColor) {
+        color = "Off-White";
+      }
+    }
 
     // Format human-friendly title with proper demographic prefix
     let title = rawClean;
@@ -3136,25 +3366,39 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "blazer") itemQueryKeyword = "tailored formal blazer";
     // The saree's own name carries its weave, fabric and construction; a silk blouse
     // elsewhere in the outfit must not turn a cotton saree into a "silk saree" search.
-    else if (g.subcat === "saree") itemQueryKeyword = /\b(saree|sari)s?\b/i.test(rawClean) ? "" : "saree";
+    else if (g.subcat === "saree") itemQueryKeyword = rawClean;
     else if (g.subcat === "lehenga") itemQueryKeyword = "chaniya choli lehenga set";
     else if (g.subcat === "inner_top") itemQueryKeyword = rawClean.toLowerCase().includes("choli") || rawClean.toLowerCase().includes("blouse") ? "embroidered choli blouse" : "formal inner top camisole";
     else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
     else if (g.subcat === "dress") itemQueryKeyword = "dress";
+    else if (g.subcat === "sherwani") itemQueryKeyword = "sherwani";
+    else if (g.subcat === "ethnic_bottom") itemQueryKeyword = /\bchuridars?\b/i.test(rawClean) ? "churidar" : "ethnic pyjama";
 
-    // Men's queries are built from the garment's own name (type, colour, fabric, fit, style)
-    // with "men" exactly once; the generic women's-first keywords ("dress", "tailored
-    // trousers pants", "festive kurta set") are not appended to them.
+    // Men's and Boys' queries are built from the garment's own name (type, colour, fabric, fit, style)
+    // without appending conflicting generic women's-first keywords ("tailored trousers pants", "dress", etc.)
     const searchTerms = isMen
       ? buildMenGarmentQuery(rawClean, g.subcat, g.color)
-      : [
-          targetGender,
-          color,
-          itemQueryKeyword,
-          ...preferredRetailers.slice(0, 3),
-        ]
-          .filter(Boolean)
-          .join(" ");
+      : isBoy
+        ? [
+            "boys",
+            color && !rawClean.toLowerCase().includes(color.toLowerCase()) ? color : "",
+            g.subcat === "sherwani"
+              ? "sherwani"
+              : g.subcat === "ethnic_bottom"
+                ? /\bchuridars?\b/i.test(rawClean) ? "churidar" : "ethnic bottom"
+                : itemQueryKeyword,
+            ...preferredRetailers.slice(0, 3),
+          ]
+            .filter(Boolean)
+            .join(" ")
+        : [
+            targetGender,
+            color,
+            itemQueryKeyword,
+            ...preferredRetailers.slice(0, 3),
+          ]
+            .filter(Boolean)
+            .join(" ");
 
     specs.push({
       category: "outfit",
@@ -3194,7 +3438,13 @@ export function detectFootwearSpec(
   );
 
   const rawFootText = (footPiece?.name || (look.footwear || "").split(",")[0] || "").trim();
-  const lowerFoot = rawFootText.toLowerCase();
+  const allFootContext = [
+    footPiece?.name,
+    (footPiece as { detail?: string })?.detail,
+    (footPiece as { color?: string })?.color,
+    look.footwear,
+  ].filter(Boolean).join(" ");
+  const lowerFoot = (allFootContext || rawFootText).toLowerCase();
   const occ = (profile.occasion || "").toLowerCase();
   const allContext = `${lowerFoot} ${occ} ${(profile.style || []).join(" ")}`.toLowerCase();
 
@@ -3269,7 +3519,7 @@ export function detectFootwearSpec(
     label = "Handcrafted Ethnic Mojaris / Juttis";
   }
 
-  const footColor = resolveHumanColor(rawFootText, dominantHumanColor);
+  const footColor = resolveHumanColor(allFootContext || rawFootText, dominantHumanColor);
 
   let title = rawFootText;
   if (!title || title.length < 4 || title.toLowerCase() === "shoes" || title.toLowerCase() === "footwear") {
@@ -3283,8 +3533,31 @@ export function detectFootwearSpec(
   }
 
   const preferredRetailers = ctx.isKids
-    ? ["Myntra", "AJIO", "Amazon India", "Bata", "Tata CLiQ"]
+    ? ["Myntra", "AJIO", "Amazon India", "Bata", "FirstCry"]
     : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
+
+  let footSearchTerm = subcat.replace(/_/g, " ");
+  if (/\b(canvas\s*sneakers?)\b/i.test(lowerFoot)) {
+    footSearchTerm = "canvas sneakers";
+  } else if (/\b(canvas\s*shoes?|canvas)\b/i.test(lowerFoot)) {
+    footSearchTerm = "canvas shoes";
+  } else if (/\b(boat\s*shoes?|moccasins?)\b/i.test(lowerFoot)) {
+    footSearchTerm = "boat shoes loafers";
+  } else if (/\b(oxfords?|derby|brogues?)\b/i.test(lowerFoot)) {
+    footSearchTerm = "formal oxford derby shoes";
+  } else if (/\bchelsea\b/i.test(lowerFoot)) {
+    footSearchTerm = "chelsea boots";
+  } else if (/\bblock\s*heels?\b/i.test(lowerFoot)) {
+    footSearchTerm = "block heels";
+  } else if (/\bkitten\s*heels?\b/i.test(lowerFoot)) {
+    footSearchTerm = "kitten heels";
+  } else if (/\b(stilettos?|pumps?)\b/i.test(lowerFoot)) {
+    footSearchTerm = "heeled pumps";
+  } else if (subcat === "sandals") {
+    footSearchTerm = "sandals slides";
+  } else if (subcat === "mojaris") {
+    footSearchTerm = "ethnic mojaris juttis";
+  }
 
   // footColor can be the whole footwear phrase (e.g. "Gold block heels"), so repeated
   // words are dropped rather than producing "women Gold block heels heels".
@@ -3292,7 +3565,7 @@ export function detectFootwearSpec(
   const footQuery = [
     targetGender,
     footColor,
-    subcat === "sandals" ? "sandals slides" : subcat === "mojaris" ? "ethnic mojaris juttis" : subcat.replace(/_/g, " "),
+    footSearchTerm,
     preferredRetailers[0],
     preferredRetailers[1],
   ]
@@ -3606,175 +3879,216 @@ export function planRequirementSpecs(
 
   // 4. Dynamic Accessories Requirement (Bags, Clutches, Totes, Potlis, Belts)
   if (includeAccessories) {
-    const accessoryItems = dynamicAccessories.filter((a) => a.category === "accessories");
+    const isBoyAudience = ctx.isBoy || targetGender === "boys";
+    const skipBoyAccessories = isBoyAudience && isExplicitlyNoneAccessory(look.accessories);
 
-    if (accessoryItems.length > 0) {
-      for (const item of accessoryItems) {
+    if (!skipBoyAccessories) {
+      const accessoryItems = dynamicAccessories.filter((a) => a.category === "accessories");
+
+      if (accessoryItems.length > 0) {
+        for (const item of accessoryItems) {
+          let accStyle = "";
+          let accQuery = "";
+
+          if (item.type === "laptop_bag") {
+            accStyle = `Structured work laptop bag or briefcase with clean dedicated compartment`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} laptop bag briefcase Myntra AJIO Tata CLiQ`;
+          } else if (item.type === "bag") {
+            if (persona === "man" || targetGender === "men") {
+              // The bag the look names (messenger, briefcase, backpack, duffle...) is what is
+              // searched; the occasion only shapes the styling note, never the product type.
+              const hasBagNoun = /\b(bags?|briefcases?|backpacks?|duffle|duffel|satchels?|totes?|wallets?|pouch)\b/i.test(item.title);
+              if (item.title && hasBagNoun) {
+                accStyle = isOfficeOrFormal
+                  ? `${item.title} with a structured, professional finish`
+                  : `${item.title} coordinating with the outfit`;
+                accQuery = `men ${item.title}`;
+              } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
+                accStyle = `Rich raw silk stole or pocket square coordinating with festive kurta`;
+                accQuery = `men ${dominantHumanColor} silk stole pocket square Myntra AJIO`;
+              } else if (isOfficeOrFormal) {
+                accStyle = `Structured leather briefcase or laptop messenger bag with dedicated compartment`;
+                accQuery = `men ${dominantHumanColor} structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
+              } else {
+                accStyle = `Clean leather messenger bag or sleek cardholder`;
+                accQuery = `men ${dominantHumanColor} leather messenger bag wallet Myntra AJIO`;
+              }
+            } else if (isBoyAudience) {
+              accStyle = `Boys casual bag or backpack coordinating with outfit`;
+              accQuery = `boys ${dominantHumanColor} ${item.title} Myntra AJIO Amazon`;
+            } else if (ctx.isGirl || targetGender === "girls") {
+              if (isGarbaOrNavratri || isTraditionalOrFestive) {
+                accStyle = `Girls festive embellished potli bag with tassel drawstring`;
+                accQuery = `girls festive potli bag Myntra FirstCry Mumkins AJIO`;
+              } else if (isVacation) {
+                accStyle = `Girls cute soft cotton canvas pouch or mini tote bag`;
+                accQuery = `girls cute soft cotton tote pouch bag FirstCry Myntra Amazon`;
+              } else {
+                accStyle = `Girls cute mini everyday pouch or small crossbody bag`;
+                accQuery = `girls cute mini pouch small bag FirstCry Myntra Amazon`;
+              }
+            } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
+              accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
+              accQuery = `${targetGender} ${dominantHumanColor} ${item.title} potli bag festive clutch Myntra Nykaa AJIO`;
+            } else if (isOfficeOrFormal) {
+              accStyle = `Structured formal tote or handbag with clean lines and dual handles`;
+              accQuery = `${targetGender} ${dominantHumanColor} ${item.title} structured formal handbag tote Myntra AJIO Tata CLiQ`;
+            } else if (isDateNight || isParty) {
+              accStyle = `Compact evening bag or sleek crossbody`;
+              accQuery = `${targetGender} ${dominantHumanColor} ${item.title} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
+            } else {
+              accStyle = `Clean everyday shoulder bag or tote`;
+              accQuery = `${targetGender} ${dominantHumanColor} ${item.title} shoulder bag tote Myntra AJIO`;
+            }
+          } else if (item.type === "hair_accessory") {
+            const isTraditional = isGarbaOrNavratri || isTraditionalOrFestive;
+            accStyle = isTraditional
+              ? `Festive floral hair clips or embellished headband coordinating with ethnic look`
+              : isVacation
+                ? `Cute floral hair clip, ribbon or sun headband coordinating with vacation look`
+                : `Cute hair accessories, floral clips or headband coordinating with the outfit`;
+            accQuery = isTraditional
+              ? `girls festive floral hair clips headband Myntra FirstCry Mumkins Amazon`
+              : isVacation
+                ? `girls cute floral hair clips headband FirstCry Myntra Amazon`
+                : `girls cute hair clips headband accessories FirstCry Myntra Amazon`;
+          } else if (item.type === "belt") {
+            const isEthnicMen =
+              (persona === "man" || targetGender === "men") &&
+              (isGarbaOrNavratri || isTraditionalOrFestive || /\b(kurta|sherwani|dhoti|pyjama|pajama|bandhgala)\b/i.test(`${look.outfit || ""} ${look.title || ""}`));
+            if (isEthnicMen) {
+              accStyle = `Festive pure silk pocket square or royal sherwani brooch pin coordinating with kurta`;
+              accQuery = `men festive silk pocket square brooch set Myntra AJIO`;
+            } else if (isBoyAudience) {
+              accStyle = `Boys tailored comfortable belt coordinating with outfit`;
+              accQuery = `boys ${dominantHumanColor} ${item.title}${/\bbelt\b/i.test(item.title) ? "" : " belt"} Myntra AJIO`;
+            } else {
+              accStyle = isTraditionalOrFestive
+                ? `Embellished festive waist belt / kamarbandh coordinating with outfit drape`
+                : `Tailored structured belt in coordinating finish with clean buckle`;
+              accQuery = `${targetGender} ${dominantHumanColor} ${item.title} belt Myntra AJIO Tata CLiQ`;
+            }
+          } else if (item.type === "sunglasses") {
+            accStyle = `Classic UV-protected sunglasses complementing your facial features and outfit`;
+            accQuery = `${targetGender} ${item.title} sunglasses Myntra AJIO Amazon`;
+          } else if (item.type === "scarf") {
+            accStyle = `Soft coordinating scarf or stole adding dimension and texture to your outfit`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} scarf stole Myntra AJIO Tata CLiQ`;
+          } else if (item.type === "clutch") {
+            accStyle = `Compact evening clutch with refined metallic or textured finish`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} evening clutch Myntra AJIO Nykaa`;
+          } else if (item.type === "potli") {
+            accStyle = `Festive embellished potli bag with drawstring closure and tassel details`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} festive potli bag Myntra FirstCry Mumkins AJIO`;
+          } else if (item.type === "hat") {
+            accStyle = `Breathable coordinating hat or cap`;
+            accQuery = `${targetGender} ${item.title} cap hat Myntra AJIO Amazon`;
+          } else {
+            accStyle = isBoyAudience
+              ? `Finishing accent coordinating with boys ${dominantHumanColor} outfit`
+              : `Finishing accent coordinating with your ${dominantHumanColor} outfit`;
+            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} Myntra AJIO`;
+          }
+
+          specs.push({
+            category: "accessories",
+            itemTitle: isBoyAudience && !/\bboys?\b/i.test(item.title) ? `Boys ${item.title}` : item.title,
+            itemSubcategory: item.type,
+            targetGender,
+            dominantColor: dominantHumanColor,
+            stylingRequirement: accStyle,
+            searchQuery: accQuery.trim(),
+            preferredRetailers: isBoyAudience
+              ? ["Myntra", "FirstCry", "AJIO", "Amazon India", "Mumkins"]
+              : (ctx.isGirl || targetGender === "girls")
+                ? ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India"]
+                : ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
+            matchContext: isBoyAudience
+              ? `Harmonizes the finishing details for this boys ${profile.occasion || "styling"} edit.`
+              : `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
+          });
+        }
+      } else if (!isBoyAudience) {
+        // Fallback if no specific accessory was found in look, but category was requested
+        // Note: For boys kidswear, we do NOT invent fallback accessories (brooches, pocket squares, belts, caps or bags).
+        // Shopping recommendations strictly follow the actual AI-generated look.
+        let accTitle = "";
         let accStyle = "";
         let accQuery = "";
+        let fallbackSubcat = "bag";
 
-        if (item.type === "laptop_bag") {
-          accStyle = `Structured work laptop bag or briefcase with clean dedicated compartment`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} laptop bag briefcase Myntra AJIO Tata CLiQ`;
-        } else if (item.type === "bag") {
-          if (persona === "man" || targetGender === "men") {
-            // The bag the look names (messenger, briefcase, backpack, duffle...) is what is
-            // searched; the occasion only shapes the styling note, never the product type.
-            const hasBagNoun = /\b(bags?|briefcases?|backpacks?|duffle|duffel|satchels?|totes?|wallets?|pouch)\b/i.test(item.title);
-            if (item.title && hasBagNoun) {
-              accStyle = isOfficeOrFormal
-                ? `${item.title} with a structured, professional finish`
-                : `${item.title} coordinating with the outfit`;
-              accQuery = `men ${item.title}`;
-            } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
-              accStyle = `Rich raw silk stole or pocket square coordinating with festive kurta`;
-              accQuery = `men ${dominantHumanColor} silk stole pocket square Myntra AJIO`;
-            } else if (isOfficeOrFormal) {
-              accStyle = `Structured leather briefcase or laptop messenger bag with dedicated compartment`;
-              accQuery = `men ${dominantHumanColor} structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
-            } else {
-              accStyle = `Clean leather messenger bag or sleek cardholder`;
-              accQuery = `men ${dominantHumanColor} leather messenger bag wallet Myntra AJIO`;
-            }
-          } else if (isGarbaOrNavratri || isTraditionalOrFestive) {
-            accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} potli bag festive clutch Myntra Nykaa AJIO`;
-          } else if (isOfficeOrFormal) {
-            accStyle = `Structured formal tote or handbag with clean lines and dual handles`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} structured formal handbag tote Myntra AJIO Tata CLiQ`;
-          } else if (isDateNight || isParty) {
-            accStyle = `Compact evening bag or sleek crossbody`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
+        if (ctx.isGirl || targetGender === "girls") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            fallbackSubcat = "potli";
+            accTitle = "Girls Festive Potli Bag";
+            accStyle = "Festive embellished potli bag with tassel drawstring";
+            accQuery = `girls festive potli bag hair accessory Myntra FirstCry Mumkins AJIO`;
+          } else if (isVacation) {
+            fallbackSubcat = "bag";
+            accTitle = "Girls Soft Cotton Cute Bag";
+            accStyle = "Soft cotton cute pouch bag or sun protection hat";
+            accQuery = `girls cute soft cotton bag FirstCry Myntra Amazon`;
           } else {
-            accStyle = `Clean everyday shoulder bag or tote`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} shoulder bag tote Myntra AJIO`;
+            fallbackSubcat = "hair_accessory";
+            accTitle = "Girls Cute Hair Accessories & Clips";
+            accStyle = "Everyday cute floral hair clips, headband or soft scrunchies";
+            accQuery = `girls cute floral hair clips headband FirstCry Myntra Amazon`;
           }
-        } else if (item.type === "belt") {
-          const isEthnicMen =
-            (persona === "man" || targetGender === "men") &&
-            (isGarbaOrNavratri || isTraditionalOrFestive || /\b(kurta|sherwani|dhoti|pyjama|pajama|bandhgala)\b/i.test(`${look.outfit || ""} ${look.title || ""}`));
-          if (isEthnicMen) {
-            accStyle = `Festive pure silk pocket square or royal sherwani brooch pin coordinating with kurta`;
+        } else if (persona === "man" || targetGender === "men") {
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            fallbackSubcat = "other_accessory";
+            accTitle = "Men's Silk Pocket Square & Royal Brooch";
+            accStyle = `Festive pure silk pocket square and matching royal sherwani brooch pin`;
             accQuery = `men festive silk pocket square brooch set Myntra AJIO`;
+          } else if (isOfficeOrFormal) {
+            fallbackSubcat = "laptop_bag";
+            accTitle = "Men's Structured Leather Briefcase";
+            accStyle = `Structured formal leather briefcase or messenger bag with clean lines`;
+            accQuery = `men structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
           } else {
-            accStyle = isTraditionalOrFestive
-              ? `Embellished festive waist belt / kamarbandh coordinating with outfit drape`
-              : `Tailored structured belt in coordinating finish with clean buckle`;
-            accQuery = `${targetGender} ${dominantHumanColor} ${item.title} belt Myntra AJIO Tata CLiQ`;
+            fallbackSubcat = "sunglasses";
+            accTitle = "Men's Classic UV-Protected Sunglasses";
+            accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
+            accQuery = `men classic sunglasses Myntra AJIO Amazon`;
           }
-        } else if (item.type === "sunglasses") {
-          accStyle = `Classic UV-protected sunglasses complementing your facial features and outfit`;
-          accQuery = `${targetGender} ${item.title} sunglasses Myntra AJIO Amazon`;
-        } else if (item.type === "scarf") {
-          accStyle = `Soft coordinating scarf or stole adding dimension and texture to your outfit`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} scarf stole Myntra AJIO Tata CLiQ`;
-        } else if (item.type === "clutch") {
-          accStyle = `Compact evening clutch with refined metallic or textured finish`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} evening clutch Myntra AJIO Nykaa`;
-        } else if (item.type === "potli") {
-          accStyle = `Festive embellished potli bag with drawstring closure and tassel details`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} festive potli bag Myntra AJIO Nykaa`;
-        } else if (item.type === "hat") {
-          accStyle = `Breathable coordinating hat or cap`;
-          accQuery = `${targetGender} ${item.title} cap hat Myntra AJIO Amazon`;
         } else {
-          accStyle = `Finishing accent coordinating with your ${dominantHumanColor} outfit`;
-          accQuery = `${targetGender} ${dominantHumanColor} ${item.title} Myntra AJIO`;
+          if (isGarbaOrNavratri || isTraditionalOrFestive) {
+            fallbackSubcat = "potli";
+            accTitle = "Embroidered Festive Potli Bag with Pearl Handle";
+            accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
+            accQuery = `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`;
+          } else if (isOfficeOrFormal) {
+            fallbackSubcat = "bag";
+            accTitle = "Structured Leather Formal Handbag";
+            accStyle = `Structured formal handbag with dual handles and clean lines`;
+            accQuery = `${targetGender} ${dominantHumanColor} structured formal handbag tote Myntra AJIO Tata CLiQ`;
+          } else if (isDateNight || isParty) {
+            fallbackSubcat = "clutch";
+            accTitle = "Sleek Metallic Crossbody / Evening Clutch";
+            accStyle = `Compact evening clutch with chain strap`;
+            accQuery = `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
+          } else {
+            fallbackSubcat = "sunglasses";
+            accTitle = "Classic UV-Protected Sunglasses";
+            accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
+            accQuery = `${targetGender} classic sunglasses Myntra AJIO Amazon`;
+          }
         }
 
         specs.push({
           category: "accessories",
-          itemTitle: item.title,
-          itemSubcategory: item.type,
+          itemTitle: accTitle,
+          itemSubcategory: fallbackSubcat,
           targetGender,
           dominantColor: dominantHumanColor,
           stylingRequirement: accStyle,
           searchQuery: accQuery.trim(),
-          preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
+          preferredRetailers: (ctx.isGirl || targetGender === "girls")
+            ? ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India"]
+            : ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
           matchContext: `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
         });
       }
-    } else {
-      // Fallback if no specific accessory was found in look, but category was requested
-      let accTitle = "";
-      let accStyle = "";
-      let accQuery = "";
-      let fallbackSubcat = "bag";
-
-      if (ctx.isBoy || targetGender === "boys") {
-        fallbackSubcat = isGarbaOrNavratri || isTraditionalOrFestive ? "other_accessory" : "belt";
-        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? "Boys Festive Brooch & Pocket Square"
-          : "Boys Casual Belt & Cap";
-        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? "Festive metallic brooch and matching pocket square"
-          : "Everyday durable belt and cap";
-        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
-          ? `boys festive brooch pocket square Myntra AJIO`
-          : `boys belt cap Myntra AJIO`;
-      } else if (ctx.isGirl || targetGender === "girls") {
-        fallbackSubcat = isGarbaOrNavratri || isTraditionalOrFestive ? "potli" : "bag";
-        accTitle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? "Girls Embroidered Festive Potli Bag"
-          : "Girls Hair Accessories & Sling Bag";
-        accStyle = isGarbaOrNavratri || isTraditionalOrFestive
-          ? "Festive embellished potli bag with tassel drawstring"
-          : "Everyday cute sling bag and accessories";
-        accQuery = isGarbaOrNavratri || isTraditionalOrFestive
-          ? `girls festive potli bag Myntra AJIO`
-          : `girls sling bag accessories Myntra AJIO`;
-      } else if (persona === "man" || targetGender === "men") {
-        if (isGarbaOrNavratri || isTraditionalOrFestive) {
-          fallbackSubcat = "other_accessory";
-          accTitle = "Men's Silk Pocket Square & Royal Brooch";
-          accStyle = `Festive pure silk pocket square and matching royal sherwani brooch pin`;
-          accQuery = `men festive silk pocket square brooch set Myntra AJIO`;
-        } else if (isOfficeOrFormal) {
-          fallbackSubcat = "laptop_bag";
-          accTitle = "Men's Structured Leather Briefcase";
-          accStyle = `Structured formal leather briefcase or messenger bag with clean lines`;
-          accQuery = `men structured leather briefcase laptop bag Myntra AJIO Tata CLiQ`;
-        } else {
-          fallbackSubcat = "sunglasses";
-          accTitle = "Men's Classic UV-Protected Sunglasses";
-          accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
-          accQuery = `men classic sunglasses Myntra AJIO Amazon`;
-        }
-      } else {
-        if (isGarbaOrNavratri || isTraditionalOrFestive) {
-          fallbackSubcat = "potli";
-          accTitle = "Embroidered Festive Potli Bag with Pearl Handle";
-          accStyle = `Rich velvet or raw silk potli bag with mirror work, drawstring closure, and festive tassels`;
-          accQuery = `${targetGender} ${dominantHumanColor} embroidered potli bag festive clutch Myntra Nykaa AJIO`;
-        } else if (isOfficeOrFormal) {
-          fallbackSubcat = "bag";
-          accTitle = "Structured Leather Formal Handbag";
-          accStyle = `Structured formal handbag with dual handles and clean lines`;
-          accQuery = `${targetGender} ${dominantHumanColor} structured formal handbag tote Myntra AJIO Tata CLiQ`;
-        } else if (isDateNight || isParty) {
-          fallbackSubcat = "clutch";
-          accTitle = "Sleek Metallic Crossbody / Evening Clutch";
-          accStyle = `Compact evening clutch with chain strap`;
-          accQuery = `${targetGender} ${dominantHumanColor} sleek evening clutch crossbody bag Myntra AJIO Nykaa`;
-        } else {
-          fallbackSubcat = "sunglasses";
-          accTitle = "Classic UV-Protected Sunglasses";
-          accStyle = `Timeless UV-protected sunglasses coordinating with your outfit`;
-          accQuery = `${targetGender} classic sunglasses Myntra AJIO Amazon`;
-        }
-      }
-
-      specs.push({
-        category: "accessories",
-        itemTitle: accTitle,
-        itemSubcategory: fallbackSubcat,
-        targetGender,
-        dominantColor: dominantHumanColor,
-        stylingRequirement: accStyle,
-        searchQuery: accQuery.trim(),
-        preferredRetailers: ["Myntra", "AJIO", "Tata CLiQ", "Nykaa Fashion", "Amazon India"],
-        matchContext: `Harmonizes the finishing details for this ${profile.occasion || "styling"} edit.`,
-      });
     }
   }
 
@@ -3995,9 +4309,90 @@ export function getBenchmarkCandidatesForRequirement(
       }
 
       if (
+        subcat.includes("ethnic_bottom") ||
+        subcat.includes("churidar") ||
+        stylingReq.includes("churidar") ||
+        spec.itemTitle.toLowerCase().includes("churidar")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Vastramay Boys Off-White Solid Cotton Churidar",
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 499,
+            originalPrice: 999,
+            url: "https://www.myntra.com/churidar/vastramay/boys-off-white-churidar/23489176/buy",
+            material: "100% Breathable Cotton with Elasticated Waist",
+            shade: "Off-White",
+          },
+          {
+            tier: "mid",
+            productTitle: "Kisah Boys White Cotton Silk Festive Churidar",
+            brand: "Kisah",
+            retailer: "AJIO",
+            price: 799,
+            originalPrice: 1499,
+            url: "https://www.ajio.com/kisah-boys-white-churidar/p/469283719",
+            material: "Soft Cotton Silk Blend",
+            shade: "White",
+          },
+          {
+            tier: "premium",
+            productTitle: "Manyavar Boys Cream Stretch Silk Churidar",
+            brand: "Manyavar",
+            retailer: "FirstCry",
+            price: 1199,
+            originalPrice: 1899,
+            url: "https://www.firstcry.com/manyavar/boys-cream-churidar/2847193/product-detail",
+            material: "Premium Silk Blend with Comfort Elastic",
+            shade: "Cream",
+          },
+        ];
+      }
+
+      if (
+        subcat.includes("sherwani") ||
+        stylingReq.includes("sherwani") ||
+        spec.itemTitle.toLowerCase().includes("sherwani")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Boys ${color} Embroidered Silk Festive Sherwani`,
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 1499,
+            originalPrice: 2999,
+            url: `https://www.myntra.com/sherwani/vastramay/boys-${encodeURIComponent(color.toLowerCase())}-sherwani/23489177/buy`,
+            material: "Art Silk with Zari Embroidery",
+          },
+          {
+            tier: "mid",
+            productTitle: `Boys ${color} Jacquard Mandarin Collar Sherwani`,
+            brand: "Kisah",
+            retailer: "AJIO",
+            price: 2499,
+            originalPrice: 4499,
+            url: `https://www.ajio.com/kisah-boys-${encodeURIComponent(color.toLowerCase())}-sherwani/p/469283720`,
+            material: "Woven Jacquard Silk Blend",
+          },
+          {
+            tier: "premium",
+            productTitle: `Boys Royal Brocade ${color} Festive Sherwani`,
+            brand: "Manyavar",
+            retailer: "FirstCry",
+            price: 3999,
+            originalPrice: 5999,
+            url: `https://www.firstcry.com/manyavar/boys-royal-sherwani/2847194/product-detail`,
+            material: "Heritage Pure Silk Brocade",
+          },
+        ];
+      }
+
+      if (
         subcat.includes("kurta") ||
         subcat.includes("kedia") ||
-        subcat.includes("sherwani") ||
         subcat.includes("dhoti") ||
         subcat.includes("lehenga") ||
         subcat.includes("chaniya") ||
@@ -5602,9 +5997,10 @@ export function getBenchmarkCandidatesForRequirement(
       if (
         stylingReq.includes("brooch") ||
         stylingReq.includes("pocket") ||
-        stylingReq.includes("ethnic") ||
-        stylingReq.includes("festive") ||
-        subcat.includes("brooch")
+        subcat.includes("brooch") ||
+        subcat.includes("pocket_square") ||
+        spec.itemTitle.toLowerCase().includes("brooch") ||
+        spec.itemTitle.toLowerCase().includes("pocket square")
       ) {
         return [
           {
@@ -5630,28 +6026,109 @@ export function getBenchmarkCandidatesForRequirement(
           {
             tier: "premium",
             productTitle: "Boys Traditional Zardozi Festive Stole & Brooch Set",
-            brand: "Manyavar",
-            retailer: "Tata CLiQ",
-            price: 1499,
-            url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("boys manyavar festive brooch stole")}`,
+            brand: "Mumkins",
+            retailer: "Mumkins",
+            price: 1299,
+            originalPrice: 1999,
+            url: "https://www.mumkins.in/products/boys-festive-brooch-stole-set",
             material: "Silk Blend Stole with Handcrafted Brooch",
+          },
+        ];
+      }
+      if (
+        subcat.includes("sunglass") ||
+        stylingReq.includes("sunglass") ||
+        spec.itemTitle.toLowerCase().includes("sunglass")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Boys UV-Protected Flexible Frame Sunglasses",
+            brand: "Babyhug",
+            retailer: "FirstCry",
+            price: 399,
+            originalPrice: 799,
+            url: "https://www.firstcry.com/babyhug/boys-sunglasses/1382914/product-detail",
+            material: "100% UV400 Protection Flexible Silicone",
+          },
+          {
+            tier: "mid",
+            productTitle: "Boys Polarized Classic Aviator Sunglasses",
+            brand: "Royal Son Junior",
+            retailer: "Amazon India",
+            price: 699,
+            originalPrice: 1499,
+            url: "https://www.amazon.in/dp/B08BOYSSUN",
+            material: "Polarized Lenses with Metal Frame",
+          },
+          {
+            tier: "premium",
+            productTitle: "Boys Designer UV Wayfarer Sunglasses",
+            brand: "H&M Kids",
+            retailer: "Myntra",
+            price: 999,
+            originalPrice: 1499,
+            url: "https://www.myntra.com/boys-sunglasses",
+            material: "Durable Acetate Frame",
+          },
+        ];
+      }
+      if (
+        subcat.includes("hat") ||
+        subcat.includes("cap") ||
+        stylingReq.includes("hat") ||
+        stylingReq.includes("cap") ||
+        spec.itemTitle.toLowerCase().includes("hat") ||
+        spec.itemTitle.toLowerCase().includes("cap")
+      ) {
+        const isVacationCap = stylingReq.includes("vacation") || stylingReq.includes("beach") || stylingReq.includes("bucket");
+        return [
+          {
+            tier: "budget",
+            productTitle: isVacationCap ? "Boys Breathable Cotton Sun Bucket Hat" : "Boys Classic Cotton Baseball Cap",
+            brand: "Babyhug",
+            retailer: "FirstCry",
+            price: 349,
+            originalPrice: 699,
+            url: "https://www.firstcry.com/babyhug/boys-cap/1392811/product-detail",
+            material: "100% Breathable Cotton",
+          },
+          {
+            tier: "mid",
+            productTitle: "Boys Classic Twill Embroidered Baseball Cap",
+            brand: "Allen Solly Junior",
+            retailer: "AJIO",
+            price: 599,
+            originalPrice: 999,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys cap")}`,
+            material: "100% Cotton Twill",
+          },
+          {
+            tier: "premium",
+            productTitle: "Boys Reversible Print Cotton Bucket Hat",
+            brand: "GAP Kids",
+            retailer: "Myntra",
+            price: 899,
+            originalPrice: 1299,
+            url: "https://www.myntra.com/boys-caps",
+            material: "100% Washed Cotton",
           },
         ];
       }
       return [
         {
           tier: "budget",
-          productTitle: "Boys Reversible Classic Leather Belt",
-          brand: "Wildhorn Junior",
-          retailer: "Myntra",
-          price: 499,
-          originalPrice: 999,
-          url: "https://www.myntra.com/boys-belt",
-          material: "Durable Synthetic Leather",
+          productTitle: "Boys Classic Twill Baseball Cap",
+          brand: "Babyhug",
+          retailer: "FirstCry",
+          price: 349,
+          originalPrice: 699,
+          url: "https://www.firstcry.com/babyhug/boys-cap/1392811/product-detail",
+          material: "100% Cotton Twill",
         },
         {
           tier: "mid",
-          productTitle: "Boys Classic Twill Baseball Cap & Belt Set",
+          productTitle: "Boys Classic Embroidered Cap & Belt Set",
           brand: "Allen Solly Junior",
           retailer: "AJIO",
           price: 799,
@@ -5672,35 +6149,159 @@ export function getBenchmarkCandidatesForRequirement(
     }
 
     if (isGirl) {
+      if (
+        subcat === "hair_accessory" ||
+        stylingReq.includes("hair") ||
+        spec.itemTitle.toLowerCase().includes("hair") ||
+        spec.itemTitle.toLowerCase().includes("clip") ||
+        spec.itemTitle.toLowerCase().includes("band")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Girls Pastel Floral & Bow Hair Clips (Set of 10)",
+            brand: "KIDS CLAN",
+            retailer: "FirstCry",
+            price: 299,
+            originalPrice: 599,
+            url: "https://www.firstcry.com/kids-clan/girls-hair-clips-set/1283741/product-detail",
+            material: "Soft Ribbon & Acrylic Floral Clips",
+          },
+          {
+            tier: "mid",
+            productTitle: "Girls Embellished Pearl & Ribbon Headbands Set",
+            brand: "Accessorize London Kids",
+            retailer: "Myntra",
+            price: 599,
+            originalPrice: 1199,
+            url: "https://www.myntra.com/girls-hair-accessories",
+            material: "Faux Pearl with Satin Ribbon",
+          },
+          {
+            tier: "premium",
+            productTitle: "Girls Handcrafted Floral Hair Accessories Set",
+            brand: "Mumkins",
+            retailer: "Mumkins",
+            price: 899,
+            originalPrice: 1499,
+            url: "https://www.mumkins.in/products/girls-floral-hair-accessories-set",
+            material: "Handcrafted Fabric Florals with Gold Zari Accents",
+          },
+        ];
+      }
+
+      if (
+        stylingReq.includes("potli") ||
+        stylingReq.includes("ethnic") ||
+        stylingReq.includes("festive") ||
+        stylingReq.includes("traditional") ||
+        subcat.includes("potli")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Girls Embroidered Mini Festive Potli Bag",
+            brand: "Anekaant Kids",
+            retailer: "Myntra",
+            price: 499,
+            originalPrice: 999,
+            url: "https://www.myntra.com/girls-potli-bag",
+            material: "Satin with Gota Patti Trim",
+          },
+          {
+            tier: "mid",
+            productTitle: "Girls Traditional Zari Work Potli Bag with Tassels",
+            brand: "Mumkins",
+            retailer: "Mumkins",
+            price: 799,
+            originalPrice: 1299,
+            url: "https://www.mumkins.in/products/girls-festive-potli-bag",
+            material: "Jacquard Silk with Pearl Drawstring",
+          },
+          {
+            tier: "premium",
+            productTitle: "Girls Handcrafted Velvet Festive Bag & Hairband Set",
+            brand: "Fayon Kids",
+            retailer: "FirstCry",
+            price: 1499,
+            originalPrice: 2200,
+            url: "https://www.firstcry.com/fayon-kids/girls-festive-bag-set/2947195/product-detail",
+            material: "Embroidered Velvet with Pearl Tassels",
+          },
+        ];
+      }
+
+      if (
+        stylingReq.includes("vacation") ||
+        stylingReq.includes("beach") ||
+        stylingReq.includes("cotton") ||
+        subcat.includes("tote") ||
+        subcat.includes("hat")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Girls Soft Cotton Cute Mini Crossbody Pouch",
+            brand: "Babyhug",
+            retailer: "FirstCry",
+            price: 349,
+            originalPrice: 699,
+            url: "https://www.firstcry.com/babyhug/girls-cotton-crossbody-pouch/1482910/product-detail",
+            material: "100% Breathable Cotton Canvas",
+          },
+          {
+            tier: "mid",
+            productTitle: "Girls Breathable Canvas Cute Shoulder Pouch Bag",
+            brand: "H&M Kids",
+            retailer: "Myntra",
+            price: 699,
+            originalPrice: 999,
+            url: "https://www.myntra.com/girls-accessories",
+            material: "Pure Cotton Canvas with Cute Print",
+          },
+          {
+            tier: "premium",
+            productTitle: "Girls Woven Straw Sun Hat & Mini Tote Bag Set",
+            brand: "Accessorize London Kids",
+            retailer: "Amazon India",
+            price: 1299,
+            originalPrice: 1999,
+            url: "https://www.amazon.in/dp/B09KIDSHAT",
+            material: "Natural Paper Straw with Floral Trim",
+          },
+        ];
+      }
+
       return [
         {
           tier: "budget",
-          productTitle: "Girls Embroidered Mini Festive Potli Bag",
-          brand: "Anekaant Kids",
-          retailer: "Myntra",
-          price: 499,
-          originalPrice: 999,
-          url: "https://www.myntra.com/girls-potli-bag",
-          material: "Satin with Gota Patti Trim",
+          productTitle: "Girls Pastel Floral & Bow Hair Clips (Set of 10)",
+          brand: "KIDS CLAN",
+          retailer: "FirstCry",
+          price: 299,
+          originalPrice: 599,
+          url: "https://www.firstcry.com/kids-clan/girls-hair-clips-set/1283741/product-detail",
+          material: "Soft Ribbon & Acrylic Floral Clips",
         },
         {
           tier: "mid",
-          productTitle: "Girls Glitter Crossbody Sling Bag",
+          productTitle: "Girls Cute Everyday Mini Crossbody Pouch Bag",
           brand: "Accessorize London Kids",
-          retailer: "AJIO",
-          price: 999,
-          originalPrice: 1699,
-          url: `https://www.ajio.com/search/?text=${encodeURIComponent("girls sling bag accessories")}`,
-          material: "Shimmer PU with Long Chain",
+          retailer: "Myntra",
+          price: 699,
+          originalPrice: 1199,
+          url: "https://www.myntra.com/girls-accessories",
+          material: "Soft Fabric with Zip Closure",
         },
         {
           tier: "premium",
-          productTitle: "Girls Handcrafted Velvet Festive Bag & Hairband Set",
-          brand: "Fayon Kids",
-          retailer: "Tata CLiQ",
-          price: 1850,
-          url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent("girls fayon kids accessories set")}`,
-          material: "Embroidered Velvet",
+          productTitle: "Girls Handcrafted Floral Headband & Hair Bows Set",
+          brand: "Mumkins",
+          retailer: "Mumkins",
+          price: 999,
+          originalPrice: 1499,
+          url: "https://www.mumkins.in/products/girls-floral-headband-set",
+          material: "Soft Velvet & Satin Florals",
         },
       ];
     }
@@ -6602,7 +7203,7 @@ export function parseWebSearchProductsJson(text: string): Array<Record<string, u
   return products;
 }
 
-const MARKETPLACE_NAME_RE = /\b(myntra|ajio|nykaa(?:\s*fashion)?|tata\s*cliq|amazon(?:\s*india)?|flipkart)\b/gi;
+const MARKETPLACE_NAME_RE = /\b(myntra|ajio|nykaa(?:\s*fashion)?|tata\s*cliq|amazon(?:\s*india)?|flipkart|firstcry|bata|mumkins|fabindia|manyavar)\b/gi;
 
 /**
  * The requirement's search query as product keywords only. Planned queries append store
@@ -6773,6 +7374,14 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
   const seenCanonicalUrls = new Set<string>();
   const seenIdentityKeys = new Set<string>();
 
+  const isKidDemographic =
+    spec.targetGender === "boys" ||
+    spec.targetGender === "girls" ||
+    spec.targetGender === "child" ||
+    profile.ageGroup?.includes("0-") ||
+    profile.ageGroup?.includes("6-") ||
+    profile.ageGroup?.includes("11-");
+
   const discoveryQuery = buildDiscoveryQuery(spec);
   const rejections: CandidateRejection[] = [];
   const reject = (r: Omit<CandidateRejection, "category">) => {
@@ -6863,7 +7472,18 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       if (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery") {
         searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
-      // Category specialists among the approved stores
+      // Category and demographic specialists among the approved stores
+      const isKidDemographic =
+        spec.targetGender === "boys" ||
+        spec.targetGender === "girls" ||
+        spec.targetGender === "child" ||
+        profile.ageGroup?.includes("0-") ||
+        profile.ageGroup?.includes("6-") ||
+        profile.ageGroup?.includes("11-");
+      if (isKidDemographic) {
+        searchDomains.push("firstcry.com", "mumkins.in");
+        if (spec.category === "footwear") searchDomains.push("bata.in", "bata.com");
+      }
       if (spec.category === "jewellery") searchDomains.push("giva.co", "nykaafashion.com");
       if (spec.category === "footwear") searchDomains.push("nykaafashion.com");
 
@@ -7068,15 +7688,23 @@ Strictly adhere to:
 1. Target gender: ${spec.targetGender || "unisex"}.${
                     spec.targetGender === "men"
                       ? " Only products the retailer lists for men (men's section; titles usually say Men, Men's or Mens). Never women's, girls' or kids' products. Unisex products only if the item is genuinely unisex."
-                      : ""
+                      : spec.targetGender === "boys"
+                        ? " Only products listed in the boys' kidswear section (titles usually say Boys, Boy's, or Kids Boys). STRICTLY NEVER adult men's products, adult men's shirts, or adult footwear/accessories."
+                        : spec.targetGender === "girls"
+                          ? " Only products listed in the girls' kidswear section (titles usually say Girls, Girl's, or Kids Girls). STRICTLY NEVER adult women's products, adult women's dresses, or adult bags/heels."
+                          : ""
                   }
 2. Item category: ${spec.category} -> ${spec.itemSubcategory || spec.itemTitle}. Every product must be this exact kind of item.${
                     spec.category === "footwear" && spec.itemSubcategory && FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]
                       ? ` Stores list it as ${FOOTWEAR_ALTERNATIVE_NAMES[spec.itemSubcategory]}; search all of these names, keep the recommended colour and style, and never substitute a different footwear type.`
                       : ""
+                  }${
+                    spec.itemSubcategory === "ethnic_bottom"
+                      ? ` Stores list ethnic bottoms as churidars, pyjamas, dhotis, or ethnic pants; search for standalone ${spec.targetGender === "boys" ? "boys" : spec.targetGender === "men" ? "men's" : ""} ${/\bchuridars?\b/i.test(spec.itemTitle) ? "churidars or ethnic pyjamas" : "ethnic bottoms"} in ${spec.dominantColor || "Off-White or Cream"}, never full kurta clothing sets or western jeans.`
+                      : ""
                   }
-3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in)${spec.category === "jewellery" ? ", GIVA (giva.co)" : ""}. Include products from more than one retailer when your search finds them.
-4. Every URL must be ONE product's own detail page, never a category, collection, brand, search or listing page. Product pages look like: Myntra .../<product id>/buy, Amazon /dp/<ASIN>, Nykaa and Nykaa Fashion .../p/<id>, AJIO .../p/<id>, Tata CLiQ .../p-mp<id>${spec.category === "jewellery" ? ", GIVA /products/<name>" : ""}.
+3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in)${spec.category === "jewellery" ? ", GIVA (giva.co)" : ""}${spec.preferredRetailers.includes("FirstCry") ? ", FirstCry (firstcry.com)" : ""}${spec.preferredRetailers.includes("Bata") ? ", Bata (bata.in / bata.com)" : ""}${spec.preferredRetailers.includes("Mumkins") ? ", Mumkins (mumkins.in)" : ""}. Include products from more than one retailer when your search finds them.
+4. Every URL must be ONE product's own detail page, never a category, collection, brand, search or listing page. Product pages look like: Myntra .../<product id>/buy, Amazon /dp/<ASIN>, Nykaa and Nykaa Fashion .../p/<id>, AJIO .../p/<id>, Tata CLiQ .../p-mp<id>${spec.category === "jewellery" ? ", GIVA /products/<name>" : ""}${spec.preferredRetailers.includes("FirstCry") ? ", FirstCry .../product-detail" : ""}${spec.preferredRetailers.includes("Bata") ? ", Bata ...html" : ""}${spec.preferredRetailers.includes("Mumkins") ? ", Mumkins .../products/<slug>" : ""}.
 5. Return up to 8 products. Copy each product page URL exactly as it appears in your search results. Never invent, guess or complete product IDs or slugs; omit a product if you do not have its exact page URL.
 6. Use the product title exactly as listed by the retailer.`,
                 },
@@ -7226,7 +7854,7 @@ Strictly adhere to:
 
         if (!rawUrl) {
           const blockUrlMatch = trimmed.match(
-            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|azafashions\.com|perniaspopupshop\.com|elahe\.in|ogaan\.com|kalkifashion\.com|hm\.com|zara\.com|fabindia\.com|manyavar\.com|giva\.co|flipkart\.com|meesho\.com|etsy\.com|tirabeauty\.com|sephora\.in)[^\s)"'<>\[\]]+/i,
+            /https?:\/\/(?:www\.)?(?:myntra\.com|nykaa\.com|nykaafashion\.com|ajio\.com|amazon\.in|tatacliq\.com|azafashions\.com|perniaspopupshop\.com|elahe\.in|ogaan\.com|kalkifashion\.com|hm\.com|zara\.com|fabindia\.com|manyavar\.com|giva\.co|flipkart\.com|meesho\.com|etsy\.com|tirabeauty\.com|sephora\.in|firstcry\.com|bata\.in|bata\.com|mumkins\.in)[^\s)"'<>\[\]]+/i,
           );
           if (blockUrlMatch) rawUrl = blockUrlMatch[0];
         }

@@ -36,6 +36,10 @@ export const APPROVED_RETAILERS = [
   "etsy.com",
   "tirabeauty.com",
   "sephora.in",
+  "firstcry.com",
+  "bata.in",
+  "bata.com",
+  "mumkins.in",
 ];
 
 /**
@@ -83,6 +87,9 @@ export function getRetailerFromUrl(urlStr: string): string | null {
     if (host.includes("etsy.com")) return "Etsy";
     if (host.includes("tirabeauty.com")) return "Tira Beauty";
     if (host.includes("sephora.in")) return "Sephora";
+    if (host.includes("firstcry.com")) return "FirstCry";
+    if (host.includes("bata.in") || host.includes("bata.com")) return "Bata";
+    if (host.includes("mumkins.in")) return "Mumkins";
 
     // For any approved retailer domain, capitalize the primary brand segment
     for (const approved of APPROVED_RETAILERS) {
@@ -216,8 +223,10 @@ export function buildRetailerSearchUrl(
 
   // Ensure essential item type keyword is present if not already contained
   const currentTokensLower = rawTerms.join(" ").toLowerCase();
-  if (params.subcategory && !currentTokensLower.includes(params.subcategory.toLowerCase())) {
-    rawTerms.push(params.subcategory);
+  const subClean = (params.subcategory || "").replace(/_/g, " ").trim();
+  const isInternalSubcat = /^(ethnic bottom|inner top|one piece|boys outfit|girls outfit|men outfit)$/i.test(subClean);
+  if (subClean && !isInternalSubcat && !currentTokensLower.includes(subClean.toLowerCase())) {
+    rawTerms.push(subClean);
   } else if (params.category === "footwear" && !/\b(shoe|shoes|flats?|heels?|sandals?|slides?|sneakers?|boots?|loafers?|mojaris?|juttis?|pumps?|kolhapuris?)\b/i.test(currentTokensLower)) {
     rawTerms.push("shoes");
   } else if (params.category === "jewellery" && !/\b(jewellery|jewelry|earrings?|jhumkas?|necklace|choker|pendant|bracelet|bangle|kada|ring|watch)\b/i.test(currentTokensLower)) {
@@ -236,7 +245,9 @@ export function buildRetailerSearchUrl(
       rawTerms.push("potli");
     } else if ((sub.includes("hat") || sub.includes("cap")) && !currentTokensLower.includes("cap") && !currentTokensLower.includes("hat")) {
       rawTerms.push("cap");
-    } else if (!/\b(bag|bags|potli|clutch|tote|handbag|purse|sunglasses?|belt|scarf|stole|shawl|cap|hat)\b/i.test(currentTokensLower)) {
+    } else if (sub.includes("hair") && !currentTokensLower.includes("hair")) {
+      rawTerms.push("hair accessories");
+    } else if (!/\b(bag|bags|potli|clutch|tote|handbag|purse|sunglasses?|belt|scarf|stole|shawl|cap|hat|hair)\b/i.test(currentTokensLower)) {
       if (sub && sub !== "accessories") rawTerms.push(sub);
       else rawTerms.push("accessories");
     }
@@ -365,6 +376,15 @@ export function buildRetailerSearchUrl(
   if (r.includes("sephora")) {
     return `https://sephora.in/search?q=${q}`;
   }
+  if (r.includes("firstcry")) {
+    return `https://www.firstcry.com/search?q=${q}`;
+  }
+  if (r.includes("bata")) {
+    return `https://www.bata.com/in/search?q=${q}`;
+  }
+  if (r.includes("mumkins")) {
+    return `https://www.mumkins.in/search?q=${q}`;
+  }
 
   // If retailer specifies a domain (e.g. store.com / store.in), construct a search URL on that store
   if (r.includes(".com") || r.includes(".in") || r.includes(".co")) {
@@ -415,7 +435,7 @@ export function isValidProductUrl(urlStr: string): boolean {
     }
 
     // 3. Must not be a generic homepage or bare domain
-    if (pathname === "/" || pathname === "" || pathname.length < 3) {
+    if ((pathname === "/" || pathname === "" || pathname.length < 3) && pathname !== "/s") {
       return false;
     }
 
@@ -613,6 +633,23 @@ export function getCanonicalProductUrl(rawUrl: string): string {
       return `${u.origin}${u.pathname}`;
     }
 
+    if (host.includes("firstcry.com")) {
+      const match = u.pathname.match(/(.*\/product-detail)/i);
+      if (match) return `https://www.firstcry.com${match[1]}`;
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("bata.com") || host.includes("bata.in")) {
+      return `${u.origin}${u.pathname}`;
+    }
+
+    if (host.includes("mumkins.in")) {
+      if (u.pathname.includes("/products/")) {
+        return `https://www.mumkins.in${u.pathname.replace(/\/+$/, "")}`;
+      }
+      return `${u.origin}${u.pathname}`;
+    }
+
     if (u.search && (u.pathname.includes("/search") || u.pathname === "/s" || u.pathname.startsWith("/s/") || u.searchParams.has("q") || u.searchParams.has("text") || u.searchParams.has("k"))) {
       return `${u.origin}${u.pathname}${u.search}`;
     }
@@ -657,7 +694,10 @@ export function determineUrlType(urlStr: string): "exact_product" | "search_resu
       (host.includes("perniaspopupshop.com") && (path.includes("/products/") || /\.html$/i.test(path))) ||
       (host.includes("elahe.in") && path.includes("/products/")) ||
       (host.includes("ogaan.com") && (path.includes("/products/") || /\.html$/i.test(path))) ||
-      (host.includes("kalkifashion.com") && (path.includes("/products/") || /\.html$/i.test(path)))
+      (host.includes("kalkifashion.com") && (path.includes("/products/") || /\.html$/i.test(path))) ||
+      (host.includes("firstcry.com") && (path.includes("/product-detail") || /\/\d+\/product-detail/i.test(path))) ||
+      ((host.includes("bata.com") || host.includes("bata.in")) && (/\.html$/i.test(path) || path.includes("/product/"))) ||
+      (host.includes("mumkins.in") && (path.includes("/products/") || path.includes("/product/")))
     ) {
       return "exact_product";
     }
@@ -681,6 +721,8 @@ export function isUrlConsistentWithProduct(
       category?: string;
       subcategory?: string;
       retailer?: string;
+      gender?: string;
+      targetGender?: string;
     }
     | string,
   personaOrSubcategory?: string,
@@ -696,12 +738,18 @@ export function isUrlConsistentWithProduct(
     const parsed = new URL(urlStr);
     const host = parsed.hostname.toLowerCase();
     const fullUrlText = `${parsed.pathname} ${parsed.search}`.toLowerCase();
-    const gender = (persona || "").toLowerCase();
-    const isBoy = gender === "boy" || gender === "boys" || gender === "child_boy";
-    const isGirl = gender === "girl" || gender === "girls" || gender === "child_girl";
-    const isChild = isBoy || isGirl || gender === "child" || gender === "kids";
-    const isMan = !isChild && (gender === "man" || gender === "men" || gender === "male");
-    const isWoman = !isChild && (gender === "woman" || gender === "women" || gender === "female");
+    const effectiveGender = (
+      persona ||
+      (typeof productOrCategory !== "string"
+        ? (productOrCategory as any).gender || (productOrCategory as any).targetGender
+        : undefined) ||
+      ""
+    ).toLowerCase();
+    const isBoy = effectiveGender === "boy" || effectiveGender === "boys" || effectiveGender === "child_boy";
+    const isGirl = effectiveGender === "girl" || effectiveGender === "girls" || effectiveGender === "child_girl";
+    const isChild = isBoy || isGirl || effectiveGender === "child" || effectiveGender === "kids";
+    const isMan = !isChild && (effectiveGender === "man" || effectiveGender === "men" || effectiveGender === "male");
+    const isWoman = !isChild && (effectiveGender === "woman" || effectiveGender === "women" || effectiveGender === "female");
 
     // 0. Retailer consistency check: card retailer and URL destination MUST belong to the same retailer
     if (product.retailer) {
@@ -730,8 +778,30 @@ export function isUrlConsistentWithProduct(
       if (hasMaleKeyword && !/women/i.test(fullUrlText)) {
         return false;
       }
+    } else if (isBoy) {
+      // For boys kidswear: strictly NO adult men's links and NO female/women links
+      const hasFemaleKeyword = /(?:\/flats\/|\/women-|\/womens-|\/girls-|-women-|-womens-|\bladies\b|\bwomen\b|\bgirls?\b)/i.test(fullUrlText);
+      if (hasFemaleKeyword) {
+        return false;
+      }
+      const hasKidQualifier = /(?:\/boys-|-boys-|\bboys?\b|\bkids?\b|\bchildren\b|\bjunior\b|\btoddler\b|\bbaby\b)/i.test(fullUrlText);
+      const hasAdultMenKeyword = /(?<!wo)(?:\/men-|\/mens-|-men-|-mens-|\/men\/|\/mens\/|\bmen\b|\bmens\b|\bgents\b|\bgentlemen\b|\bmale\b)/i.test(fullUrlText);
+      if (hasAdultMenKeyword && !hasKidQualifier) {
+        return false;
+      }
+    } else if (isGirl) {
+      // For girls kidswear: strictly NO adult women's links and NO male/men links
+      const hasMaleKeyword = /(?<!wo)(?:men-|mens-|\/boys-|-boys-|\bgents\b|\bboys?\b|\bmale\b)/i.test(fullUrlText);
+      if (hasMaleKeyword) {
+        return false;
+      }
+      const hasKidQualifier = /(?:\/girls-|-girls-|\bgirls?\b|\bkids?\b|\bchildren\b|\bjunior\b|\btoddler\b|\bbaby\b)/i.test(fullUrlText);
+      const hasAdultWomenKeyword = /(?:\/women-|\/womens-|-women-|-womens-|\/women\/|\/womens\/|\bwomen\b|\bwomens\b|\bladies\b|\bfemale\b)/i.test(fullUrlText);
+      if (hasAdultWomenKeyword && !hasKidQualifier) {
+        return false;
+      }
     } else if (isChild) {
-      if (/(?:\/men-formal-|\/women-formal-)/i.test(fullUrlText)) {
+      if (/(?:\/men-formal-|\/women-formal-|\/men-clothing|\/women-clothing)/i.test(fullUrlText)) {
         return false;
       }
     }
@@ -772,6 +842,9 @@ export function isUrlConsistentWithProduct(
         return false;
       }
       if (sub.includes("sunglass") && !/sunglass|eyewear|shades/i.test(fullUrlText) && /(?:bag|belt|backpack)/i.test(fullUrlText)) {
+        return false;
+      }
+      if (sub.includes("hair") && !/(?:hair|clip|pin|band|headband|bow|scrunchie|rubber)/i.test(fullUrlText) && /(?:bag|belt|backpack|sunglass)/i.test(fullUrlText)) {
         return false;
       }
       if (!sub.includes("laptop") && /(?:laptop-bags?|laptop_bags?|briefcase|messenger-bag)/i.test(fullUrlText)) {
