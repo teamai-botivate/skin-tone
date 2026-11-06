@@ -47,7 +47,7 @@ const boySherwaniLook: any = {
 // -----------------------------------------------------------------------------
 console.log("\n[Test 1] Testing Boys Sherwani requirement planning & subcategory recognition...");
 const specs = planRequirementSpecs(boySherwaniLook, boyProfile, "child", ["outfit", "footwear"]);
-assert.ok(specs.length >= 2, `Expected at least 2 outfit specs (sherwani + churidar), got ${specs.length}`);
+assert.ok(specs.length >= 1, `Expected at least 1 outfit spec (sherwani), got ${specs.length}`);
 
 const sherwaniSpec = specs.find((s) => s.itemSubcategory === "sherwani");
 assert.ok(sherwaniSpec, "Sherwani spec must exist with itemSubcategory = 'sherwani' (NOT 'top')");
@@ -99,39 +99,12 @@ assert.equal(validSherwani2.isConsistent, true, `Valid Myntra boy sherwani must 
 console.log("✓ Test 1 Passed: Sherwani recognized as boys' ethnic upper garment with clean queries & passes consistency.");
 
 // -----------------------------------------------------------------------------
-// Test 2: Boys Churidar discovery and requirement extraction
+// Test 2: Boys Churidar is strictly EXCLUDED from boys recommendations
 // -----------------------------------------------------------------------------
-console.log("\n[Test 2] Testing Boys Churidar requirement planning & subcategory recognition...");
-const churidarSpec = specs.find((s) => s.itemSubcategory === "ethnic_bottom");
-assert.ok(churidarSpec, "Churidar spec must exist with itemSubcategory = 'ethnic_bottom' (NOT 'trousers')");
-assert.equal(churidarSpec?.targetGender, "boys");
-assert.ok(churidarSpec?.itemTitle.includes("Churidar"), "Item title must contain Churidar");
-assert.notEqual(churidarSpec?.dominantColor, "Churidar", "Dominant color must never be 'Churidar'");
-assert.notEqual(churidarSpec?.dominantColor, "Boys Churidar", "Dominant color must never be 'Boys Churidar'");
-assert.equal(churidarSpec?.dominantColor, "Off-White", "Dominant color extracted from piece detail must be Off-White");
-assert.ok(churidarSpec?.searchQuery.includes("boys"), "Search query must include 'boys'");
-assert.ok(churidarSpec?.searchQuery.includes("churidar"), "Search query must include 'churidar'");
-assert.ok(!churidarSpec?.searchQuery.includes("tailored trousers pants"), "Search query must NOT contain 'tailored trousers pants'");
-
-// Acceptance of valid boys churidar
-const validChuridar1 = checkProductConsistency(
-  "Vastramay Boys Off-White Solid Cotton Churidar",
-  "Vastramay",
-  "outfit",
-  "https://www.myntra.com/churidar/vastramay/boys-off-white-churidar/23489176/buy",
-  undefined,
-  "child",
-  churidarSpec!.itemSubcategory,
-  churidarSpec!.dominantColor,
-  undefined,
-  499,
-  "Festival",
-  undefined,
-  "boys",
-  churidarSpec!.itemTitle,
-);
-assert.equal(validChuridar1.isConsistent, true, `Valid boy churidar must pass: ${validChuridar1.reason}`);
-console.log("✓ Test 2 Passed: Churidar recognized as boys' ethnic bottom with clean queries & passes consistency.");
+console.log("\n[Test 2] Testing Boys Churidar exclusion from requirement planning...");
+const churidarSpec = specs.find((s) => /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.itemTitle) || /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.itemSubcategory || ""));
+assert.equal(churidarSpec, undefined, "Churidar spec must NOT exist for boys: kidswear is worn as complete sets, never separate churidars");
+console.log("✓ Test 2 Passed: Boys Churidar is strictly excluded from recommendation cards.");
 
 // -----------------------------------------------------------------------------
 // Test 3: Relevant Retailer Title Variations
@@ -306,29 +279,29 @@ console.log("✓ Test 5 Passed: Unrelated garments, Western separates, full sets
 // Test 6: Fallback Retailer Search Links when No Product is Verified
 // -----------------------------------------------------------------------------
 console.log("\n[Test 6] Testing fallback retailer search links generation...");
-const stores = churidarSpec!.preferredRetailers;
+const stores = sherwaniSpec!.preferredRetailers;
 assert.ok(stores.length >= 4, "Preferred retailers must have at least 4 stores");
 assert.ok(stores.includes("FirstCry"), "Preferred retailers for kids must include FirstCry");
 
 const myntraLink = buildRetailerSearchUrl("Myntra", {
-  productName: churidarSpec!.itemTitle,
-  category: churidarSpec!.category,
-  subcategory: churidarSpec!.itemSubcategory,
-  gender: churidarSpec!.targetGender,
-  color: churidarSpec!.dominantColor,
+  productName: sherwaniSpec!.itemTitle,
+  category: sherwaniSpec!.category,
+  subcategory: sherwaniSpec!.itemSubcategory,
+  gender: sherwaniSpec!.targetGender,
+  color: sherwaniSpec!.dominantColor,
 });
 assert.ok(myntraLink.includes("myntra.com/"), "Myntra search link must be generated");
-assert.ok(myntraLink.includes("churidar"), "Myntra search link must include churidar");
+assert.ok(myntraLink.includes("sherwani"), "Myntra search link must include sherwani");
 
 const firstcryLink = buildRetailerSearchUrl("FirstCry", {
-  productName: churidarSpec!.itemTitle,
-  category: churidarSpec!.category,
-  subcategory: churidarSpec!.itemSubcategory,
-  gender: churidarSpec!.targetGender,
-  color: churidarSpec!.dominantColor,
+  productName: sherwaniSpec!.itemTitle,
+  category: sherwaniSpec!.category,
+  subcategory: sherwaniSpec!.itemSubcategory,
+  gender: sherwaniSpec!.targetGender,
+  color: sherwaniSpec!.dominantColor,
 });
 assert.ok(firstcryLink.includes("firstcry.com/search?q="), "FirstCry search link must use search endpoint");
-assert.ok(firstcryLink.toLowerCase().includes("churidar"), "FirstCry search link must include churidar");
+assert.ok(firstcryLink.toLowerCase().includes("sherwani"), "FirstCry search link must include sherwani");
 
 console.log("✓ Test 6 Passed: High-fidelity fallback retailer search links generated correctly for FirstCry and Myntra.");
 

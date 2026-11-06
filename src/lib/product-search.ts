@@ -325,6 +325,42 @@ export function checkProductConsistency(
     };
   }
 
+  // 0a. CONTROVERSIAL / CRIMINAL / NOTORIOUS FIGURE SEO SPAM CHECK
+  if (/\b(lawrence\s*bishnoi|gangster)\b/i.test(fullCheckText)) {
+    return {
+      isConsistent: false,
+      reason: `Inappropriate content: Product '${productName}' contains blocked or controversial tokens (${urlStr})`,
+    };
+  }
+
+  // 0b. RETAILER SEARCH SCRAPED TITLE CHECK: Reject search results pages masquerading as product names
+  if (/^(?:amazon\.in|flipkart\.com|ajio\.com|myntra\.com)\s*[:|-]/i.test(productName) || /^(?:amazon\.in|flipkart|ajio|myntra)$/i.test(brand)) {
+    return {
+      isConsistent: false,
+      reason: `Malformed title: Product '${productName}' is a search page title, not an individual product`,
+    };
+  }
+
+  // 0c. IMPLAUSIBLE GARMENT PRICE: Clothing pieces (kurtas, jackets, dresses, lehengas) cannot cost under ₹199
+  if (category === "outfit" && price !== undefined && price > 0 && price < 199) {
+    return {
+      isConsistent: false,
+      reason: `Implausible price: Outfit garment '${productName}' priced at ₹${price} is implausibly low`,
+    };
+  }
+
+  // 0d. NON-FASHION / MEDIA / BOOK / TOY REJECTION: Reject books, novels, toys, games, stationery, electronics
+  const isNonFashionItem =
+    /\b(books?|novel|novels|paperback|hardcover|reprint|classic\s*reprint|edition|illustrated\s*edition|author|biography|textbook|workbook|coloring\s*book|story\s*book|board\s*book|encyclopedia|stationery|notebooks?|diaries|toys?|puzzle|puzzles|lego|board\s*game|action\s*figure|doll|dolls|soft\s*toy|diecast|remote\s*control|railways?|trains?\s*set)\b/i.test(cleanName) &&
+    !/\b(t-?shirt|shirt|dress|kurta|kurti|saree|lehenga|top|bottom|pants?|trousers?|jacket|blazer|shoes?|heels?|boots?|sandals?|lipstick|foundation|dupatta|stole)\b/i.test(cleanName);
+
+  if (isNonFashionItem) {
+    return {
+      isConsistent: false,
+      reason: `Non-fashion item: Product '${productName}' is a book, toy, or non-apparel item (${urlStr})`,
+    };
+  }
+
   // 1. GENDER & DEMOGRAPHIC SANITY CHECK
   const isBoy = genderLower === "boy" || genderLower === "boys" || (persona === "child" && genderLower !== "girls" && genderLower !== "girl" && (fullCheckText.includes("boy") || !genderLower));
   const isGirl = genderLower === "girl" || genderLower === "girls";
@@ -390,6 +426,17 @@ export function checkProductConsistency(
   }
 
   if (persona === "child" || genderLower === "child" || isBoy || isGirl) {
+    // Kidswear must NEVER link to adult luxury bridal boutiques with adult-only catalogs (Pernia's, Elahé, Ogaan)
+    const isAdultBoutique =
+      /\b(perniaspopupshop|elahe\.in|ogaan\.com)\b/i.test(fullCheckText) ||
+      /\b(pernia|elahe|ogaan)\b/i.test(brand || "");
+    if (isAdultBoutique) {
+      return {
+        isConsistent: false,
+        reason: `Demographic mismatch: Adult luxury boutique is not approved for kidswear (${urlStr})`,
+      };
+    }
+
     // Never recommend mature adult items or adult cosmetics/lingerie for any child
     const isAdultItem = /\b(stilettos?|high\s*heels|lingerie|deep\s*neck|plunge|corporate\s*suit|office\s*blazer|anti-aging|anti-wrinkle|retinol|nighty|nightwear\s*gown|sexy)\b/i.test(fullCheckText);
     if (isAdultItem) {
@@ -646,6 +693,52 @@ export function checkProductConsistency(
         reason: `Subcategory is Kurta / Sherwani, but item does not match ethnic kurta/sherwani type: ${productName} (${urlStr})`,
       };
     }
+  } else if (
+    subcat === "dupatta" ||
+    subcat === "stole" ||
+    subcat === "shawl" ||
+    (requiredItemTitle && /\b(dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram|odhani|chunni)\b/i.test(requiredItemTitle))
+  ) {
+    // 1. The product title ITSELF must name a genuine drape / shawl / stole / dupatta
+    const isDrapeInTitle = /\b(shawls?|doshala|lohi|chaddar|dupattas?|stoles?|angavastram|odhani|chunni|uttariya|drape|wrap)\b/i.test(cleanName);
+
+    // 2. Any contradictory upper/lower garment or western wear in title is strictly rejected,
+    //    even if the seller included 'shawl' (e.g. 'shawl collar bomber jacket' or 'shawl lapel blazer')
+    const isContradictoryGarment =
+      /\b(jackets?|bombers?|blazers?|coats?|shirts?|t-?shirts?|trousers?|pants?|jeans|shorts?|shoes?|books?|toys?|suit\s*set|hoodies?|sweatshirts?)\b/i.test(cleanName);
+
+    // 3. Reject URL paths belonging to jackets, blazers, jeans, shoes, or non-apparel
+    const isWrongUrl =
+      /(?:\/jackets?\/|\/bombers?\/|\/blazers?\/|\/jeans\/|\/t-shirts?\/|\/shoes?\/|\/trousers?\/|\/pants?\/|\/books?\/)/i.test(urlStr);
+
+    if (!isDrapeInTitle || isContradictoryGarment || isWrongUrl) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Shawl / Stole / Dupatta, but product '${productName}' is not an authentic shawl/drape (${urlStr})`,
+      };
+    }
+  } else if (
+    subcat === "bundi" ||
+    subcat === "nehru_jacket" ||
+    (requiredItemTitle && /\b(bundi|nehru\s*jacket|modi\s*jacket|ethnic\s*waistcoat|koti)\b/i.test(requiredItemTitle))
+  ) {
+    const isEthnicJacket = /\b(bundi|nehru|waistcoat|koti|modi\s*jacket|bandhgala\s*waistcoat|ethnic\s*jacket)\b/i.test(fullCheckText);
+    const isWesternJacket = /\b(bomber|puffer|fleece|flannel|denim\s*jacket|biker|hoodie|sweatshirt)\b/i.test(cleanName);
+    if (!isEthnicJacket || isWesternJacket) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Ethnic Bundi / Nehru Jacket, but product is not an ethnic waistcoat: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (subcat === "jacket") {
+    const isJacket = /\b(jackets?|coats?|overshirts?|shrugs?|cardigans?|waistcoats?|vests?|bombers?|puffers?)\b/i.test(cleanName);
+    const isWrongType = /\b(trousers?|pants?|jeans|shorts?|shoes?|dresses?|sarees?|kurtas?|books?)\b/i.test(cleanName) && !isJacket;
+    if (!isJacket || isWrongType) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Jacket, but product is not a jacket: ${productName} (${urlStr})`,
+      };
+    }
   }
 
   // 3. JEWELLERY: Minimal Studs vs Heavy Traditional Jhumkas & Type Segregation
@@ -799,7 +892,7 @@ export function checkProductConsistency(
         };
       }
     } else if (subcat ? subcat === "loafers" : cleanName.includes("loafer")) {
-      const isLoafer = /\b(loafers?|moccasins?|boat\s*shoes?|driving\s*shoes?|slip-ons?)\b/i.test(fullCheckText);
+      const isLoafer = /\b(loafers?|moccasins?|boat\s*shoes?|driving\s*shoes?|slip[- ]?ons?|pull[- ]?ons?)\b/i.test(fullCheckText);
       const isWrongFoot = /\b(sneakers?|heels?|boots?|sandals?|slides?)\b/i.test(cleanName) && !isLoafer;
       if (!isLoafer || isWrongFoot) {
         return {
@@ -1108,12 +1201,26 @@ export function checkProductConsistency(
 
     if (isTraditionalOccasion) {
       if (category === "outfit") {
-        const isWesternGarment = /\b(jeans|denim|t-?shirts?|tees?|polo|sweatshirt|hoodie|blazer|western\s*suit|shorts|bermudas|cargo\s*pants?|trackpants?|joggers?|cocktail\s*dress|mini\s*dress|bodycon|pencil\s*skirt)\b/i.test(cleanName);
-        const isEthnicGarment = /\b(kurta|kurtas|kurti|kurtis|saree|sari|saris|sarees|lehenga|lehengas|chaniya|choli|ghagra|dhoti|dhotis|pyjama|pyjamas|pajama|pajamas|churidar|churidars|sherwani|sherwanis|bandhgala|achkan|angrakha|anarkali|sharara|festive|ethnic|traditional|indo-western|bundi|nehru\s*jacket)\b/i.test(fullCheckText);
-        if (isWesternGarment && !isEthnicGarment) {
+        const isDefiniteWesternWear =
+          /\b(bombers?|puffers?|fleece|flannel|biker|varsity|windbreaker|quilted|trucker|denim\s*jacket|leather\s*jacket|jeans|hoodies?|sweatshirts?|zip-front|crop\s*outdoor|patchwork\s*jacket)\b/i.test(cleanName);
+        if (isDefiniteWesternWear) {
           return {
             isConsistent: false,
-            reason: `Occasion mismatch: Cannot recommend modern western wear '${productName}' for a traditional/festive occasion`,
+            reason: `Occasion mismatch: Cannot recommend casual western jacket or western wear '${productName}' for a traditional/festive occasion`,
+          };
+        }
+
+        const isWesternGarment = /\b(jeans|denim|t-?shirts?|tees?|polo|sweatshirt|hoodie|blazer|western\s*suit|shorts|bermudas|cargo\s*pants?|trackpants?|joggers?|cocktail\s*dress|mini\s*dress|bodycon|pencil\s*skirt)\b/i.test(cleanName);
+        const isWesternJacket =
+          /\b(bomber|bombers|puffer|puffers|fleece|flannel|biker|motorcycle|varsity|windbreaker|quilted|trucker|denim\s*jacket|leather\s*jacket|spread\s*collar|tailored\s*jacket|classic\s*jacket|casual\s*jacket|outdoor\s*jacket|zip-front|crop\s*outdoor|patchwork\s*jacket)\b/i.test(cleanName) ||
+          (/\bjackets?\b/i.test(cleanName) && !/\b(nehru|bundi|waistcoat|koti|modi|bandhgala|achkan|sherwani|ethnic|traditional|embroidered|festive|indo-western)\b/i.test(fullCheckText));
+
+        const isEthnicGarment = /\b(kurta|kurtas|kurti|kurtis|saree|sari|saris|sarees|lehenga|lehengas|chaniya|choli|ghagra|dhoti|dhotis|pyjama|pyjamas|pajama|pajamas|churidar|churidars|sherwani|sherwanis|bandhgala|achkan|angrakha|anarkali|sharara|festive|ethnic|traditional|indo-western|bundi|nehru|dupatta|dupattas|stole|stoles|shawl|shawls|doshala|lohi|chaddar|angavastram)\b/i.test(cleanName);
+
+        if ((isWesternGarment || isWesternJacket) && !isEthnicGarment) {
+          return {
+            isConsistent: false,
+            reason: `Occasion mismatch: Cannot recommend modern western wear or western jacket '${productName}' for a traditional/festive occasion`,
           };
         }
       } else if (category === "footwear") {
@@ -2571,7 +2678,7 @@ function parseHexToRgb(hex: string): { r: number; g: number; b: number } | null 
 }
 
 const GARMENT_NOUN_PATTERN =
-  /\b(churidar|sherwani|kurta|kurti|trousers?|pants?|shirts?|blazers?|jackets?|mojris?|shoes?|dresses?|tops?|bottoms?|suits?|sets?|lehenga|choli|saree|dupatta|stole|footwear|accessories)\b/i;
+  /\b(churidar|sherwani|kurta|kurti|trousers?|pants?|shirts?|blazers?|jackets?|bombers?|coats?|cardigans?|hoodies?|vests?|waistcoats?|bundi|koti|mojris?|shoes?|dresses?|tops?|bottoms?|suits?|sets?|lehenga|choli|saree|dupatta|dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram|footwear|accessories)\b/i;
 
 const FASHION_COLOR_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: "Off-White", re: /\b(off[\s-]*white)\b/i },
@@ -2677,6 +2784,10 @@ export function resolveHumanColor(colorInput?: string, context?: string): string
   if (context) {
     const fromContext = extractColorFromText(context);
     if (fromContext) return fromContext;
+    const cleanCtx = context.trim();
+    if (cleanCtx && !cleanCtx.includes("#") && cleanCtx.length > 2 && !GARMENT_NOUN_PATTERN.test(cleanCtx)) {
+      return cleanCtx;
+    }
   }
 
   return "Classic";
@@ -3060,6 +3171,11 @@ export function decomposeOutfitGarments(
     for (const p of apparelPieces) {
       const c = (p.category || "").toLowerCase();
       const n = (p.name || "").trim();
+
+      // For boys kidswear, never recommend or separate out churidar/chudidar
+      if (isBoy && /\bchu[rd]i(?:dar|dhar)s?\b/i.test(n)) {
+        continue;
+      }
       let type: "layer" | "top" | "bottom" | "one_piece" = "top";
       let subcat = "top";
       const masculineGarment = (isMen || isBoy) ? classifyMenGarment(n, c) : null;
@@ -3073,6 +3189,16 @@ export function decomposeOutfitGarments(
       } else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) {
         type = "bottom";
         subcat = "lehenga";
+      } else if (/\b(dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram|odhani|chunni|uttariya)\b/i.test(n)) {
+        type = "layer";
+        subcat = /\b(shawls?|doshala|lohi|chaddar)\b/i.test(n)
+          ? "shawl"
+          : /\b(stoles?|angavastram|uttariya)\b/i.test(n)
+            ? "stole"
+            : "dupatta";
+      } else if (/\b(bundi|nehru\s*jacket|modi\s*jacket|koti)\b/i.test(n) || (c.includes("layer") && /\bwaistcoat\b/i.test(n))) {
+        type = "layer";
+        subcat = /\b(nehru\s*jacket|modi\s*jacket)\b/i.test(n) ? "nehru_jacket" : "bundi";
       } else if (c.includes("layer") || c.includes("outer") || isLayer(n)) {
         type = "layer";
         subcat = n.toLowerCase().includes("blazer") ? "blazer" : "jacket";
@@ -3187,11 +3313,39 @@ export function decomposeOutfitGarments(
         const cleanClause = cleanOutfitGarmentTitle(clause, targetGender);
         if (!cleanClause || cleanClause.length < 3) continue;
 
+        // For boys kidswear, never recommend or separate out churidar/chudidar
+        if (isBoy && /\bchu[rd]i(?:dar|dhar)s?\b/i.test(cleanClause)) {
+          continue;
+        }
+
         const masculineClauseGarment = (isMen || isBoy) ? classifyMenGarment(cleanClause) : null;
         if (masculineClauseGarment) {
           if (!foundTypes.has(masculineClauseGarment.type)) {
             foundTypes.add(masculineClauseGarment.type);
             detectedGarments.push({ type: masculineClauseGarment.type, subcat: masculineClauseGarment.subcat, rawTitle: cleanClause });
+          }
+        } else if (/\b(dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram|odhani|chunni|uttariya)\b/i.test(cleanClause)) {
+          const pieceSubcat = /\b(shawls?|doshala|lohi|chaddar)\b/i.test(cleanClause)
+            ? "shawl"
+            : /\b(stoles?|angavastram|uttariya)\b/i.test(cleanClause)
+              ? "stole"
+              : "dupatta";
+          if (!foundTypes.has(pieceSubcat)) {
+            foundTypes.add(pieceSubcat);
+            detectedGarments.push({
+              type: "layer",
+              subcat: pieceSubcat,
+              rawTitle: cleanClause,
+            });
+          }
+        } else if (/\b(bundi|nehru\s*jacket|modi\s*jacket|koti)\b/i.test(cleanClause) || (/\bwaistcoat\b/i.test(cleanClause) && !/\bformal|suit\b/i.test(cleanClause))) {
+          if (!foundTypes.has("bundi")) {
+            foundTypes.add("bundi");
+            detectedGarments.push({
+              type: "layer",
+              subcat: /\b(nehru\s*jacket|modi\s*jacket)\b/i.test(cleanClause) ? "nehru_jacket" : "bundi",
+              rawTitle: cleanClause,
+            });
           }
         } else if (isLayer(cleanClause) && !foundTypes.has("layer")) {
           foundTypes.add("layer");
@@ -3304,25 +3458,36 @@ export function decomposeOutfitGarments(
     });
   }
 
+  // For boys kidswear, strictly filter out any churidar pieces that may have been parsed
+  let finalGarments = detectedGarments;
+  if (isBoy) {
+    finalGarments = detectedGarments.filter(
+      (g) => !/\bchu[rd]i(?:dar|dhar)s?\b/i.test(g.rawTitle) && !/\bchu[rd]i(?:dar|dhar)s?\b/i.test(g.subcat)
+    );
+  }
+
   // Fallback if still nothing detected: single outfit piece
-  if (detectedGarments.length === 0) {
-    const defaultTitle = ctx.isBoy
-      ? `Boys ${dominantHumanColor} Smart Casual Outfit Set`
+  if (finalGarments.length === 0) {
+    const isFestive = /traditional|festive|ethnic|wedding|diwali|navratri|garba|puja|eid/i.test(allOccContext);
+    const defaultTitle = isBoy
+      ? isFestive
+        ? `Boys ${dominantHumanColor} Festive Kurta Set`
+        : `Boys ${dominantHumanColor} Smart Casual Outfit Set`
       : ctx.isGirl
         ? `Girls ${dominantHumanColor} Casual Dress / Co-ord Set`
         : targetGender === "men"
           ? `Men's ${dominantHumanColor} Curated Outfit`
           : `Women's ${dominantHumanColor} Curated Dress / Outfit`;
 
-    detectedGarments.push({
+    finalGarments.push({
       type: "one_piece",
-      subcat: ctx.isBoy ? "boys_outfit" : ctx.isGirl ? "girls_outfit" : targetGender === "men" ? "men_outfit" : "dress",
+      subcat: isBoy ? "boys_outfit" : ctx.isGirl ? "girls_outfit" : targetGender === "men" ? "men_outfit" : "dress",
       rawTitle: outfitText || defaultTitle,
     });
   }
 
   // Convert each detected garment into a fully realized RequirementSpec
-  for (const g of detectedGarments) {
+  for (const g of finalGarments) {
     const rawClean =
       g.subcat === "saree"
         ? stripHandDrapeTerms(cleanOutfitGarmentTitle(g.rawTitle, targetGender))
@@ -3331,6 +3496,9 @@ export function decomposeOutfitGarments(
     let color = g.color;
     if (!color || GARMENT_NOUN_PATTERN.test(color)) {
       color = resolveHumanColor(rawClean, isEthnicBottom ? undefined : dominantHumanColor);
+    }
+    if (color && GARMENT_NOUN_PATTERN.test(color)) {
+      color = dominantHumanColor && !GARMENT_NOUN_PATTERN.test(dominantHumanColor) ? dominantHumanColor : "Classic";
     }
     if (isEthnicBottom) {
       const isNeutralEthnicColor = /\b(white|off-white|cream|ivory|beige|gold|black|maroon)\b/i.test(color || "");
@@ -3372,7 +3540,10 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
     else if (g.subcat === "dress") itemQueryKeyword = "dress";
     else if (g.subcat === "sherwani") itemQueryKeyword = "sherwani";
-    else if (g.subcat === "ethnic_bottom") itemQueryKeyword = /\bchuridars?\b/i.test(rawClean) ? "churidar" : "ethnic pyjama";
+    else if (g.subcat === "ethnic_bottom") itemQueryKeyword = "ethnic pyjama";
+    else if (g.subcat === "shawl") itemQueryKeyword = "traditional ethnic shawl";
+    else if (g.subcat === "dupatta" || g.subcat === "stole") itemQueryKeyword = /\bdupattas?\b/i.test(rawClean) ? "festive dupatta stole" : "festive stole angavastram";
+    else if (g.subcat === "bundi" || g.subcat === "nehru_jacket") itemQueryKeyword = "festive nehru jacket bundi waistcoat";
 
     // Men's and Boys' queries are built from the garment's own name (type, colour, fabric, fit, style)
     // without appending conflicting generic women's-first keywords ("tailored trousers pants", "dress", etc.)
@@ -3385,8 +3556,14 @@ export function decomposeOutfitGarments(
             g.subcat === "sherwani"
               ? "sherwani"
               : g.subcat === "ethnic_bottom"
-                ? /\bchuridars?\b/i.test(rawClean) ? "churidar" : "ethnic bottom"
-                : itemQueryKeyword,
+                ? "ethnic pyjama pants"
+                : g.subcat === "shawl"
+                  ? "traditional ethnic shawl"
+                  : g.subcat === "dupatta" || g.subcat === "stole"
+                    ? /\bdupattas?\b/i.test(rawClean) ? "festive dupatta stole" : "festive stole"
+                    : g.subcat === "bundi" || g.subcat === "nehru_jacket"
+                      ? "festive nehru jacket bundi"
+                      : itemQueryKeyword,
             ...preferredRetailers.slice(0, 3),
           ]
             .filter(Boolean)
@@ -4106,7 +4283,24 @@ export function planRequirementSpecs(
     }
   }
 
-  return specs;
+  // For boys kidswear: strictly filter out any churidar/chudidar requirements.
+  // Boys wear complete sets (kurta-pyjama, kurta-dhoti, sherwani set); standalone churidars
+  // are not worn by young boys and are not sold as standalone bottoms on kidswear stores.
+  const filteredSpecs = specs.filter((s) => {
+    if (s.targetGender === "boys" || ctx.isBoy) {
+      if (
+        /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.itemTitle) ||
+        /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.itemSubcategory || "") ||
+        /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.stylingRequirement || "") ||
+        /\bchu[rd]i(?:dar|dhar)s?\b/i.test(s.searchQuery || "")
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  return filteredSpecs;
 }
 
 /**
@@ -4310,43 +4504,95 @@ export function getBenchmarkCandidatesForRequirement(
 
       if (
         subcat.includes("ethnic_bottom") ||
-        subcat.includes("churidar") ||
-        stylingReq.includes("churidar") ||
-        spec.itemTitle.toLowerCase().includes("churidar")
+        subcat.includes("dhoti") ||
+        subcat.includes("pyjama") ||
+        subcat.includes("pajama")
       ) {
         return [
           {
             tier: "budget",
-            productTitle: "Vastramay Boys Off-White Solid Cotton Churidar",
+            productTitle: `Vastramay Boys ${color} Solid Cotton Festive Dhoti Pants`,
             brand: "Vastramay",
             retailer: "Myntra",
-            price: 499,
-            originalPrice: 999,
-            url: "https://www.myntra.com/churidar/vastramay/boys-off-white-churidar/23489176/buy",
-            material: "100% Breathable Cotton with Elasticated Waist",
-            shade: "Off-White",
+            price: 599,
+            originalPrice: 1199,
+            url: `https://www.myntra.com/dhoti/vastramay/boys-${encodeURIComponent(color.toLowerCase())}-dhoti/23489176/buy`,
+            material: "100% Breathable Cotton with Drawstring Waist",
+            shade: color,
           },
           {
             tier: "mid",
-            productTitle: "Kisah Boys White Cotton Silk Festive Churidar",
+            productTitle: `Kisah Boys ${color} Cotton Silk Festive Pyjama Pants`,
             brand: "Kisah",
             retailer: "AJIO",
             price: 799,
             originalPrice: 1499,
-            url: "https://www.ajio.com/kisah-boys-white-churidar/p/469283719",
-            material: "Soft Cotton Silk Blend",
-            shade: "White",
+            url: `https://www.ajio.com/kisah-boys-${encodeURIComponent(color.toLowerCase())}-pyjama/p/469283719`,
+            material: "Soft Cotton Silk Blend with Elastic Waist",
+            shade: color,
           },
           {
             tier: "premium",
-            productTitle: "Manyavar Boys Cream Stretch Silk Churidar",
-            brand: "Manyavar",
+            productTitle: `Tiber Taber Boys ${color} Pure Silk Festive Dhoti`,
+            brand: "Tiber Taber",
             retailer: "FirstCry",
-            price: 1199,
-            originalPrice: 1899,
-            url: "https://www.firstcry.com/manyavar/boys-cream-churidar/2847193/product-detail",
-            material: "Premium Silk Blend with Comfort Elastic",
-            shade: "Cream",
+            price: 1299,
+            originalPrice: 1999,
+            url: `https://www.firstcry.com/tiber-taber/boys-${encodeURIComponent(color.toLowerCase())}-dhoti/2847193/product-detail`,
+            material: "Pure Silk Festive Draped Dhoti",
+            shade: color,
+          },
+        ];
+      }
+
+      const isShawlRequirement =
+        subcat.includes("shawl") ||
+        stylingReq.includes("shawl") ||
+        spec.itemTitle.toLowerCase().includes("shawl");
+
+      if (
+        isShawlRequirement ||
+        subcat.includes("dupatta") ||
+        subcat.includes("stole") ||
+        stylingReq.includes("dupatta") ||
+        stylingReq.includes("stole") ||
+        spec.itemTitle.toLowerCase().includes("dupatta") ||
+        spec.itemTitle.toLowerCase().includes("stole")
+      ) {
+        const drapeType = isShawlRequirement ? "Traditional Shawl" : subcat.includes("dupatta") ? "Festive Dupatta Stole" : "Festive Stole";
+        return [
+          {
+            tier: "budget",
+            productTitle: `Vastramay Boys ${color} Woven Silk ${drapeType}`,
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: isShawlRequirement ? 699 : 499,
+            originalPrice: isShawlRequirement ? 1399 : 999,
+            url: `https://www.myntra.com/boys-${encodeURIComponent(color.toLowerCase())}-${isShawlRequirement ? "traditional-shawl" : "festive-dupatta-stole"}`,
+            material: "Art Silk with Metallic Gold Zari Border",
+            shade: color,
+          },
+          {
+            tier: "mid",
+            productTitle: `Kisah Boys ${color} Traditional Silk Blend Festive ${isShawlRequirement ? "Doshala Shawl" : "Angavastram Stole"}`,
+            brand: "Kisah",
+            retailer: "AJIO",
+            price: isShawlRequirement ? 999 : 799,
+            originalPrice: isShawlRequirement ? 1799 : 1399,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} festive traditional ${isShawlRequirement ? "shawl doshala" : "stole dupatta"}`)}`,
+            material: "Silk Blend with Woven Temple Zari Border",
+            shade: color,
+          },
+          {
+            tier: "premium",
+            productTitle: `Tiber Taber Boys ${color} Pure Silk Heritage Embroidered ${drapeType}`,
+            brand: "Tiber Taber",
+            retailer: "FirstCry",
+            price: isShawlRequirement ? 1499 : 1199,
+            originalPrice: isShawlRequirement ? 2299 : 1799,
+            url: `https://www.firstcry.com/tiber-taber/boys-festive-silk-${isShawlRequirement ? "shawl" : "stole"}/3192842/product-detail`,
+            material: "Pure Chanderi Silk with Handcrafted Tassels",
+            shade: color,
           },
         ];
       }
@@ -4432,6 +4678,51 @@ export function getBenchmarkCandidatesForRequirement(
             originalPrice: 4999,
             url: `https://www.tatacliq.com/search/?searchCategory=all&text=${encodeURIComponent(`boys ${color} festive kurta set`)}`,
             material: "Jacquard Pure Silk Blend with Inner Lining",
+          },
+        ];
+      }
+
+      if (
+        subcat.includes("bundi") ||
+        subcat.includes("waistcoat") ||
+        subcat.includes("nehru") ||
+        stylingReq.includes("bundi") ||
+        stylingReq.includes("waistcoat") ||
+        spec.itemTitle.toLowerCase().includes("bundi") ||
+        spec.itemTitle.toLowerCase().includes("waistcoat") ||
+        spec.itemTitle.toLowerCase().includes("nehru") ||
+        ((subcat.includes("jacket") || subcat.includes("layer")) && (stylingReq.includes("festive") || stylingReq.includes("traditional") || stylingReq.includes("ethnic")))
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: `Vastramay Boys ${color} Printed Cotton Festive Bundi Waistcoat`,
+            brand: "Vastramay",
+            retailer: "Myntra",
+            price: 899,
+            originalPrice: 1799,
+            url: `https://www.myntra.com/boys-${encodeURIComponent(color.toLowerCase())}-bundi-waistcoat`,
+            material: "100% Breathable Cotton with Mandarin Collar",
+          },
+          {
+            tier: "mid",
+            productTitle: `Tiber Taber Boys ${color} Floral Embroidered Nehru Jacket`,
+            brand: "Tiber Taber",
+            retailer: "AJIO",
+            price: 1599,
+            originalPrice: 2499,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent(`boys ${color} festive nehru jacket bundi`)}`,
+            material: "Cotton Silk Blend with Slub Texture",
+          },
+          {
+            tier: "premium",
+            productTitle: `Mumkins Boys Brocade Heritage Festive Bundi Jacket`,
+            brand: "Mumkins",
+            retailer: "FirstCry",
+            price: 2499,
+            originalPrice: 3499,
+            url: "https://www.firstcry.com/mumkins/boys-heritage-bundi-jacket/3192841/product-detail",
+            material: "Woven Jacquard Brocade Silk with Welt Pockets",
           },
         ];
       }
@@ -5601,6 +5892,48 @@ export function getBenchmarkCandidatesForRequirement(
           },
         ];
       }
+
+      if (
+        stylingReq.includes("loafer") ||
+        stylingReq.includes("moccasin") ||
+        subcat.includes("loafer") ||
+        subcat.includes("moccasin") ||
+        spec.itemTitle.toLowerCase().includes("loafer")
+      ) {
+        return [
+          {
+            tier: "budget",
+            productTitle: "Boys Cushioned Slip-On Loafers",
+            brand: "Bata",
+            retailer: "Bata",
+            price: 799,
+            originalPrice: 1299,
+            url: "https://www.bata.in/boys-slip-on-loafers",
+            material: "Cushioned Faux Leather with Soft Padded Footbed",
+          },
+          {
+            tier: "mid",
+            productTitle: "Boys Classic Driving Moccasin Loafers",
+            brand: "Babyhug",
+            retailer: "FirstCry",
+            price: 1299,
+            originalPrice: 1999,
+            url: "https://www.firstcry.com/babyhug/boys-driving-loafers/2841938/product-detail",
+            material: "Supple Faux Leather with Flexible Rubber Sole",
+          },
+          {
+            tier: "premium",
+            productTitle: "Boys Handcrafted Suede-Finish Loafers",
+            brand: "GAP Kids",
+            retailer: "AJIO",
+            price: 2199,
+            originalPrice: 2999,
+            url: `https://www.ajio.com/search/?text=${encodeURIComponent("boys slip-on moccasin loafers")}`,
+            material: "Soft Suede Finish with Memory Foam Insole",
+          },
+        ];
+      }
+
       return [
         {
           tier: "budget",
@@ -7315,8 +7648,20 @@ async function searchAlternativesForRequirement(
   const colorsAvoidList = Array.isArray(profile.colorsAvoid) ? profile.colorsAvoid : [];
   const colorsAvoidStr = colorsAvoidList.join(", ");
 
+  const isKidDemographic =
+    spec.targetGender === "boys" ||
+    spec.targetGender === "girls" ||
+    spec.targetGender === "child" ||
+    profile.ageGroup?.includes("0-") ||
+    profile.ageGroup?.includes("6-") ||
+    profile.ageGroup?.includes("11-");
+
+  const approvedBoutiquesList = isKidDemographic
+    ? "Myntra, AJIO, FirstCry, Mumkins, Tata CLiQ, Amazon India, Bata"
+    : "Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India, Fabindia, Manyavar, SUGAR, Lakmé, MAC, GIVA";
+
   const prompt = `You are LetStyle's Multi-Retailer Product Discovery Engine.
-Your task is to search the web for 3 distinct, REAL, currently available products in India from multiple trusted retailers and designer boutiques (Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India, Fabindia, Manyavar, SUGAR, Lakmé, MAC, GIVA) that satisfy this EXACT styling requirement:
+Your task is to search the web for 3 distinct, REAL, currently available products in India from multiple trusted retailers and designer boutiques (${approvedBoutiquesList}) that satisfy this EXACT styling requirement:
 
 STYLING REQUIREMENT:
 - Item: "${spec.itemTitle}"
@@ -7333,7 +7678,7 @@ BUDGET INSTRUCTION:
 ${budgetInstruction}
 
 SEARCH INSTRUCTIONS:
-1. MULTI-RETAILER DIVERSITY: Search across ALL approved retailers and designer boutiques: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon India. Discover all relevant, available matching products across multiple retailers rather than restricting to one store.
+1. MULTI-RETAILER DIVERSITY: Search across approved retailers: ${approvedBoutiquesList}. Discover all relevant, available matching products across multiple retailers rather than restricting to one store.
 2. Find distinct REAL shoppable products that satisfy this exact same styling requirement across price points (Budget, Mid-range, Premium).
 3. Do NOT change user's color, occasion, or style requirement between alternatives.
 4. You MUST extract the REAL, exact product page URL with the real product ID directly from your search result.
@@ -7344,7 +7689,7 @@ Format each product cleanly as:
 TIER: budget | mid | premium
 PRODUCT_TITLE: <exact title as listed on the retailer>
 BRAND: <brand name>
-RETAILER: <retailer name: Myntra, AJIO, Nykaa, Aza Fashions, Pernia's Pop-Up Shop, Elahé, Tata CLiQ, Amazon, etc.>
+RETAILER: <retailer name: Myntra, AJIO, FirstCry, Mumkins, Tata CLiQ, Amazon, etc.>
 PRICE: <exact price number in INR>
 ORIGINAL_PRICE: <original MRP number in INR if discounted>
 URL: <exact real product page URL with real product ID>
@@ -7373,14 +7718,6 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
 
   const seenCanonicalUrls = new Set<string>();
   const seenIdentityKeys = new Set<string>();
-
-  const isKidDemographic =
-    spec.targetGender === "boys" ||
-    spec.targetGender === "girls" ||
-    spec.targetGender === "child" ||
-    profile.ageGroup?.includes("0-") ||
-    profile.ageGroup?.includes("6-") ||
-    profile.ageGroup?.includes("11-");
 
   const discoveryQuery = buildDiscoveryQuery(spec);
   const rejections: CandidateRejection[] = [];
@@ -7460,32 +7797,33 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         occasionLower.includes("luxury");
       const isHighBudget = (budgetLimit ?? 0) >= 3500;
 
-      const searchDomains = [
-        "myntra.com",
-        "ajio.com",
-        "nykaa.com",
-        "amazon.in",
-        "tatacliq.com",
-        "hm.com",
-        "zara.com",
-      ];
-      if (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery") {
+      const searchDomains = isKidDemographic
+        ? [
+            "myntra.com",
+            "ajio.com",
+            "amazon.in",
+            "firstcry.com",
+            "mumkins.in",
+            "tatacliq.com",
+          ]
+        : [
+            "myntra.com",
+            "ajio.com",
+            "nykaa.com",
+            "amazon.in",
+            "tatacliq.com",
+            "hm.com",
+            "zara.com",
+          ];
+      if (!isKidDemographic && (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery")) {
         searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
-      // Category and demographic specialists among the approved stores
-      const isKidDemographic =
-        spec.targetGender === "boys" ||
-        spec.targetGender === "girls" ||
-        spec.targetGender === "child" ||
-        profile.ageGroup?.includes("0-") ||
-        profile.ageGroup?.includes("6-") ||
-        profile.ageGroup?.includes("11-");
       if (isKidDemographic) {
-        searchDomains.push("firstcry.com", "mumkins.in");
         if (spec.category === "footwear") searchDomains.push("bata.in", "bata.com");
+      } else {
+        if (spec.category === "jewellery") searchDomains.push("giva.co", "nykaafashion.com");
+        if (spec.category === "footwear") searchDomains.push("nykaafashion.com");
       }
-      if (spec.category === "jewellery") searchDomains.push("giva.co", "nykaafashion.com");
-      if (spec.category === "footwear") searchDomains.push("nykaafashion.com");
 
       const tavilyResp = await tavilySearch(tavilyQuery, 15, searchDomains);
       discovery.tavily = "ok";
@@ -7700,10 +8038,14 @@ Strictly adhere to:
                       : ""
                   }${
                     spec.itemSubcategory === "ethnic_bottom"
-                      ? ` Stores list ethnic bottoms as churidars, pyjamas, dhotis, or ethnic pants; search for standalone ${spec.targetGender === "boys" ? "boys" : spec.targetGender === "men" ? "men's" : ""} ${/\bchuridars?\b/i.test(spec.itemTitle) ? "churidars or ethnic pyjamas" : "ethnic bottoms"} in ${spec.dominantColor || "Off-White or Cream"}, never full kurta clothing sets or western jeans.`
+                      ? ` Stores list ethnic bottoms as ${spec.targetGender === "boys" ? "pyjamas, dhotis, or ethnic pants (never tight churidars)" : "churidars, pyjamas, dhotis, or ethnic pants"}; search for standalone ${spec.targetGender === "boys" ? "boys" : spec.targetGender === "men" ? "men's" : ""} ${spec.targetGender === "boys" ? "ethnic pyjamas or dhoti pants" : /\bchuridars?\b/i.test(spec.itemTitle) ? "churidars or ethnic pyjamas" : "ethnic bottoms"} in ${spec.dominantColor || "Off-White or Cream"}, never full kurta clothing sets or western jeans.`
                       : ""
                   }
-3. Approved retailers and boutiques: Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in)${spec.category === "jewellery" ? ", GIVA (giva.co)" : ""}${spec.preferredRetailers.includes("FirstCry") ? ", FirstCry (firstcry.com)" : ""}${spec.preferredRetailers.includes("Bata") ? ", Bata (bata.in / bata.com)" : ""}${spec.preferredRetailers.includes("Mumkins") ? ", Mumkins (mumkins.in)" : ""}. Include products from more than one retailer when your search finds them.
+3. Approved retailers and boutiques: ${
+  isKidDemographic
+    ? "Myntra (myntra.com), AJIO (ajio.com), FirstCry (firstcry.com), Mumkins (mumkins.in), Amazon India (amazon.in), Tata CLiQ (tatacliq.com)" + (spec.category === "footwear" ? ", Bata (bata.in / bata.com)" : "") + ". STRICTLY NEVER search or return adult luxury bridal boutiques like Pernia's Pop-Up Shop, Elahé, Ogaan, or Aza Fashions."
+    : "Myntra (myntra.com), AJIO (ajio.com), Tata CLiQ (tatacliq.com), Nykaa (nykaa.com / nykaafashion.com), Aza Fashions (azafashions.com), Pernia's Pop-Up Shop (perniaspopupshop.com), Elahé (elahe.in), Amazon India (amazon.in)" + (spec.category === "jewellery" ? ", GIVA (giva.co)" : "") + (spec.preferredRetailers.includes("FirstCry") ? ", FirstCry (firstcry.com)" : "") + (spec.preferredRetailers.includes("Bata") ? ", Bata (bata.in / bata.com)" : "") + (spec.preferredRetailers.includes("Mumkins") ? ", Mumkins (mumkins.in)" : "")
+}. Include products from more than one retailer when your search finds them.
 4. Every URL must be ONE product's own detail page, never a category, collection, brand, search or listing page. Product pages look like: Myntra .../<product id>/buy, Amazon /dp/<ASIN>, Nykaa and Nykaa Fashion .../p/<id>, AJIO .../p/<id>, Tata CLiQ .../p-mp<id>${spec.category === "jewellery" ? ", GIVA /products/<name>" : ""}${spec.preferredRetailers.includes("FirstCry") ? ", FirstCry .../product-detail" : ""}${spec.preferredRetailers.includes("Bata") ? ", Bata ...html" : ""}${spec.preferredRetailers.includes("Mumkins") ? ", Mumkins .../products/<slug>" : ""}.
 5. Return up to 8 products. Copy each product page URL exactly as it appears in your search results. Never invent, guess or complete product IDs or slugs; omit a product if you do not have its exact page URL.
 6. Use the product title exactly as listed by the retailer.`,

@@ -856,12 +856,12 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
         {
           id: 'garba-boy-03',
           title: 'Royal Bandhgala Elegance',
-          note: `Regal ${primaryColor} silk-blend bandhgala waistcoat paired with cream kurta and churidar.`,
+          note: `Regal ${primaryColor} silk-blend bandhgala waistcoat paired with cream kurta and pyjama set.`,
           vibe: 'Regal',
           personaEnergy: 'Composed, charming, and poised with a proud little smile.',
           palette: ['#be185d', '#d97706', '#fffbeb'],
           imageUrl: '/replace-with-generated/garba-03.webp',
-          outfit: `Boys ${primaryColor} tailored silk-blend bandhgala waistcoat over a crisp cream kurta and churidar.`,
+          outfit: `Boys ${primaryColor} tailored silk-blend bandhgala waistcoat over a crisp cream kurta and pyjama set.`,
           outfitColor: `Deep ${primaryColor} and antique gold brocade.`,
           jewellery: 'None (child-friendly natural styling).',
           hairstyle: 'Gentle combed side-sweep.',
@@ -876,7 +876,7 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
           ],
           pieces: [
             { category: 'Layer', name: `Boys ${primaryColor} Brocade Bandhgala Waistcoat`, detail: 'Structured mandarin collar with antique brass buttons.' },
-            { category: 'Outfit', name: 'Cream Cotton Silk Kurta Set', detail: 'Breathable base layer with soft elasticized churidar.' },
+            { category: 'Outfit', name: 'Cream Cotton Silk Kurta Set', detail: 'Breathable base layer with soft elasticized pyjama pants.' },
             { category: 'Shoe', name: 'Handcrafted Boys Ethnic Loafers', detail: 'Flexible rubber sole with padded footbed.' },
           ],
         },

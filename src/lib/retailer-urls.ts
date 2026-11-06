@@ -806,6 +806,23 @@ export function isUrlConsistentWithProduct(
       }
     }
 
+    // Children's kidswear must NEVER link to adult luxury bridal boutiques with adult-only catalogs
+    if (isChild || isBoy || isGirl) {
+      if (host.includes("perniaspopupshop.com") || host.includes("elahe.in") || host.includes("ogaan.com")) {
+        return false;
+      }
+    }
+
+    // Never link to controversial/criminal spam URLs
+    if (/(?:lawrence[-_]?bishnoi)/i.test(fullUrlText)) {
+      return false;
+    }
+
+    // Never link to books, media, or non-fashion items
+    if (/(?:\/books?\/|\/paperback\/|\/hardcover\/|\/toys?\/|\/stationery\/|\/reprint\/)/i.test(fullUrlText)) {
+      return false;
+    }
+
     // 2. Category consistency check
     const cat = (product.category || "").toLowerCase();
     if (cat === "footwear") {
@@ -817,8 +834,24 @@ export function isUrlConsistentWithProduct(
         return false;
       }
       const sub = (product.subcategory || "").toLowerCase();
+      const prodName = ((product as any).productName || (product as any).title || (product as any).name || "").toLowerCase();
       if (sub === "blazer") {
         if (/(?:\/t-shirts?\/|\/jeans\/|\/dresses?\/|\/shoes?\/|\/flats?\/)/i.test(fullUrlText) && !/blazer|suit/i.test(fullUrlText)) {
+          return false;
+        }
+      } else if (sub === "dupatta" || sub === "stole" || sub === "shawl" || /\b(dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram)\b/i.test(sub)) {
+        if (prodName) {
+          const isDrapeTitle = /\b(shawls?|doshala|lohi|chaddar|dupattas?|stoles?|angavastram|odhani|chunni|uttariya|drape|wrap)\b/i.test(prodName);
+          const isContradictoryGarment = /\b(jackets?|bombers?|blazers?|coats?|shirts?|t-?shirts?|trousers?|pants?|jeans|shorts?|shoes?|books?|toys?|hoodies?|sweatshirts?)\b/i.test(prodName);
+          if (!isDrapeTitle || isContradictoryGarment) {
+            return false;
+          }
+        }
+        if (/(?:\/jackets?\/|\/bombers?\/|\/blazers?\/|\/jeans\/|\/t-shirts?\/|\/shoes?\/|\/trousers?\/|\/pants?\/|\/books?\/)/i.test(fullUrlText)) {
+          return false;
+        }
+      } else if (sub === "bundi" || sub === "nehru_jacket") {
+        if (/(?:\/bomber|\/puffer|\/fleece|\/jeans|\/t-shirts?\/|\/shoes?\/)/i.test(fullUrlText)) {
           return false;
         }
       }
