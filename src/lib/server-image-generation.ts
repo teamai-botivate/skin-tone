@@ -22,10 +22,24 @@ import {
 
 /** Splits a "data:image/jpeg;base64,...." data URL into its mime type and raw bytes. */
 function decodeDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  const trimmed = dataUrl.trim();
+  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,([\s\S]+)$/.exec(trimmed);
   if (!match) throw new Error("photoUrl is not a valid base64 data URL");
   const [, mime, base64] = match;
-  return { mime, buffer: Buffer.from(base64, "base64") };
+  return { mime, buffer: Buffer.from(base64.replace(/\s+/g, ""), "base64") };
+}
+
+/** Resolves photo buffer whether given as a data URL or an HTTP/HTTPS URL. */
+async function resolvePhotoBuffer(photoUrl: string): Promise<{ mime: string; buffer: Buffer }> {
+  const trimmed = photoUrl.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    const res = await fetch(trimmed);
+    if (!res.ok) throw new Error(`Failed to fetch photo from URL: ${res.status}`);
+    const mime = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+    const arrayBuffer = await res.arrayBuffer();
+    return { mime, buffer: Buffer.from(arrayBuffer) };
+  }
+  return decodeDataUrl(trimmed);
 }
 
 const STYLING_ADDENDUM_JSON_SCHEMA = {
@@ -238,7 +252,8 @@ async function editViaResponsesApi(
       `Responses API image generation returned no result (status: ${imageCall?.status ?? "no call found"})`,
     );
   }
-  return `data:image/jpeg;base64,${imageCall.result}`;
+  const result = imageCall.result;
+  return result.startsWith("data:") ? result : `data:image/jpeg;base64,${result}`;
 }
 
 /**
@@ -257,7 +272,7 @@ async function editViaImagesEdit(
   photoUrl: string,
   requestOptions?: OpenAIRequestOptions,
 ): Promise<string> {
-  const { mime, buffer } = decodeDataUrl(photoUrl);
+  const { mime, buffer } = await resolvePhotoBuffer(photoUrl);
   const ext = mime.split("/")[1] ?? "jpg";
   const file = await toFile(buffer, `photo.${ext}`, { type: mime });
   const result = await openai.images.edit({

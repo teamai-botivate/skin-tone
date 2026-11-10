@@ -94,6 +94,7 @@ import {
   sortProductsByPriceAscending,
   buildFallbackSearchUrl,
 } from "./retailer-urls";
+import { buildRelevantSearchLinks, type DiscoveredSearchPage } from "./retailer-search-links";
 
 export {
   APPROVED_RETAILERS,
@@ -7639,6 +7640,11 @@ async function searchAlternativesForRequirement(
   budgetLimit: number | null,
   diagnosticsTracker: KeyDiagnostic[] = [],
   look?: LookRecommendation,
+  /**
+   * Receives store listing/search pages returned by a search index. They are never
+   * verified as products; the caller may offer the relevant ones as search links.
+   */
+  searchPageSink?: DiscoveredSearchPage[],
 ): Promise<ProductResult[]> {
   const budgetInstruction = budgetLimit
     ? `CRITICAL BUDGET CONSTRAINT: User's budget is strictly under ₹${budgetLimit}. All alternatives must stay within ₹${budgetLimit} where possible. Never exceed ₹${budgetLimit} without marking.`
@@ -7741,6 +7747,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     rawUrl: string,
     provider: CandidateRejection["provider"],
     urlSource: CandidateRejection["urlSource"],
+    pageTitle?: string,
   ): string | null => {
     const clean = cleanUrl(rawUrl);
     const retailer = getRetailerFromUrl(clean) || "Unknown";
@@ -7754,6 +7761,11 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
     }
     const canonical = getCanonicalProductUrl(clean);
     if (determineUrlType(canonical) !== "exact_product") {
+      // Not a product, but a listing/search page a search index actually returned may still be
+      // a relevant "more matching options" link. Relevance is decided by the caller.
+      if (urlSource === "search_index" && searchPageSink) {
+        searchPageSink.push({ url: clean, title: pageTitle });
+      }
       reject({
         provider, urlSource, retailer, url: canonical,
         reason: "Not an individual product page (category, listing or search URL)",
@@ -7861,7 +7873,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
       for (const res of tavilyResp.results || []) {
         if (candidateList.length >= 10) break;
 
-        const acceptedUrl = res.url ? acceptProductUrl(res.url, "tavily", "search_index") : null;
+        const acceptedUrl = res.url ? acceptProductUrl(res.url, "tavily", "search_index", res.title) : null;
         if (!acceptedUrl) {
           discovery.tavilyRejectedUrls.push(String(res.url ?? "").slice(0, 120));
         }
@@ -8112,7 +8124,7 @@ Strictly adhere to:
         for (const prod of parsedProducts) {
           const rawPageUrl = typeof prod.pageUrl === "string" ? prod.pageUrl : "";
           const citation = rawPageUrl ? citationByUrl.get(getCanonicalProductUrl(rawPageUrl)) : undefined;
-          const canonicalUrl = acceptProductUrl(rawPageUrl, "openai_web_search", citation ? "search_index" : "model_text");
+          const canonicalUrl = acceptProductUrl(rawPageUrl, "openai_web_search", citation ? "search_index" : "model_text", citation?.title);
           if (!canonicalUrl) {
             discovery.openaiRejectedUrls.push(rawPageUrl.slice(0, 120));
             continue;
@@ -8241,7 +8253,7 @@ Strictly adhere to:
         for (const cit of citations) {
           if (candidateList.length >= 12) break;
           if (seenCanonicalUrls.has(getCanonicalProductUrl(cit.url))) continue;
-          const acceptedCitationUrl = acceptProductUrl(cit.url, "openai_web_search", "search_index");
+          const acceptedCitationUrl = acceptProductUrl(cit.url, "openai_web_search", "search_index", cit.title);
           if (!acceptedCitationUrl) continue;
           const canonicalUrl = acceptedCitationUrl;
           const citTitle = cit.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
@@ -8626,6 +8638,27 @@ export function buildProductCacheKey(
 }
 
 /**
+ * Assembles one category section. Verified products stay exactly as verified; relevant
+ * store search/listing pages for the same item, category and audience are attached
+ * alongside them as "more matching options" (whether or not products were verified).
+ * Search links are typed `search_result` and are never mixed into `products`.
+ */
+export function buildProductGroup(
+  spec: RequirementSpec,
+  products: ProductResult[],
+  discoveredSearchPages: DiscoveredSearchPage[] = [],
+): ProductGroup {
+  const retailerSearchLinks = buildRelevantSearchLinks(spec, discoveredSearchPages);
+  return {
+    category: spec.category,
+    recommendedItemTitle: spec.itemTitle,
+    stylingRequirement: spec.stylingRequirement,
+    products,
+    retailerSearchLinks: retailerSearchLinks.length > 0 ? retailerSearchLinks : undefined,
+  };
+}
+
+/**
  * Searches and returns MULTIPLE verified shoppable products across retailers and price points
  * for a LookRecommendation and SkinTuneProfile.
  */
@@ -8680,29 +8713,11 @@ export async function searchProductsForLook(
 
     // Search alternatives for all requirements in parallel
     const alternativePromises = specsToSearch.map(async (spec) => {
-      const prods = await searchAlternativesForRequirement(spec, profile, budgetLimit, diagnostics, look);
-      return {
-        category: spec.category,
-        recommendedItemTitle: spec.itemTitle,
-        stylingRequirement: spec.stylingRequirement,
-        products: prods,
-        // Nothing verifiable: offer a direct search on the item's preferred stores instead.
-        // Built from the item's own gender/category/colour; these are store search pages,
-        // never presented as specific products.
-        retailerSearchLinks:
-          prods.length === 0
-            ? spec.preferredRetailers.slice(0, 4).map((retailer) => ({
-                retailer,
-                url: buildRetailerSearchUrl(retailer, {
-                  productName: spec.itemTitle,
-                  category: spec.category,
-                  subcategory: spec.itemSubcategory?.replace(/_/g, " "),
-                  gender: spec.targetGender,
-                  color: spec.dominantColor,
-                }),
-              }))
-            : undefined,
-      };
+      const discoveredSearchPages: DiscoveredSearchPage[] = [];
+      const prods = await searchAlternativesForRequirement(
+        spec, profile, budgetLimit, diagnostics, look, discoveredSearchPages,
+      );
+      return buildProductGroup(spec, prods, discoveredSearchPages);
     });
 
     const groupsRaw = await Promise.all(alternativePromises);

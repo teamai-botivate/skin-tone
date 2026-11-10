@@ -60,7 +60,7 @@ export function getOpenAIKeyDiagnostics() {
 
 function getValidTextModel(): string {
   const model = cleanEnv(process.env["OPENAI_TEXT_MODEL"]);
-  if (model && !model.includes("5.5") && (model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3"))) {
+  if (model && !model.includes("5") && (model.startsWith("gpt-") || model.startsWith("o1") || model.startsWith("o3"))) {
     return model;
   }
   return "gpt-4o-mini";
@@ -70,10 +70,16 @@ export const RECOMMENDATION_MODEL = getValidTextModel();
 
 function getValidImageModel(): string {
   const model = cleanEnv(process.env["OPENAI_IMAGE_MODEL"]);
-  if (model && model !== "dall-e-3") {
+  if (
+    model &&
+    !model.includes("flare") &&
+    !model.includes("2.5") &&
+    model !== "dall-e-3" &&
+    (model.startsWith("gpt-image-") || model === "chatgpt-image-latest")
+  ) {
     return model;
   }
-  return "gpt-image-2.5-flare";
+  return "gpt-image-2";
 }
 
 export const IMAGE_MODEL = getValidImageModel();

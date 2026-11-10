@@ -64,7 +64,7 @@ assert.equal(
   baseKey,
   "Reordering an order-insensitive color list must not bust the cache",
 );
-assert.ok(baseKey.startsWith("v10:"), "Cache key must carry the bumped cache version");
+assert.ok(baseKey.startsWith("v11:"), "Cache key must carry the bumped cache version");
 console.log("✓ Test 1 Passed");
 
 // -----------------------------------------------------------------------------

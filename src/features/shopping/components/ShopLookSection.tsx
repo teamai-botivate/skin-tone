@@ -32,6 +32,7 @@ import {
   compareProductsByPriceAscending,
   buildFallbackSearchUrl,
 } from '@/lib/retailer-urls';
+import { getGroupDisplayState, shouldShowEmptyState } from '@/lib/retailer-search-links';
 
 
 interface ShopLookSectionProps {
@@ -144,6 +145,9 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
     ...group,
     products: group.products.slice().sort(compareProductsByPriceAscending),
   }));
+
+  // Page-level empty state only when no section has verified products or relevant store links
+  const showEmptyState = shouldShowEmptyState(filteredProducts, filteredGroups);
 
   // A failure of the request itself (no response, timeout, signed out, server error),
   // as opposed to a provider/key problem reported by the server.
@@ -486,37 +490,58 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.products.length > 0 ? (
-                  group.products.map(renderProductCard)
-                ) : (
-                  <div className="col-span-full rounded-2xl border border-dashed border-border/80 bg-secondary/20 p-6 text-center">
-                    <p className="text-sm font-medium text-foreground">
-                      No verified match found on supported stores for &ldquo;{group.recommendedItemTitle}&rdquo;
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      We ensure only genuine, age-appropriate, and style-relevant pieces are shown. You can refresh products or search directly on supported stores.
-                    </p>
-                    {group.retailerSearchLinks && group.retailerSearchLinks.length > 0 && (
-                      <div className="mt-3 flex flex-wrap justify-center gap-2">
-                        {group.retailerSearchLinks.map((link) => (
-                          <a
-                            key={link.retailer}
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            data-testid={`link-store-search-${link.retailer}`}
-                            className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:border-primary/50"
-                          >
-                            Search on {link.retailer}
-                            <ExternalLink size={11} />
-                          </a>
-                        ))}
+              {(() => {
+                const displayState = getGroupDisplayState(group);
+                const links = group.retailerSearchLinks ?? [];
+                return (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {group.products.length > 0 && group.products.map(renderProductCard)}
+                      {displayState === 'empty' && (
+                        <div className="col-span-full rounded-2xl border border-dashed border-border/80 bg-secondary/20 p-6 text-center">
+                          <p className="text-sm font-medium text-foreground">
+                            No verified match found on supported stores for &ldquo;{group.recommendedItemTitle}&rdquo;
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            We ensure only genuine, age-appropriate, and style-relevant pieces are shown. You can refresh products to search again.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Relevant store searches: never product cards, never labelled as verified */}
+                    {links.length > 0 && (
+                      <div
+                        className="rounded-2xl border border-dashed border-border/80 bg-secondary/20 p-4"
+                        data-testid={`more-matching-options-${group.category}`}
+                      >
+                        <p className="text-sm font-medium text-foreground">More matching options</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {displayState === 'links_only'
+                            ? `Browse store results for “${group.recommendedItemTitle}” on supported stores.`
+                            : 'Browse more store results for this piece.'}{' '}
+                          These are store searches, not individually verified products.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {links.map((link) => (
+                            <a
+                              key={`${link.retailer}-${link.url}`}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid={`link-store-search-${link.retailer}`}
+                              className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-bold text-foreground transition hover:border-primary/50"
+                            >
+                              Search on {link.retailer}
+                              <ExternalLink size={11} />
+                            </a>
+                          ))}
+                        </div>
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
@@ -541,7 +566,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
       )}
 
       {/* Unavailable or empty state with full Diagnostic Panel */}
-      {!loading && filteredProducts.length === 0 && (
+      {!loading && showEmptyState && (
         <div className="mt-8 rounded-2xl border border-border/80 bg-secondary/30 p-6 sm:p-8" data-testid="empty-products">
           <div className="mx-auto max-w-xl text-center">
             <div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-card shadow-sm">

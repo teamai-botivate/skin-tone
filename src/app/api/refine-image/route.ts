@@ -9,6 +9,8 @@ import { getOpenAIClient, IMAGE_MODEL, RECOMMENDATION_MODEL } from "@/lib/openai
 import { logger } from "@/lib/logger";
 import { safeErrorResponse } from "@/lib/safe-error";
 
+export const maxDuration = 300;
+
 function buildRefinementPrompt(look: LookRecommendation, customization: string, hasOriginalPhoto: boolean): string {
   const parts = [
     hasOriginalPhoto
@@ -25,10 +27,11 @@ function buildRefinementPrompt(look: LookRecommendation, customization: string, 
 }
 
 function decodeDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  const trimmed = dataUrl.trim();
+  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,([\s\S]+)$/.exec(trimmed);
   if (!match) throw new Error("Not a valid base64 data URL");
   const [, mime, base64] = match;
-  return { mime, buffer: Buffer.from(base64, "base64") };
+  return { mime, buffer: Buffer.from(base64.replace(/\s+/g, ""), "base64") };
 }
 
 async function refineViaResponsesApi(

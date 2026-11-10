@@ -1,7 +1,7 @@
 import type { LookRecommendation, SkinTuneProfile } from "@/types";
 
 // Bump whenever the fingerprint inputs or the cached response shape change
-export const PRODUCT_CACHE_VERSION = "v10";
+export const PRODUCT_CACHE_VERSION = "v11";
 
 /**
  * Deterministic fingerprint of every input that materially affects product search:

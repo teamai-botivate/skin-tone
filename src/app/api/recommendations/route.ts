@@ -8,6 +8,8 @@ import { attachStyleIntent, generateLookRecommendations } from "@/lib/recommenda
 
 import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
 
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
   return await executePaidOperation(
     req,

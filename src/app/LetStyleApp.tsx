@@ -359,7 +359,7 @@ export function LetStyleApp() {
       .catch((err) => {
         if (isCurrent()) {
           refreshUser();
-          console.error('Styling recommendation failed:', err);
+          console.warn('Styling recommendation failed:', err);
           if (watchedJobIdRef.current) setActiveJobId(null);
           setGenerationError(extractErrorMessage(err));
         }

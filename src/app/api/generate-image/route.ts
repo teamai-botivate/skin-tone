@@ -8,6 +8,7 @@ import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
 // The prompt agent, provider calls and fallbacks live in
 // src/lib/server-image-generation.ts so the background job runner
 // (src/lib/generation-jobs.ts) reuses exactly the same pipeline.
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   return await executePaidOperation(

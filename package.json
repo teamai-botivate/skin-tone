@@ -17,6 +17,7 @@
     "test:mens": "npx tsx tests/mens-product-recommendations.test.ts",
     "test:mens-styling": "npx tsx tests/mens-styling-intelligence.test.ts",
     "test:mens-ai": "npx tsx tests/mens-ai-pipeline-integrity.test.ts",
+    "test:search-links": "npx tsx tests/search-link-fallback.test.ts",
     "bench:generation": "npx tsx scripts/benchmark-generation-pipeline.ts"
   },
   "dependencies": {

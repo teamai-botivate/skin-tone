@@ -137,9 +137,19 @@ export const ProductGroupSchema = z.object({
   recommendedItemTitle: z.string(),
   stylingRequirement: z.string(),
   products: z.array(ProductResultSchema),
-  // Store search pages for this item, offered when no product could be verified.
+  // Relevant store search pages for this item, shown alongside or instead of verified products.
   // These are searches on the store, never presented as specific products.
-  retailerSearchLinks: z.array(z.object({ retailer: z.string(), url: z.string() })).optional(),
+  retailerSearchLinks: z
+    .array(
+      z.object({
+        retailer: z.string(),
+        url: z.string(),
+        // Always a store search/listing page, never an exact verified product
+        urlType: z.literal("search_result").optional(),
+        source: z.enum(["discovered", "store_search"]).optional(),
+      }),
+    )
+    .optional(),
 });
 export type ProductGroup = z.infer<typeof ProductGroupSchema>;
 

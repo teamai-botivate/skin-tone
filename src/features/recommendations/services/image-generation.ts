@@ -101,7 +101,7 @@ export const generateLookImages = async (
   options?: GenerateLookImagesOptions,
 ): Promise<LookRecommendation[]> => {
   const { photoUrl, ...profileForRequest } = profile;
-  const maxRetries = options?.maxRetries ?? 2;
+  const maxRetries = options?.maxRetries ?? 3;
   const concurrency = options?.concurrency ?? 2;
   const currentLooks = [...recommendations];
 
@@ -116,8 +116,9 @@ export const generateLookImages = async (
     }
 
     if (attempt > 0) {
-      // Short bounded delay before retry (e.g. 800ms, 1600ms)
-      await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+      // Exponential backoff with jitter before retry (e.g. 1000ms, 2000ms, 4000ms)
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
     await runWithConcurrency(pendingIndices, concurrency, async (lookIdx) => {

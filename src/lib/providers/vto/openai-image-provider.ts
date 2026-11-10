@@ -6,10 +6,11 @@ import { buildAvatarPrompt } from "../../prompts/avatar-prompt";
 import { buildTryOnPrompt, writeTryOnAddendum } from "../../prompts/try-on-prompt";
 
 function decodeDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
+  const trimmed = dataUrl.trim();
+  const match = /^data:([^;,]+)(?:;[^,]*)?;base64,([\s\S]+)$/.exec(trimmed);
   if (!match) throw new Error("Not a valid base64 data URL");
   const [, mime, base64] = match;
-  return { mime, buffer: Buffer.from(base64, "base64") };
+  return { mime, buffer: Buffer.from(base64.replace(/\s+/g, ""), "base64") };
 }
 
 export class OpenAiImageProvider implements VtoProvider {

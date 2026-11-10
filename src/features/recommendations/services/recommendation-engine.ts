@@ -205,6 +205,7 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
     !isVacation &&
     (isGarba ||
       isWedding ||
+      allContext.includes('traditional') ||
       allContext.includes('diwali') ||
       allContext.includes('festive') ||
       allContext.includes('ethnic') ||

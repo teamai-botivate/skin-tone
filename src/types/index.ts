@@ -134,8 +134,14 @@ export type ProductGroup = {
   recommendedItemTitle: string;
   stylingRequirement: string;
   products: ProductResult[];
-  /** Store search pages for this item, offered when no product could be verified. */
-  retailerSearchLinks?: { retailer: string; url: string }[];
+  /** Relevant store search pages for this item ("More matching options"), alongside or instead of verified products. */
+  retailerSearchLinks?: {
+    retailer: string;
+    url: string;
+    /** Always a store search/listing page, never an exact verified product. */
+    urlType?: "search_result";
+    source?: "discovered" | "store_search";
+  }[];
 };
 
 export type ProductRecommendationsRequest = {

@@ -275,7 +275,15 @@ async function main() {
   }
   assert.ok(group!.products.every((p) => p.category === "jewellery"), "Only jewellery in the jewellery group");
   assert.ok(!fetchedPages.includes(MYNTRA_LISTING), "The listing page is rejected before any page fetch");
-  assert.equal(group!.retailerSearchLinks, undefined, "No store-search fallback when products exist");
+  // Relevant store searches now sit alongside verified products ("More matching options"),
+  // but are never product cards and never typed as exact products.
+  const searchLinks = group!.retailerSearchLinks ?? [];
+  assert.ok(searchLinks.length > 0, "Relevant store-search links are kept alongside verified products");
+  for (const link of searchLinks) {
+    assert.equal(link.urlType, "search_result", "A store-search link is never an exact product");
+    assert.ok(!byUrl.has(link.url), "A store-search link is never a product card");
+    assert.ok(!/heel|sandal|shoe/i.test(link.url), "No footwear listing in the jewellery section");
+  }
 
   const reasonFor = (url: string) => rejectionLogs.find((r) => r.url === url);
   for (const r of rejectionLogs) {
