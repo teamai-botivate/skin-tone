@@ -18,7 +18,7 @@ export const ACTIVE_JOB_STORAGE_KEY = 'letstyle-active-generation-job';
 /** Window event that makes the job watcher poll immediately (e.g. a push arrived). */
 export const JOB_POKE_EVENT = 'letstyle:job-poke';
 
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 1200;
 const MAX_POLL_INTERVAL_MS = 15000;
 
 type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
