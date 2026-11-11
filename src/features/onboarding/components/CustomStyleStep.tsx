@@ -5,17 +5,7 @@ import { StepShell } from '@/components/common/Shell';
 import { Intro } from '@/components/common/Intro';
 import { FooterActions } from '@/components/common/FooterActions';
 import { RotateCcw } from 'lucide-react';
-
-const defaultQuickTags = [
-  '👗 Latest Indo-Western look',
-  '✨ Minimal silver jewellery',
-  '🥻 Latest traditional look',
-  '🧥 Tailored power suit',
-  '🌸 Soft pastel ethnic',
-  '🌿 Comfortable breathable fabrics',
-  '💎 Statement jewellery',
-  '⚡ Modern sleek cuts',
-];
+import { quickTagsForProfile } from '../audience-selection';
 
 export function CustomStyleStep({
   profile,
@@ -35,6 +25,8 @@ export function CustomStyleStep({
   continueLabel?: string;
 }) {
   const value = profile.customStyleNotes ?? '';
+  // Prompts relevant to the audience chosen in Step 2
+  const quickTags = quickTagsForProfile(profile);
 
   const handleQuickTagClick = (tag: string) => {
     const cleanTag = tag.replace(/^[^\w\s\u0900-\u097F]+/, '').trim();
@@ -84,7 +76,7 @@ export function CustomStyleStep({
           </p>
 
           <div className="mb-4 flex flex-wrap gap-2">
-            {defaultQuickTags.map((tag) => {
+            {quickTags.map((tag) => {
               const cleanTag = tag.replace(/^[^\w\s\u0900-\u097F]+/, '').trim();
               const isSelected = value.includes(tag) || value.includes(cleanTag);
               return (

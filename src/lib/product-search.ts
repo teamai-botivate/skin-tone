@@ -530,12 +530,36 @@ export function checkProductConsistency(
 
   // 2. GARMENT SUBCATEGORY CHECK
   if (subcat ? subcat === "blazer" : cleanName.includes("blazer")) {
-    const isBlazer = /\b(blazer|suit|tuxedo|tailored jacket|formal jacket)\b/i.test(fullCheckText);
-    const isWrongType = /\b(trouser|trousers|pant|pants|skirt|dress|gown|saree|jeans|t-shirt|tshirt|top|camisole|shoe|heel|bag)\b/i.test(cleanName) && !isBlazer;
-    if (!isBlazer || isWrongType) {
+    const isBlazerInTitle = /\b(blazers?|suit\s*jackets?|suits?|tuxedos?|bandhgalas?|tailored\s*jackets?|formal\s*jackets?|dinner\s*jackets?)\b/i.test(cleanName);
+    const isCasualOrWinterJacket =
+      /\b(bombers?|puffers?|quilted|hoodies?|hooded|windbreakers?|fleece|varsity|track\s*jackets?|denim\s*jackets?|biker\s*jackets?|parkas?|down\s*jackets?)\b/i.test(cleanName);
+    const isWrongType =
+      /\b(trouser|trousers|pant|pants|skirt|dress|gown|saree|jeans|t-shirt|tshirt|top|camisole|shoe|heel|bag)\b/i.test(cleanName) &&
+      !/\b(blazers?|suit\s*jackets?|suits?|tuxedos?|bandhgalas?)\b/i.test(cleanName);
+    const isWrongUrl =
+      /(?:\/bombers?\/|\/puffers?\/|\/hoodies?\/|\/windbreakers?\/|\/track-jackets?\/|\/t-shirts?\/|\/jeans\/|\/shoes?\/)/i.test(urlStr);
+
+    if (!isBlazerInTitle || isCasualOrWinterJacket || isWrongType || isWrongUrl) {
       return {
         isConsistent: false,
         reason: `Subcategory is Blazer, but item does not match blazer type: ${productName} (${urlStr})`,
+      };
+    }
+  } else if (
+    subcat === "waistcoat" ||
+    subcat === "vest" ||
+    (requiredItemTitle && /\b(waistcoats?|vests?|gilets?)\b/i.test(requiredItemTitle) && !/\b(jacket|blazer)\b/i.test(requiredItemTitle))
+  ) {
+    const isWaistcoatInTitle = /\b(waistcoats?|vests?|gilets?|bundis?|nehru\s*waistcoat|waistcoat\s*set|vest\s*set|suit\s*vest)\b/i.test(cleanName);
+    const isContradictory =
+      /\b(bombers?|puffers?|quilted|hoodies?|hooded|windbreakers?|fleece|varsity|track\s*jackets?|denim\s*jackets?|biker\s*jackets?|parkas?|trousers?|pants?|jeans|shorts?|dresses?|sarees?|shoes?|books?|toys?)\b/i.test(cleanName) &&
+      !/\b(waistcoat\s*set|vest\s*set)\b/i.test(cleanName);
+    const isWrongUrl = /(?:\/bombers?\/|\/puffers?\/|\/hoodies?\/|\/windbreakers?\/|\/jeans\/|\/shoes?\/)/i.test(urlStr);
+
+    if (!isWaistcoatInTitle || isContradictory || isWrongUrl) {
+      return {
+        isConsistent: false,
+        reason: `Subcategory is Waistcoat / Vest, but item '${productName}' is not a valid waistcoat/vest (${urlStr})`,
       };
     }
   } else if (subcat === "suit") {
@@ -732,8 +756,16 @@ export function checkProductConsistency(
       };
     }
   } else if (subcat === "jacket") {
-    const isJacket = /\b(jackets?|coats?|overshirts?|shrugs?|cardigans?|waistcoats?|vests?|bombers?|puffers?)\b/i.test(cleanName);
+    const isJacket = /\b(jackets?|coats?|overshirts?|shrugs?|cardigans?|bombers?|puffers?)\b/i.test(cleanName);
     const isWrongType = /\b(trousers?|pants?|jeans|shorts?|shoes?|dresses?|sarees?|kurtas?|books?)\b/i.test(cleanName) && !isJacket;
+    const isFormalOccasion = expectedOccasion && /\b(formal|wedding|party|special\s*event|ceremony|reception|evening)\b/i.test(expectedOccasion);
+    const isHeavyCasualOuterwear = /\b(puffer|quilted|hoodie|hooded|windbreaker|fleece|down\s*jacket)\b/i.test(cleanName);
+    if (isFormalOccasion && isHeavyCasualOuterwear) {
+      return {
+        isConsistent: false,
+        reason: `Occasion is '${expectedOccasion}', but jacket is heavy casual/winter outerwear: ${productName} (${urlStr})`,
+      };
+    }
     if (!isJacket || isWrongType) {
       return {
         isConsistent: false,
@@ -3027,6 +3059,12 @@ export function classifyMenGarment(
     return { type: "bottom", subcat: "ethnic_bottom" };
   }
   if (/\bco-?ords?\b/.test(n)) return { type: "one_piece", subcat: "men_outfit" };
+  if (/\b(waistcoats?|vests?|gilets?)\b/.test(n) && !/\b(jacket|blazer)\b/.test(n)) {
+    return { type: "layer", subcat: "waistcoat" };
+  }
+  if (/\b(blazers?)\b/.test(n)) {
+    return { type: "layer", subcat: "blazer" };
+  }
   return null;
 }
 
@@ -3038,7 +3076,8 @@ const MEN_SUBCAT_NOUNS: Record<string, { present: RegExp; noun: string }> = {
   trousers: { present: /\b(trousers?|pants?|chinos?|jeans|joggers?|cargos?|slacks)\b/i, noun: "trousers" },
   shorts: { present: /\b(shorts?|bermudas?)\b/i, noun: "shorts" },
   blazer: { present: /\b(blazers?)\b/i, noun: "blazer" },
-  jacket: { present: /\b(jackets?|coats?|overshirts?|waistcoats?|vests?|cardigans?|shrugs?|bombers?|overcoats?)\b/i, noun: "jacket" },
+  waistcoat: { present: /\b(waistcoats?|vests?|gilets?)\b/i, noun: "waistcoat" },
+  jacket: { present: /\b(jackets?|coats?|overshirts?|cardigans?|shrugs?|overcoats?)\b/i, noun: "jacket" },
   kurta: { present: /\b(kurtas?|pathani)\b/i, noun: "kurta" },
   sherwani: { present: /\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i, noun: "sherwani" },
   suit: { present: /\b(suits?|tuxedos?)\b/i, noun: "suit" },
@@ -3155,6 +3194,12 @@ export function decomposeOutfitGarments(
 
   const isLayer = (t: string) =>
     /\b(blazer|jacket|coat|shrug|cardigan|vest|waistcoat|nehru\s*jacket|overcoat|trench|bomber)\b/i.test(t);
+  const getLayerSubcat = (t: string) => {
+    const lower = t.toLowerCase();
+    if (/\bblazer\b/i.test(lower)) return "blazer";
+    if (/\b(waistcoats?|vests?|gilets?)\b/i.test(lower)) return "waistcoat";
+    return "jacket";
+  };
   const isBottom = (t: string) =>
     /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|churidars?|joggers?|culottes?)\b/i.test(t);
   const isTop = (t: string) =>
@@ -3202,7 +3247,7 @@ export function decomposeOutfitGarments(
         subcat = /\b(nehru\s*jacket|modi\s*jacket)\b/i.test(n) ? "nehru_jacket" : "bundi";
       } else if (c.includes("layer") || c.includes("outer") || isLayer(n)) {
         type = "layer";
-        subcat = n.toLowerCase().includes("blazer") ? "blazer" : "jacket";
+        subcat = getLayerSubcat(n);
       } else if (c.includes("bottom") || isBottom(n)) {
         type = "bottom";
         if (/\b(shorts?|bermudas?)\b/i.test(n)) subcat = "shorts";
@@ -3350,9 +3395,10 @@ export function decomposeOutfitGarments(
           }
         } else if (isLayer(cleanClause) && !foundTypes.has("layer")) {
           foundTypes.add("layer");
+          const layerSub = getLayerSubcat(cleanClause);
           detectedGarments.push({
             type: "layer",
-            subcat: /\bblazer\b/i.test(cleanClause) ? "blazer" : "jacket",
+            subcat: layerSub,
             rawTitle: cleanClause,
           });
         } else if (isBottom(cleanClause) && !foundTypes.has("bottom")) {
@@ -3406,10 +3452,16 @@ export function decomposeOutfitGarments(
           const hasLayer = isLayer(lowerText);
 
           if (hasLayer) {
+            const layerSubcat = getLayerSubcat(lowerText);
             detectedGarments.push({
               type: "layer",
-              subcat: /\bblazer\b/i.test(lowerText) ? "blazer" : "jacket",
-              rawTitle: `${dominantHumanColor} Tailored Blazer`,
+              subcat: layerSubcat,
+              rawTitle:
+                layerSubcat === "waistcoat"
+                  ? `${dominantHumanColor} Tailored Waistcoat`
+                  : layerSubcat === "blazer"
+                    ? `${dominantHumanColor} Tailored Blazer`
+                    : `${dominantHumanColor} Tailored Jacket`,
             });
           }
           if (hasTop) {
@@ -3449,12 +3501,18 @@ export function decomposeOutfitGarments(
       /\b((?:[a-zA-Z-]+\s+){0,3}(?:blazer|suit\s*jacket|jacket|coat|overcoat|trench(?:\s*coat)?|shrug|cardigan|waistcoat|vest|nehru\s*jacket))\b/i,
     );
     const layerPhrase = layerMatch ? layerMatch[1].trim() : "Tailored Blazer";
-    const layerSubcat = /\bblazer\b/i.test(layerPhrase) ? "blazer" : "jacket";
+    const layerSubcat = getLayerSubcat(layerPhrase);
     const layerColor = resolveHumanColor(layerPhrase, dominantHumanColor);
     detectedGarments.unshift({
       type: "layer",
       subcat: layerSubcat,
-      rawTitle: cleanOutfitGarmentTitle(layerPhrase, targetGender) || `${layerColor} Tailored Blazer`,
+      rawTitle:
+        cleanOutfitGarmentTitle(layerPhrase, targetGender) ||
+        (layerSubcat === "waistcoat"
+          ? `${layerColor} Tailored Waistcoat`
+          : layerSubcat === "blazer"
+            ? `${layerColor} Tailored Blazer`
+            : `${layerColor} Tailored Jacket`),
       color: layerColor,
     });
   }
@@ -3508,6 +3566,25 @@ export function decomposeOutfitGarments(
       }
     }
 
+    // For inner tops/shirts under a coordinated outfit/vest set/suit:
+    // If candidate color is an unrequested contrasting shade that doesn't match loved colors or the look's palette,
+    // harmonize it with an elegant neutral (Cream/White) or the look's dominant color.
+    if ((g.subcat === "shirt" || g.subcat === "inner_top") && color) {
+      const lovedList = (profile.colorsLove || []).map((c) => c.toLowerCase());
+      const paletteList = (look.palette || []).map((c) => c.toLowerCase());
+      const lowerColor = color.toLowerCase();
+      const isLoved = lovedList.some((l) => lowerColor.includes(l) || l.includes(lowerColor));
+      const isPalette = paletteList.some((p) => lowerColor.includes(p) || p.includes(lowerColor));
+      const isOutfitMentioned = outfitText.toLowerCase().includes(lowerColor);
+      const isNeutral = /\b(white|off-white|cream|ivory|ecru|beige|classic|neutral)\b/i.test(lowerColor);
+      const isSameAsDominant = lowerColor.includes(dominantHumanColor.toLowerCase()) || dominantHumanColor.toLowerCase().includes(lowerColor);
+
+      if (!isLoved && !isPalette && !isOutfitMentioned && !isNeutral && !isSameAsDominant) {
+        const isWarmLook = /\b(yellow|butter|gold|mustard|orange|peach|rose|pink|cream|ivory)\b/i.test(dominantHumanColor);
+        color = isWarmLook ? "Cream" : "White";
+      }
+    }
+
     // Format human-friendly title with proper demographic prefix
     let title = rawClean;
     if (ctx.isBoy && !/\bboys?\b/i.test(title)) {
@@ -3533,6 +3610,7 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "top") itemQueryKeyword = rawClean.toLowerCase().includes("tee") || rawClean.toLowerCase().includes("t-shirt") ? "t-shirt tee" : "top";
     else if (g.subcat === "trousers") itemQueryKeyword = "tailored trousers pants";
     else if (g.subcat === "blazer") itemQueryKeyword = "tailored formal blazer";
+    else if (g.subcat === "waistcoat") itemQueryKeyword = "tailored waistcoat vest";
     // The saree's own name carries its weave, fabric and construction; a silk blouse
     // elsewhere in the outfit must not turn a cotton saree into a "silk saree" search.
     else if (g.subcat === "saree") itemQueryKeyword = rawClean;
@@ -3564,7 +3642,9 @@ export function decomposeOutfitGarments(
                     ? /\bdupattas?\b/i.test(rawClean) ? "festive dupatta stole" : "festive stole"
                     : g.subcat === "bundi" || g.subcat === "nehru_jacket"
                       ? "festive nehru jacket bundi"
-                      : itemQueryKeyword,
+                      : g.subcat === "waistcoat"
+                        ? "waistcoat vest"
+                        : itemQueryKeyword,
             ...preferredRetailers.slice(0, 3),
           ]
             .filter(Boolean)

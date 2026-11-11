@@ -84,6 +84,128 @@ export const styleOptions: SelectOption[] = [
   { label: 'Androgynous & Fluid', icon: '⚖️', description: 'Clean gender-fluid lines & neutral tailoring.' },
 ];
 
+// Step 7 style worlds per audience. `styleOptions` above stays the list for a custom
+// audience that matches none of these (see getStyleOptionsForAudience).
+export type OnboardingAudience = 'women' | 'men' | 'boys' | 'girls' | 'kids' | 'neutral';
+
+const womenStyleOptions: SelectOption[] = [
+  { label: 'Elegant', icon: '✨', description: 'Polished, graceful cuts & refined balance.' },
+  { label: 'Glamorous', icon: '🪞', description: 'High-shine sparkle, drama & red-carpet allure.' },
+  { label: 'Minimal', icon: '◻️', description: 'Clean lines, neutral tones & zero clutter.' },
+  { label: 'Romantic & Soft', icon: '🌸', description: 'Dreamy pastels, delicate ruffles & feminine drape.' },
+  { label: 'Old Money', icon: '🍸', description: 'Quiet luxury, understated neutrals & heritage quality.' },
+  { label: 'Indo-Western', icon: '🪡', description: 'Ethnic drapes and textiles blended with modern silhouettes.' },
+  { label: 'Traditional', icon: '🪷', description: 'Authentic ethnic weaves, sarees, lehengas & cultural craft.' },
+  { label: 'Modern', icon: '⚡', description: 'Sharp current trends, crisp tailoring & fresh cuts.' },
+];
+
+const menStyleOptions: SelectOption[] = [
+  { label: 'Classic & Timeless', icon: '🏛️', description: 'Enduring essentials, clean fits & versatile colours.' },
+  { label: 'Smart Casual', icon: '👔', description: 'Relaxed tailoring and refined texture without a full suit.' },
+  { label: 'Formal & Tailored', icon: '🤵', description: 'Structured suiting, crisp shirting & refined leather shoes.' },
+  { label: 'Streetwear', icon: '🛹', description: 'Relaxed urban cuts, layering & sneaker-led looks.' },
+  { label: 'Minimal', icon: '◻️', description: 'Clean lines, tonal palettes & quiet details.' },
+  { label: 'Old Money', icon: '🍸', description: 'Understated heritage quality, natural fibres & no logos.' },
+  { label: 'Traditional', icon: '🪷', description: 'Kurtas, sherwanis, bandhgalas & heritage textiles.' },
+  { label: 'Indo-Western', icon: '🪡', description: 'Ethnic cuts and textiles blended with modern tailoring.' },
+];
+
+const boysStyleOptions: SelectOption[] = [
+  { label: 'Cute & Playful', icon: '🎈', description: 'Fun prints, bright colours & easy pieces.' },
+  { label: 'Smart Casual', icon: '👕', description: 'Neat shirts and polos with comfy bottoms.' },
+  { label: 'Traditional & Festive', icon: '🪔', description: 'Kurta sets, bundis & festive ethnic wear.' },
+  { label: 'Mini Gentleman', icon: '🎩', description: 'Waistcoats, smart shirts & dressy little details.' },
+  { label: 'Comfortable Everyday', icon: '🧸', description: 'Soft, breathable clothes for play and school days.' },
+  { label: 'Sporty', icon: '⚽', description: 'Active tees, joggers & sneakers.' },
+];
+
+const girlsStyleOptions: SelectOption[] = [
+  { label: 'Cute & Playful', icon: '🎈', description: 'Fun prints, bright colours & easy pieces.' },
+  { label: 'Princess & Party', icon: '👑', description: 'Twirly party dresses, tulle & sparkle.' },
+  { label: 'Floral & Pastel', icon: '🌸', description: 'Soft pastels, florals & pretty details.' },
+  { label: 'Traditional & Festive', icon: '🪔', description: 'Lehengas, sharara sets & festive ethnic wear.' },
+  { label: 'Casual & Comfy', icon: '🧸', description: 'Soft, breathable everyday clothes.' },
+  { label: 'Modern', icon: '⚡', description: 'Trendy co-ords and fresh cuts.' },
+];
+
+const uniqueByLabel = (lists: SelectOption[][]): SelectOption[] => {
+  const seen = new Set<string>();
+  return lists.flat().filter((o) => (seen.has(o.label) ? false : (seen.add(o.label), true)));
+};
+
+export const audienceStyleOptions: Record<OnboardingAudience, SelectOption[]> = {
+  women: womenStyleOptions,
+  men: menStyleOptions,
+  boys: boysStyleOptions,
+  girls: girlsStyleOptions,
+  // A child without a stated gender gets both kids lists
+  kids: uniqueByLabel([boysStyleOptions, girlsStyleOptions]),
+  neutral: styleOptions,
+};
+
+// Step 8 quick prompts per audience. They are starting points the user can tap, never
+// recommendations; the user's own words in the text box always come first.
+const womenQuickTags = [
+  '🥻 Latest traditional saree look',
+  '👗 Latest Indo-Western look',
+  '🌸 Soft pastel ethnic',
+  '✨ Minimal silver jewellery',
+  '💎 Statement jewellery',
+  '🧥 Tailored power suit',
+  '⚡ Modern sleek cuts',
+  '🌿 Comfortable breathable fabrics',
+];
+
+const menQuickTags = [
+  '🪷 Classic kurta set',
+  '🤵 Bandhgala or Indo-Western jacket',
+  '🧥 Sharp tailored suit',
+  '👔 Smart casual layers',
+  '🛹 Clean streetwear',
+  '⌚ Minimal watch & accessories',
+  '🍸 Old-money neutrals',
+  '🌿 Breathable linen & cotton',
+];
+
+const boysQuickTags = [
+  '🪔 Festive kurta-pyjama set',
+  '🎩 Mini gentleman waistcoat',
+  '👕 Comfy tee & shorts',
+  '⚽ Sporty joggers & sneakers',
+  '🎈 Fun bright prints',
+  '🌿 Soft breathable cotton',
+];
+
+const girlsQuickTags = [
+  '👑 Twirly party dress',
+  '🪔 Festive lehenga or sharara set',
+  '🌸 Floral pastel dress',
+  '🧸 Comfy everyday co-ord',
+  '🎀 Cute hair accessories',
+  '🌿 Soft breathable cotton',
+];
+
+const uniqueTags = (lists: string[][]): string[] => [...new Set(lists.flat())];
+
+export const audienceQuickTags: Record<OnboardingAudience, string[]> = {
+  women: womenQuickTags,
+  men: menQuickTags,
+  boys: boysQuickTags,
+  girls: girlsQuickTags,
+  kids: uniqueTags([boysQuickTags, girlsQuickTags]),
+  neutral: uniqueTags([womenQuickTags, menQuickTags]),
+};
+
+export const getStyleOptionsForAudience = (audience: OnboardingAudience): SelectOption[] =>
+  audienceStyleOptions[audience];
+
+export const getQuickTagsForAudience = (audience: OnboardingAudience): string[] => audienceQuickTags[audience];
+
+/** Every preset Step 7 label of any audience (anything else in profile.style is the user's own text). */
+export const allPresetStyleLabels: ReadonlySet<string> = new Set(
+  Object.values(audienceStyleOptions).flatMap((list) => list.map((o) => o.label)),
+);
+
 export const colorLoveOptions: SelectOption[] = [
   { label: 'Terracotta', color: '#C26A51' },
   { label: 'Cream', color: '#FDFBF7' },

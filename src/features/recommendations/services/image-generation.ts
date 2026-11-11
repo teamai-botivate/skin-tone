@@ -52,12 +52,46 @@ export const generateOneLookImage = async (
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => null);
-    throw new Error(errData?.error || errData?.message || `Image generation request failed: ${res.status}`);
+    throw new ImageRequestError(
+      errData?.error || errData?.message || `Image generation request failed: ${res.status}`,
+      res.status,
+    );
   }
   const data = (await res.json()) as { look: LookRecommendation };
   if (!data.look) throw new Error('Empty image generation response');
   return data.look;
 };
+
+/** A non-2xx answer from /api/generate-image, keeping the HTTP status for retry decisions. */
+export class ImageRequestError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ImageRequestError';
+    this.status = status;
+  }
+}
+
+/**
+ * Whether another request for this look could succeed. Network failures,
+ * timeouts, rate limits and server errors are transient, as is a moderation
+ * block (judged per generated image). Any other 4xx (content policy, invalid
+ * input, signed out) fails the same way every time, so retrying it only
+ * repeats a slow paid call.
+ */
+export function isTransientImageFailure(err: unknown): boolean {
+  if (!(err instanceof ImageRequestError)) return true;
+  const { status } = err;
+  if (status === 408 || status === 409 || status === 429 || status >= 500) return true;
+  return status === 400 && /moderation/i.test(err.message);
+}
+
+/** Exponential backoff with jitter before retry `attempt` (1-based): ~1s, 2s, 4s, capped at 8s. */
+export function imageRetryDelayMs(attempt: number, random: () => number = Math.random): number {
+  if (attempt <= 0) return 0;
+  const base = Math.min(1000 * 2 ** (attempt - 1), 8000);
+  return Math.round(base * (0.8 + random() * 0.4));
+}
 
 import { hasRealImage } from '../components/LookVisual';
 
@@ -84,13 +118,19 @@ export interface GenerateLookImagesOptions {
   maxRetries?: number;
   concurrency?: number;
   onProgress?: (looks: LookRecommendation[]) => void;
+  /** Injected in tests to avoid real waits. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
  * Generate visuals for a set of recommendations.
  * - Only requests images for looks that do not yet have a valid, usable image.
- * - Concurrency is controlled (default 2) to prevent provider rate-limit spikes (429).
- * - Bounded retry count (default 2 retries) retrying ONLY failed requests.
+ * - All five looks render at once by default, matching the background job
+ *   runner; 429s are retried server-side by the OpenAI SDK honouring Retry-After.
+ * - Each look retries on its own, so a failed look never waits for the
+ *   slowest look of a "wave" before trying again.
+ * - Only transient failures are retried (default up to 3 retries) with
+ *   exponential backoff; a permanent rejection fails fast.
  * - Successfully generated images are preserved and never regenerated.
  * - Ensures all requested looks have usable images before presenting completion.
  */
@@ -102,32 +142,24 @@ export const generateLookImages = async (
 ): Promise<LookRecommendation[]> => {
   const { photoUrl, ...profileForRequest } = profile;
   const maxRetries = options?.maxRetries ?? 3;
-  const concurrency = options?.concurrency ?? 2;
+  const concurrency = options?.concurrency ?? 5;
+  const sleep = options?.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const currentLooks = [...recommendations];
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    // Find only the looks that still need a real image
-    const pendingIndices = currentLooks
-      .map((look, idx) => (!hasRealImage(look.imageUrl) ? idx : -1))
-      .filter((idx) => idx !== -1);
+  // Only the looks that still need a real image
+  const pendingIndices = currentLooks
+    .map((look, idx) => (!hasRealImage(look.imageUrl) ? idx : -1))
+    .filter((idx) => idx !== -1);
 
-    if (pendingIndices.length === 0) {
-      break;
-    }
+  await runWithConcurrency(pendingIndices, concurrency, async (lookIdx) => {
+    const look = currentLooks[lookIdx];
+    const siblingVibes = currentLooks
+      .filter((other) => other.id !== look.id)
+      .map((other) => other.vibe)
+      .filter((vibe): vibe is string => Boolean(vibe));
 
-    if (attempt > 0) {
-      // Exponential backoff with jitter before retry (e.g. 1000ms, 2000ms, 4000ms)
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 4000);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-
-    await runWithConcurrency(pendingIndices, concurrency, async (lookIdx) => {
-      const look = currentLooks[lookIdx];
-      const siblingVibes = currentLooks
-        .filter((other) => other.id !== look.id)
-        .map((other) => other.vibe)
-        .filter((vibe): vibe is string => Boolean(vibe));
-
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) await sleep(imageRetryDelayMs(attempt));
       try {
         const updated = await generateOneLookImage(
           look,
@@ -139,12 +171,18 @@ export const generateLookImages = async (
         if (hasRealImage(updated.imageUrl)) {
           currentLooks[lookIdx] = updated;
           options?.onProgress?.([...currentLooks]);
+          return;
         }
       } catch (err) {
-        console.warn(`Image generation attempt ${attempt + 1} failed for ${look.id}:`, err);
+        const transient = isTransientImageFailure(err);
+        console.warn(
+          `Image generation attempt ${attempt + 1} failed for ${look.id}${transient ? '' : ' (not retryable)'}:`,
+          err,
+        );
+        if (!transient) return;
       }
-    });
-  }
+    }
+  });
 
   // Ensure all looks have usable images before presenting result
   const missing = currentLooks.filter((l) => !hasRealImage(l.imageUrl));

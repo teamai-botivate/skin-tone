@@ -6,3 +6,10 @@ export { SectionStep } from './components/SectionStep';
 export { CustomStyleStep } from './components/CustomStyleStep';
 export { SingleChoiceStep, MultiChoiceStep } from './components/SingleChoiceStep';
 export * from './data/options';
+export {
+  applyAudienceSelection,
+  getOnboardingAudience,
+  quickTagsForProfile,
+  repairStoredAudience,
+  styleOptionsForProfile,
+} from './audience-selection';

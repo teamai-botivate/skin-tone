@@ -8,6 +8,7 @@ import { attachStyleIntent, generateLookRecommendations } from "./recommendation
 import {
   buildLookImagePrompt,
   getPrimaryRenderError,
+  isModerationBlocked,
   renderLookImage,
   type LookImagePrompt,
 } from "./server-image-generation";
@@ -156,6 +157,20 @@ function isRetryableProviderError(err: unknown): boolean {
 function isRetryableRenderError(err: unknown): boolean {
   const primary = getPrimaryRenderError(err);
   return isRetryableProviderError(err) || (primary !== undefined && isRetryableProviderError(primary));
+}
+
+/**
+ * Wait before re-attempting a look image. Only retryable failures get here.
+ * A moderation block is about the image that came out, not provider load,
+ * so the next render starts right away; transient failures (rate limits,
+ * 5xx, dropped connections) back off exponentially with jitter so a
+ * struggling provider isn't hammered by five looks at once.
+ */
+export function renderRetryDelayMs(attempt: number, err: unknown, random: () => number = Math.random): number {
+  if (attempt <= 0) return 0;
+  if (isModerationBlocked(err)) return 0;
+  const base = Math.min(1000 * 2 ** (attempt - 1), 8000);
+  return Math.round(base * (0.8 + random() * 0.4));
 }
 
 /** Awaits `promise`, rejecting early if `signal` aborts first. */
@@ -700,9 +715,12 @@ export async function runGenerationJob(
     if (remainingMs() >= imageTimeoutMs() || stepsStarted === 0) pending.forEach(preparePrompt);
 
     const renderOne = async (look: LookRecommendation) => {
+      let lastErr: unknown;
       for (let attempt = 0; attempt < IMAGE_ATTEMPTS_PER_RUN; attempt++) {
         if (stoppedForBudget || doomed) return;
-        if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 800));
+        const retryDelay = renderRetryDelayMs(attempt, lastErr);
+        if (retryDelay > 0) await new Promise((r) => setTimeout(r, retryDelay));
+        if (stoppedForBudget || doomed) return;
         const attemptStartedAt = Date.now();
         try {
           const imageUrl = await runStep(imageTimeoutMs(), async (signal) => {
@@ -749,6 +767,7 @@ export async function runGenerationJob(
             return;
           }
           if (doomed) return;
+          lastErr = err;
           const retryable = isRetryableRenderError(err);
           logger.warn(
             { err, jobId, lookId: look.id, attempt, retryable, attemptMs: Date.now() - attemptStartedAt },

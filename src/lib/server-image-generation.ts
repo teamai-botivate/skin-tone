@@ -145,7 +145,7 @@ async function writeStylingAddendum(
           content: [
             {
               type: "text",
-              text: `Subject Demographic: ${demographicLabel} (Age group: ${profile.ageGroup || "child"}). Look to render on this person: "${look.title}" — ${look.note} Outfit "${look.outfit}" (${look.outfitColor}), footwear "${look.footwear}", jewellery "${look.jewellery}", hairstyle "${look.hairstyle}", makeup "${look.makeup}", accessories "${look.accessories}". Why this look was chosen: ${look.reasoning.join(" ")}${look.vibe ? ` This look's intended vibe: "${look.vibe}".` : ""}${look.personaEnergy ? ` Photographer's energy brief for this look: ${look.personaEnergy}` : ""} Occasion: ${context.occasion || "everyday"}.${formatStyleIntent(look) ? ` ${formatStyleIntent(look)}` : ""}${context.details ? ` Additional context: ${context.details}` : ""} Person's stated pronouns: ${profile.pronouns || "not specified"}, build: ${profile.bodyBuild || "not specified"}, fit preference: ${profile.fit || "not specified"}.${siblingVibes.length ? ` This person is getting ${siblingVibes.length + 1} looks generated in this same shoot. The OTHER looks' vibes are: ${siblingVibes.join(", ")}. Your expression, pose, body language, and setting for THIS look must be clearly and obviously different from all of those — do not converge on a similar "safe" default.` : ""} Study their actual face in the photo and direct this exact full-length head-to-toe shoot from scratch showing the complete outfit down to the footwear on their feet and jewellery, honoring the vibe/energy brief above but translated onto this specific real face — do not just restate the brief, show how it looks on THIS person. Decide a setting/background genuinely fitting this occasion (for vacation or beach settings, choose a bright, breezy resort or coastal environment; strictly avoid formal office or heavy ethnic backdrops unless explicitly fitting), describe exactly how the new hairstyle ("${look.hairstyle}") should render on their actual head shape and hair as seen in the photo, and give concrete direction on what will make this exact person look genuinely great in this exact look.`,
+              text: `Subject Demographic: ${demographicLabel} (Age group: ${ctx.ageGroup || (ctx.isKids ? "child" : "adult")}). Look to render on this person: "${look.title}" — ${look.note} Outfit "${look.outfit}" (${look.outfitColor}), footwear "${look.footwear}", jewellery "${look.jewellery}", hairstyle "${look.hairstyle}", makeup "${look.makeup}", accessories "${look.accessories}". Why this look was chosen: ${look.reasoning.join(" ")}${look.vibe ? ` This look's intended vibe: "${look.vibe}".` : ""}${look.personaEnergy ? ` Photographer's energy brief for this look: ${look.personaEnergy}` : ""} Occasion: ${context.occasion || "everyday"}.${formatStyleIntent(look) ? ` ${formatStyleIntent(look)}` : ""}${context.details ? ` Additional context: ${context.details}` : ""} Person's stated pronouns: ${profile.pronouns || "not specified"}, build: ${profile.bodyBuild || "not specified"}, fit preference: ${profile.fit || "not specified"}.${siblingVibes.length ? ` This person is getting ${siblingVibes.length + 1} looks generated in this same shoot. The OTHER looks' vibes are: ${siblingVibes.join(", ")}. Your expression, pose, body language, and setting for THIS look must be clearly and obviously different from all of those — do not converge on a similar "safe" default.` : ""} Study their actual face in the photo and direct this exact full-length head-to-toe shoot from scratch showing the complete outfit down to the footwear on their feet and jewellery, honoring the vibe/energy brief above but translated onto this specific real face — do not just restate the brief, show how it looks on THIS person. Decide a setting/background genuinely fitting this occasion (for vacation or beach settings, choose a bright, breezy resort or coastal environment; strictly avoid formal office or heavy ethnic backdrops unless explicitly fitting), describe exactly how the new hairstyle ("${look.hairstyle}") should render on their actual head shape and hair as seen in the photo, and give concrete direction on what will make this exact person look genuinely great in this exact look.`,
             },
             { type: "image_url", image_url: { url: photoUrl } },
           ],
@@ -348,6 +348,11 @@ export function getPrimaryRenderError(err: unknown): unknown {
   return typeof err === "object" && err !== null ? primaryRenderErrors.get(err) : undefined;
 }
 
+/** True for a provider error saying this particular generated image was blocked by moderation. */
+export function isModerationBlocked(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "moderation_blocked";
+}
+
 /** Step 2 of a look image: renders `prompt` with the exact same provider settings and fallbacks. */
 export async function renderLookImage({
   lookId,
@@ -369,6 +374,11 @@ export async function renderLookImage({
     } catch (responsesApiErr) {
       // Out of time: the fallback would only be cut short too.
       if (requestOptions?.signal?.aborted) throw responsesApiErr;
+      // A moderation block is judged per generated image, so a fresh primary
+      // render can pass. The images.edit fallback runs with the provider's
+      // default (stricter) moderation and weaker identity preservation, so
+      // trying it here only burns a slow paid call before the retry anyway.
+      if (isModerationBlocked(responsesApiErr)) throw responsesApiErr;
       logger.warn(
         { err: responsesApiErr, lookId },
         "Responses API image edit failed, falling back to images.edit",

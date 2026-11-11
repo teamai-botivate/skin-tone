@@ -21,10 +21,11 @@ export const SYSTEM_PROMPT = `You are LetStyle's styling engine. Given a user's 
 
 STEP 1 — INTERPRET THE REQUEST (fill "styleBrief" before writing any look):
 - Read the user's own styling request word by word. It is the most specific and most recent input: any occasion, theme, aesthetic, garment preference, fabric or comfort need, cultural preference, or exclusion stated there is a REQUIREMENT.
-- Selected options (occasion, style worlds, impression) may be outdated leftovers from an earlier session. Use them where they are consistent with the request; where they conflict, the user's own request wins. Record each conflict and how you resolved it in "resolvedConflicts".
+- The style worlds were chosen by the user in this session and are intentional preferences, not leftovers: every look must express them together with the request. The request refines them — garments, fabrics, accessories, colours, comfort needs or a general mood (such as modern, minimal or sleek) are expressed WITHIN the selected style worlds — and overrides a selected style world only where it explicitly rules that style out (e.g. "no ethnic wear", "western only").
+- Other selected options (occasion, impression) may be outdated leftovers from an earlier session. Use them where they are consistent with the request; where they conflict, the user's own request wins. Record each conflict and how you resolved it in "resolvedConflicts".
 - Decide the effective occasion and the theme/aesthetic from everything the user provided. Never assume an occasion or theme the user did not express.
-- Decide the style direction (traditional, western, fusion, mixed, or other) from the user's actual intent and the genuine cultural context of the effective occasion. Do not default to any tradition the user's intent does not support, and do not exclude one the user asked for or that the occasion genuinely calls for. Explain the choice in "styleDirectionReasoning".
-- List in "mustInclude" and "mustAvoid" ONLY requirements and exclusions the user actually expressed (in their request, colours, restrictions, or non-conflicting selections) — e.g. a stated theme, fabric, comfort need, garment, colour, or exclusion. Never list your own styling ideas or specific garment choices there; those belong in the looks, where they can vary.
+- Decide the style direction (traditional, western, fusion, mixed, or other) from the user's actual intent — the selected style worlds and the request first — and the genuine cultural context of the effective occasion. A selected traditional / ethnic / festive style world makes the direction traditional, whatever the occasion: interpret the occasion through it (e.g. light, breathable everyday ethnic wear for a relaxed occasion) instead of switching to western wear. A selected fusion / Indo-Western style world makes the direction fusion. When traditional or fusion is selected together with western style worlds, the direction is mixed or fusion so that each selected world is genuinely represented across the looks. Do not default to any tradition the user's intent does not support, and do not exclude one the user asked for, selected, or that the occasion genuinely calls for. Explain the choice in "styleDirectionReasoning".
+- List in "mustInclude" and "mustAvoid" ONLY requirements and exclusions the user actually expressed (in their request, selected style worlds, colours, restrictions, or non-conflicting selections) — e.g. a stated theme, selected style world, fabric, comfort need, garment, colour, or exclusion. Never list your own styling ideas or specific garment choices there; those belong in the looks, where they can vary.
 
 - Set "sareeAesthetic" ONLY from what the user asked for: "traditional" when they want a traditional saree, "contemporary" when they want a modern / pre-draped / innovative saree, "traditional_with_modern_touch" when they want a traditional saree updated with modern elements, and "not_requested" when the request is not about sarees. If they ask for a saree without saying which, choose from their style worlds, impression and occasion and explain it in "styleDirectionReasoning".
 
@@ -86,12 +87,13 @@ AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
       * Vacation / Resort / Beach / Holiday: Lightweight sun-ready breathable silhouettes (linen, gauze, chambray):
         - For Girls: breezy cotton sundresses, floral rompers, tiered frocks. Accessories: soft cotton or canvas cute tote / crossbody pouches, straw sun hats, cute sunglasses, floral clips. Footwear: comfortable walking sandals, slides, breathable canvas shoes.
         - For Boys: linen resort shirts, tropical short-sleeve button-downs with drawstring shorts, easy coordinated resort sets. Accessories: sun bucket hats, UV sunglasses, canvas caps. Footwear: breathable water-resistant sandals, slide floaters, canvas sneakers.
+      * Mini Gentleman / Special Event / Party / Dressy (Boys): Propose tailored waistcoats, waistcoat sets, smart dress shirts (crisp white, cream, or pastel tones harmonizing with the palette), bowties or dressy little details, tailored trousers or chinos, and smart loafers or derby shoes. Layered pieces must be authentic tailored waistcoats or blazers; NEVER winter puffer jackets, outdoor bomber jackets, or casual hoodies.
     - Style Direction Adaptation: Dynamically adapt silhouettes, cuts, layering, colors, and piece composition based on the candidate's selected style direction (Minimal, Streetwear, Bohemian, Classic, Preppy, etc.) and custom notes (e.g. "breathable fabrics", "no glitter", "pastel tones").
-  * Boys: boys' kidswear only — STRICTLY NEVER adult men's garments or women's/girls' garments (no adult shirts/blazers, adult formal tailoring, skirts, dresses, cholis, lehengas, heels, or girls' hair accessories).
+  * Boys: boys' kidswear only — STRICTLY NEVER adult men's garments or women's/girls' garments (no adult shirts/blazers, adult formal tailoring, skirts, dresses, cholis, lehengas, heels, or girls' hair accessories). When a look features a blazer, waistcoat, or formal layer, NEVER recommend or suggest winter puffer jackets, quilted jackets, hooded varsity bombers, or casual sportswear.
   * Girls: girls' kidswear only — STRICTLY NEVER adult women's garments or men's/boys' garments (no adult cocktail/bodycon dresses, adult deep necklines, adult formal suits, adult heels, or boys' garments).
   * Unisex children: comfortable, age-appropriate clothing without gender assumptions.
-  * TRADITIONAL & ETHNIC OCCASION INTEGRITY (applies whenever occasion is Traditional, Festive, Diwali, Navratri, Garba, Wedding, Puja, Eid, etc.):
-    - STRICTLY NO MODERN OR WESTERN WEAR in traditional occasions:
+  * TRADITIONAL & ETHNIC INTEGRITY (applies to every look when the brief's styleDirection is "traditional", to each traditional look of a "mixed" brief, and whenever occasion is Traditional, Festive, Diwali, Navratri, Garba, Wedding, Puja, Eid, etc.):
+    - STRICTLY NO MODERN OR WESTERN WEAR in these looks, whatever the occasion:
       * NEVER suggest western garments: no blue jeans, denim jackets, bomber jackets, puffer jackets, fleece jackets, flannel shirts, western casual jackets, spread-collar buttoned jackets, classic western jackets, western casual shirts, polo t-shirts, blazers, western cocktail dresses, mini skirts, shorts, joggers, cargo pants, hoodies, western evening gowns, or western formal suits. Any layer, jacket, or drape must be an authentic Indian traditional piece: Nehru jacket, Bundi waistcoat, Modi jacket, ethnic embroidered koti, or traditional festive silk stole/dupatta.
       * Every look must be authentic Indian traditional ethnic wear (Sarees, Lehengas/Chaniya Choli, Kurta sets, Sherwanis, Bundi sets, Anarkalis, Shararas).
       * Footwear must be traditional ethnic footwear: ethnic mojris, juttis, kolhapuris, or traditional embellished sandals — NEVER western sneakers, running shoes, loafers, or stilettos.
@@ -109,6 +111,7 @@ FIELD RULES:
 - 'footwear' and 'accessories' (bags, belts, scarves, hats) belong in their own fields.
 - INTERNAL CONSISTENCY: title, note, outfit, outfitColor and pieces must all describe the SAME outfit. Never name a garment in the title, note or pieces that is not in 'outfit'.
 - Respect loved colours prominently and never use a colour the user avoids.
+- All pieces in a look MUST strictly harmonize with the look's designated palette and outfitColor. For monochromatic or coordinated sets (e.g. Butter Yellow Vest Ensemble), inner shirts and separates must be tonal (matching palette shade) or crisp elegant neutrals (white, cream, ivory); NEVER introduce random unrequested contrasting colours (such as blue denim or bright blue shirts) that clash with the look.
 - applicableCategories: women ["outfit", "makeup", "jewellery", "footwear", "accessories"]; men ["outfit", "footwear", "accessories", "jewellery"]; children ["outfit", "footwear", "accessories"].
 - The 5 "vibe" values must be 5 DIFFERENT single words; "personaEnergy" is 1-2 vivid sentences on how this person moves and feels in this specific look (a photo step uses these, so make them genuinely different).
 - reasoning: 3-5 short, concrete, supportive bullet points explaining why THIS look suits THIS person and their request. Never use words like "flaws", "hide your body", "make you fairer", "dull", "unsuitable body", or "imperfections".
@@ -117,7 +120,18 @@ FIELD RULES:
 - Output must be valid JSON matching the schema exactly, with look ids "look-01".."look-05".`;
 
 /**
- * Presents the profile neutrally: the user's own request verbatim and first, selected options as
+ * The user's Step 7 style worlds as written for the model: a custom "Other: Cottagecore" choice is
+ * passed as "Cottagecore", and an "Other" chip with no text (no preference stated) is dropped.
+ */
+export function selectedStyleWorlds(style: string[] | undefined): string[] {
+  return (style || [])
+    .map((s) => (s.startsWith("Other: ") ? s.slice(7) : s).trim())
+    .filter((s) => s && s !== "Other");
+}
+
+/**
+ * Presents the profile neutrally: the user's own request verbatim and first, the style worlds
+ * chosen in this session as intentional preferences, and the remaining selected options as
  * possibly-stale context. No occasion- or keyword-triggered garment directives are injected.
  */
 export function buildUserPrompt(profile: SkinTuneProfile): string {
@@ -141,14 +155,16 @@ ${notes ? `"${notes}"` : "(none provided — rely on the selected options below)
 
 WHO IS BEING STYLED (must be preserved in every look):
 - Audience: ${ctx.audience.toUpperCase()} — ${audienceLabel}
-- Age group: ${profile.ageGroup || (ctx.isKids ? "Child" : "Adult")}
+- Age group: ${ctx.ageGroup || (ctx.isKids ? "Child" : "Adult")}
 - Appearance: skin tone ${profile.appearance.skinTone || "unspecified"}, ${profile.appearance.undertone || "unspecified"} undertone, contrast ${profile.appearance.contrast || "unspecified"}
 - Body build: ${profile.bodyBuild || "not specified"}
 - Fit preference: ${profile.fit || "no strong preference"}
 
+STYLE WORLDS CHOSEN IN THIS SESSION (intentional preferences — every look must express them; the request above refines them and overrides one only where it explicitly rules it out):
+- Style worlds: ${list(selectedStyleWorlds(profile.style), "open to suggestion")}
+
 SELECTED OPTIONS (may be left over from an earlier session; use where consistent with the request above):
 - Occasion: ${profile.occasion || "not specified"}
-- Style worlds: ${list(profile.style, "open to suggestion")}
 - Desired impression: ${list(profile.impression, "not specified")}
 
 PREFERENCES & LIMITS:
@@ -259,7 +275,7 @@ const RESPONSE_JSON_SCHEMA = {
 
 export const REVIEW_SYSTEM_PROMPT = `You are LetStyle's styling quality reviewer. You receive a user's profile (including their own free-text styling request), the style brief a stylist derived from it, and 5 proposed looks. Audit each look against an explicit checklist — be literal and evidence-based, not a matter of taste.
 
-1. Build the checklist ONCE in "requirements": every explicit requirement or exclusion in the user's own request (split compound requests into separate items, e.g. "full sleeves", "ankle length", "no slits"), plus brief mustInclude/mustAvoid items ONLY if they are grounded in something the user actually provided (request, colours, restrictions, non-conflicting selections) — skip items that are merely the stylist's own garment or styling ideas — plus the effective occasion and the style direction. The user's own words outrank the brief; selected options that conflict with the user's request are NOT requirements. Do not invent requirements (no colour-matching or comfort preferences the user did not state).
+1. Build the checklist ONCE in "requirements": every explicit requirement or exclusion in the user's own request (split compound requests into separate items, e.g. "full sleeves", "ankle length", "no slits"), plus brief mustInclude/mustAvoid items ONLY if they are grounded in something the user actually provided (request, selected style worlds, colours, restrictions, non-conflicting selections) — skip items that are merely the stylist's own garment or styling ideas — plus the effective occasion and the style direction. The style worlds chosen in this session ARE requirements: a selected traditional / ethnic style needs authentic traditional garments and a selected fusion / Indo-Western style needs a visible fusion of Indian and western elements (across the looks the brief's direction assigns them to), unless the user's own request explicitly rules that style out. The user's own words outrank the brief; other selected options (occasion, impression) that conflict with the user's request are NOT requirements. Do not invent requirements (no colour-matching or comfort preferences the user did not state).
    When the brief's sareeAesthetic is not "not_requested", add one requirement for it: "traditional" = an authentic traditional saree or regional weave, traditionally worn (no western or fusion outfit); "contemporary" = a modern saree construction or innovative drape (pre-draped, ruffle, pant-style, dhoti-style, belted, cape, jacket or cowl); "traditional_with_modern_touch" = an authentic traditional saree or weave AND a visible contemporary element (modern blouse, jacket or cape, belt, or updated drape). A saree look that names a weave but no drape, or calls a drape a weave, does not satisfy it.
    When styling men, check menswear styling cohesion and aesthetic fidelity: ensure footwear and accessories match the outfit formality (no running shoes with formal suits; no women's jewellery, potli bags or clutches; no belts over kurtas or ethnic tunics); and ensure the aesthetic and occasion the user actually asked for are genuinely reflected in the garments and footwear, with each look having one coherent formality level.
 2. For each look, check EVERY requirement against the garments actually named in the look's outfit and pieces: satisfied = true only if the look clearly meets it; quote the deciding words in "evidence". A different garment than requested (e.g. a length, cut or fabric other than the one specified) is NOT satisfied.

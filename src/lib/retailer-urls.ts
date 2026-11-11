@@ -170,8 +170,14 @@ export function buildRetailerSearchUrl(
   const rawTerms: string[] = [];
 
   const gender = (params.gender || "").toLowerCase();
-  const isBoy = gender === "boy" || gender === "boys" || gender === "child_boy";
-  const isGirl = gender === "girl" || gender === "girls" || gender === "child_girl";
+  const isBoy =
+    gender === "boy" ||
+    gender === "boys" ||
+    gender === "child_boy" ||
+    /\bboys?\b/i.test(params.gender || "") ||
+    /\bboys?\b/i.test(params.productName || "") ||
+    /\bboys?\b/i.test(params.query || "");
+  const isGirl = !isBoy && (gender === "girl" || gender === "girls" || gender === "child_girl" || /\bgirls?\b/i.test(params.gender || "") || /\bgirls?\b/i.test(params.productName || "") || /\bgirls?\b/i.test(params.query || ""));
   const isChild = isBoy || isGirl || gender === "child" || gender === "kids" || gender === "children";
   const isMan = !isChild && (gender === "man" || gender === "men" || gender === "male");
   const isWoman = !isChild && (gender === "woman" || gender === "women" || gender === "female");
@@ -836,7 +842,19 @@ export function isUrlConsistentWithProduct(
       const sub = (product.subcategory || "").toLowerCase();
       const prodName = ((product as any).productName || (product as any).title || (product as any).name || "").toLowerCase();
       if (sub === "blazer") {
-        if (/(?:\/t-shirts?\/|\/jeans\/|\/dresses?\/|\/shoes?\/|\/flats?\/)/i.test(fullUrlText) && !/blazer|suit/i.test(fullUrlText)) {
+        const isCasualJacketTitle = /\b(bombers?|puffers?|quilted|hoodies?|hooded|windbreakers?|fleece|varsity|track\s*jackets?|denim\s*jackets?|biker\s*jackets?|parkas?)\b/i.test(prodName);
+        if (isCasualJacketTitle) {
+          return false;
+        }
+        if (/(?:\/t-shirts?\/|\/jeans\/|\/dresses?\/|\/shoes?\/|\/flats?\/|\/bombers?\/|\/puffers?\/|\/hoodies?\/|\/windbreakers?\/)/i.test(fullUrlText) && !/blazer|suit/i.test(fullUrlText)) {
+          return false;
+        }
+      } else if (sub === "waistcoat" || sub === "vest" || /\b(waistcoats?|vests?)\b/i.test(sub)) {
+        const isCasualJacketTitle = /\b(bombers?|puffers?|quilted|hoodies?|hooded|windbreakers?|fleece|varsity|parkas?)\b/i.test(prodName);
+        if (isCasualJacketTitle) {
+          return false;
+        }
+        if (/(?:\/bombers?\/|\/puffers?\/|\/hoodies?\/|\/windbreakers?\/|\/t-shirts?\/|\/jeans\/|\/shoes?\/)/i.test(fullUrlText) && !/waistcoat|vest|bundi/i.test(fullUrlText)) {
           return false;
         }
       } else if (sub === "dupatta" || sub === "stole" || sub === "shawl" || /\b(dupattas?|stoles?|shawls?|doshala|lohi|chaddar|angavastram)\b/i.test(sub)) {

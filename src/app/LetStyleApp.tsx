@@ -23,7 +23,9 @@ import {
   pronounOptions,
   ageGroupOptions,
   kidsAgeGroupOptions,
-  styleOptions,
+  styleOptionsForProfile,
+  applyAudienceSelection,
+  repairStoredAudience,
   colorLoveOptions,
   colorAvoidOptions,
   occasionOptions,
@@ -46,6 +48,7 @@ import {
   JobsUnavailableError,
   JOB_POKE_EVENT,
 } from '@/features/recommendations';
+import type { GenerationProgress } from '@/features/recommendations/services/generation-progress';
 
 type Screen =
   | 'welcome'
@@ -112,6 +115,8 @@ export function LetStyleApp() {
   const [generatedLooks, setGeneratedLooks] = useState<LookRecommendation[]>([]);
   const [looksFingerprint, setLooksFingerprint] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  // Real progress of the running generation (server stage + which looks are rendered)
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [deletedNotice, setDeletedNotice] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -176,7 +181,8 @@ export function LetStyleApp() {
     try {
       const savedProfile = localStorage.getItem('letstyle-profile') || localStorage.getItem('skintune-profile');
       if (savedProfile) {
-        setProfile({ ...initialProfile, ...JSON.parse(savedProfile) });
+        // Profiles saved before audience switching was fixed may carry a stale gender or kids age
+        setProfile(repairStoredAudience({ ...initialProfile, ...JSON.parse(savedProfile) }));
       }
       const saved = localStorage.getItem('letstyle-saved-looks') || localStorage.getItem('skintune-saved-looks');
       if (saved) setSavedLooks(JSON.parse(saved));
@@ -205,36 +211,9 @@ export function LetStyleApp() {
     else go(user && profile.name ? 'home' : 'welcome');
   };
   const saveProfile = () => {
-    // When the user changes to a casual / vacation / resort occasion, reconcile conflicting residual traditional style tags
-    // unless the user explicitly requested traditional/ethnic styling in their customStyleNotes
-    const occLower = (profile.occasion || '').toLowerCase();
-    const isCasualOrVacation =
-      occLower.includes('vacation') ||
-      occLower.includes('beach') ||
-      occLower.includes('resort') ||
-      occLower.includes('goa') ||
-      occLower.includes('casual') ||
-      occLower.includes('everyday');
-
-    const notesLower = (profile.customStyleNotes || '').toLowerCase();
-    const explicitlyRequestsEthnic =
-      notesLower.includes('ethnic') ||
-      notesLower.includes('traditional') ||
-      notesLower.includes('kurta') ||
-      notesLower.includes('sherwani') ||
-      notesLower.includes('saree') ||
-      notesLower.includes('lehenga');
-
-    let effectiveProfile = profile;
-    if (isCasualOrVacation && !explicitlyRequestsEthnic) {
-      const filteredStyles = profile.style.filter(
-        (s) => !['traditional', 'royal & regal', 'ethnic', 'festive'].includes(s.toLowerCase()),
-      );
-      if (filteredStyles.length !== profile.style.length) {
-        effectiveProfile = { ...profile, style: filteredStyles };
-        setProfile(effectiveProfile);
-      }
-    }
+    // The profile is saved exactly as the user chose it: selected styles (e.g. Traditional with an
+    // Everyday occasion) are never dropped here; the styling engine reconciles style and occasion.
+    const effectiveProfile = profile;
 
     localStorage.setItem('letstyle-profile', JSON.stringify(effectiveProfile));
     const currentFingerprint = getGenerationFingerprint(effectiveProfile);
@@ -291,6 +270,12 @@ export function LetStyleApp() {
     const onProgress = (partial: LookRecommendation[]) => {
       if (isCurrent()) setGeneratedLooks(partial);
     };
+    const onStatus = (progress: GenerationProgress) => {
+      if (isCurrent()) setGenerationProgress(progress);
+    };
+    const toLookProgress = (looks: LookRecommendation[]) =>
+      looks.map((look) => ({ id: look.id, title: look.title, ready: hasRealImage(look.imageUrl) }));
+    setGenerationProgress(canReuseLooks ? null : { stage: 'queued', looks: [] });
     const context = {
       occasion: profile.occasion,
       details: profile.customStyleNotes || '',
@@ -299,11 +284,18 @@ export function LetStyleApp() {
     // Previous in-page pipeline, kept only as a fallback for deployments
     // where background jobs are unavailable. It stops if the tab is frozen.
     const generateInPage = async () => {
+      onStatus({ stage: 'styling', looks: [] });
       const recommendations = await getLookRecommendations(profile);
       if (!isCurrent()) return null;
       refreshUser();
       setGeneratedLooks(recommendations);
-      return await generateLookImages(recommendations, profile, context, { onProgress });
+      onStatus({ stage: 'rendering', looks: toLookProgress(recommendations) });
+      return await generateLookImages(recommendations, profile, context, {
+        onProgress: (partial) => {
+          onProgress(partial);
+          onStatus({ stage: 'rendering', looks: toLookProgress(partial) });
+        },
+      });
     };
 
     // Runs on the server, independent of this tab: switching apps, locking
@@ -325,7 +317,7 @@ export function LetStyleApp() {
       }
       watchedJobIdRef.current = jobId;
       setActiveJobId(jobId);
-      const watched = await watchGenerationJob(jobId, { onProgress, shouldStop: () => !isCurrent() });
+      const watched = await watchGenerationJob(jobId, { onProgress, onStatus, shouldStop: () => !isCurrent() });
       return { looks: watched?.looks ?? null, jobId, finishedBeforeWatch: watched?.finishedBeforeWatch ?? false };
     };
 
@@ -586,6 +578,7 @@ export function LetStyleApp() {
     return (
       <Generating
         error={generationError}
+        progress={generationProgress}
         onRetry={() => {
           setGenerationError(null);
           generationRequestIdRef.current += 1;
@@ -608,25 +601,13 @@ export function LetStyleApp() {
       <SingleChoiceStep
         profile={profile}
         update={(p) => {
-          let derivedGender = profile.gender;
-          if (p.pronouns !== undefined) {
-            const lower = p.pronouns.toLowerCase();
-            if (lower.includes('boy')) derivedGender = 'boy';
-            else if (lower.includes('girl')) derivedGender = 'girl';
-            else if (lower.includes('kid') || lower.includes('child')) derivedGender = 'unspecified';
-            else if (lower.includes('men') && !lower.includes('women')) derivedGender = 'men';
-            else if (lower.includes('women')) derivedGender = 'women';
+          if (p.pronouns === undefined) {
+            update(p);
+            return;
           }
-
-          if (p.pronouns !== undefined && p.pronouns !== profile.pronouns) {
-            const wasKids = getStylingContext(profile).isKids;
-            const isNowKids = getStylingContext({ ...profile, ...p, gender: derivedGender }).isKids;
-            if (wasKids !== isNowKids) {
-              update({ ...p, gender: derivedGender, ageGroup: '' });
-              return;
-            }
-          }
-          update({ ...p, gender: derivedGender });
+          // Re-derives gender, clears an age from the other adult/kids side, and drops preset
+          // styles of the previous audience (see features/onboarding/audience-selection.ts)
+          update({ ...p, ...applyAudienceSelection(profile, p.pronouns) });
         }}
         field="pronouns"
         step={2}
@@ -693,7 +674,7 @@ export function LetStyleApp() {
             field: 'style',
             label: 'Which style worlds pull you in?',
             hint: 'Choose as many as you like.',
-            options: styleOptions,
+            options: styleOptionsForProfile(profile),
             allowOther: true,
             otherPlaceholder: 'Type your custom style (e.g. Cottagecore, Dark Academia, Cyberpunk)...',
             compact: true,

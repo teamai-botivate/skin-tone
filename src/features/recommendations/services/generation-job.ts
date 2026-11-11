@@ -12,6 +12,7 @@
 
 import type { LookRecommendation, SkinTuneProfile } from '@/types';
 import type { OccasionContext } from './image-generation';
+import { normalizeStage, type GenerationProgress } from './generation-progress';
 
 export const ACTIVE_JOB_STORAGE_KEY = 'letstyle-active-generation-job';
 /** Window event that makes the job watcher poll immediately (e.g. a push arrived). */
@@ -118,6 +119,8 @@ function waitForNextPoll(ms: number): Promise<void> {
 
 export interface WatchGenerationJobOptions {
   onProgress?: (looks: LookRecommendation[]) => void;
+  /** Real job state after every status poll: the server's stage and which look images are in. */
+  onStatus?: (progress: GenerationProgress) => void;
   /** Return true to stop watching (the job itself keeps running server-side). */
   shouldStop?: () => boolean;
 }
@@ -168,6 +171,10 @@ export async function watchGenerationJob(
       throw new GenerationJobFailedError(job.error || 'Generation failed. Please try again.');
     }
 
+    if (!job.looks) {
+      options.onStatus?.({ stage: normalizeStage(job.stage), looks: [] });
+    }
+
     if (job.looks) {
       const newIds = job.readyLookIds.filter((id) => !images.has(id));
       // Fetched in parallel (still one image per request): when several are
@@ -185,6 +192,10 @@ export async function watchGenerationJob(
       const looks = job.looks.map((look) =>
         images.has(look.id) ? { ...look, imageUrl: images.get(look.id)! } : look,
       );
+      options.onStatus?.({
+        stage: normalizeStage(job.stage),
+        looks: job.looks.map((look) => ({ id: look.id, title: look.title, ready: images.has(look.id) })),
+      });
       if (newIds.length > 0 || !looksAnnounced) {
         looksAnnounced = true;
         options.onProgress?.(looks);

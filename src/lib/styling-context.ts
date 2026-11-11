@@ -39,53 +39,32 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
   const age = (profile.ageGroup || "").toLowerCase();
   const notes = (profile.customStyleNotes || "").toLowerCase();
 
-  // 1. Determine if Kids / Children
-  const isKidsAge =
-    age.includes("0-5") ||
-    age.includes("0–5") ||
-    age.includes("6-10") ||
-    age.includes("6–10") ||
-    age.includes("11-15") ||
-    age.includes("11–15") ||
-    age.includes("15-19") ||
-    age.includes("15–19") ||
-    age.includes("0-12") ||
-    age.includes("0–12") ||
-    age.includes("0-13") ||
-    age.includes("0–13") ||
-    age.includes("13-18") ||
-    age.includes("13–18") ||
-    age.includes("kid") ||
-    age.includes("child");
+  // 1. Determine if Kids / Children.
+  // Precedence: an explicit adult audience (gender women/men, or an adult audience text)
+  // always wins over a kids age left over from an earlier selection; kids words are matched
+  // as whole words, so e.g. "girlfriend" or "boyfriend" never mean a child.
+  const isExplicitAdultGender = ADULT_WOMEN_GENDERS.has(rawGender) || ADULT_MEN_GENDERS.has(rawGender);
+  const isKidsGender = KIDS_GENDERS.has(rawGender);
+  const isKidsPronoun = KIDS_WORDS.test(pronouns);
+  // Only an explicit adult audience word counts here; bare he/him or she/her describe children too
+  const isAdultPronoun = !isKidsPronoun && ADULT_AUDIENCE_WORDS.test(pronouns);
+  const isKidsAge = isKidsAgeGroup(age);
 
-  const isKidsPronoun =
-    pronouns.includes("kid") ||
-    pronouns.includes("child") ||
-    pronouns.includes("boy") ||
-    pronouns.includes("girl");
-
-  const isKidsGender =
-    rawGender === "boy" ||
-    rawGender === "boys" ||
-    rawGender === "girl" ||
-    rawGender === "girls" ||
-    rawGender === "child" ||
-    rawGender === "kid" ||
-    rawGender === "kids";
-
-  const isKids = isKidsAge || isKidsPronoun || isKidsGender;
+  const isKids =
+    !isExplicitAdultGender &&
+    (isKidsGender || isKidsPronoun || (!isAdultPronoun && isKidsAge));
 
   if (isKids) {
+    // The selected Boys / Girls audience decides; pronouns and notes only fill in an unset gender.
+    const explicitBoy = rawGender === "boy" || rawGender === "boys";
+    const explicitGirl = rawGender === "girl" || rawGender === "girls";
     const isBoy =
-      rawGender === "boy" ||
-      rawGender === "boys" ||
-      /\b(boy|boys|son)\b/i.test(pronouns) ||
-      /\b(boy|boys|son)\b/i.test(notes);
+      explicitBoy ||
+      (!explicitGirl && (/\b(boy|boys|son)\b/i.test(pronouns) || /\b(boy|boys|son)\b/i.test(notes)));
 
     const isGirl =
       !isBoy &&
-      (rawGender === "girl" ||
-        rawGender === "girls" ||
+      (explicitGirl ||
         /\b(girl|girls|daughter)\b/i.test(pronouns) ||
         /\b(girl|girls|daughter)\b/i.test(notes));
 
@@ -104,14 +83,12 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
     };
   }
 
-  // 2. Adult Women (check before "men" because "women" contains the substring "men")
-  const isWoman =
-    rawGender === "women" ||
-    rawGender === "woman" ||
-    rawGender === "female" ||
-    pronouns.includes("women") ||
-    pronouns.includes("female") ||
-    pronouns.includes("she/her");
+  // A kids age range never describes an adult; it is a leftover from an earlier kids selection.
+  const adultAgeGroup = isKidsAge ? "" : profile.ageGroup || "";
+
+  // 2. Adult Women (check before "men" because "women" contains the substring "men").
+  // An explicit gender decides on its own; the audience text is used only when gender is unset.
+  const isWoman = ADULT_WOMEN_GENDERS.has(rawGender) || (!ADULT_MEN_GENDERS.has(rawGender) && womenFromPronouns(pronouns));
 
   if (isWoman) {
     return {
@@ -122,24 +99,13 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
       isGirl: false,
       isMan: false,
       isWoman: true,
-      ageGroup: profile.ageGroup || "",
+      ageGroup: adultAgeGroup,
       displayLabel: "Women",
     };
   }
 
   // 3. Adult Men
-  const strippedOfWomen = pronouns.replace(/\b(women|womens|women's|female|woman)\b/gi, "");
-  // Natural variants: Men, Men's / Men’s, Mens, Male, Gents, Him (he/him/his)
-  const isMan =
-    rawGender === "men" ||
-    rawGender === "man" ||
-    rawGender === "male" ||
-    rawGender === "mens" ||
-    rawGender === "gents" ||
-    strippedOfWomen.includes("men") ||
-    pronouns.includes("male") ||
-    pronouns.includes("he/him") ||
-    /\b(he|him|his|gents?)\b/.test(strippedOfWomen);
+  const isMan = ADULT_MEN_GENDERS.has(rawGender) || menFromPronouns(pronouns);
 
   if (isMan) {
     return {
@@ -150,7 +116,7 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
       isGirl: false,
       isMan: true,
       isWoman: false,
-      ageGroup: profile.ageGroup || "",
+      ageGroup: adultAgeGroup,
       displayLabel: "Men",
     };
   }
@@ -163,9 +129,54 @@ export function getStylingContext(profile?: Partial<SkinTuneProfile> | null): St
     isGirl: false,
     isMan: false,
     isWoman: false,
-    ageGroup: profile.ageGroup || "",
+    ageGroup: adultAgeGroup,
     displayLabel: "Styling",
   };
+}
+
+const ADULT_WOMEN_GENDERS = new Set(["women", "woman", "female"]);
+const ADULT_MEN_GENDERS = new Set(["men", "man", "male", "mens", "gents"]);
+const KIDS_GENDERS = new Set(["boy", "boys", "girl", "girls", "child", "kid", "kids"]);
+/** Whole words only: "girlfriend", "boyfriend" or "kidding" never mean a child. */
+const KIDS_WORDS = /\b(kids?|child|children|childrens|children's|children’s|boys?|girls?)\b/;
+
+const ADULT_AUDIENCE_WORDS = /\b(women|womens|woman|female|men|mens|man|male|gents?)\b/;
+
+const KIDS_AGE_RANGES =["0-5", "6-10", "11-15", "15-19", "0-12", "0-13", "13-18"];
+
+/** True for the kids age ranges offered in onboarding (and older stored variants). */
+export function isKidsAgeGroup(ageGroup?: string | null): boolean {
+  const age = (ageGroup || "").toLowerCase().replace(/–/g, "-");
+  return KIDS_AGE_RANGES.some((range) => age.includes(range)) || /\b(kids?|child|children)\b/.test(age);
+}
+
+function womenFromPronouns(pronouns: string): boolean {
+  return pronouns.includes("women") || pronouns.includes("female") || pronouns.includes("she/her");
+}
+
+function menFromPronouns(pronouns: string): boolean {
+  const strippedOfWomen = pronouns.replace(/\b(women|womens|women's|female|woman)\b/gi, "");
+  // Natural variants: Men, Men's / Men’s, Mens, Male, Gents, Him (he/him/his)
+  return (
+    strippedOfWomen.includes("men") ||
+    /\bmale\b/.test(strippedOfWomen) ||
+    pronouns.includes("he/him") ||
+    /\b(he|him|his|gents?)\b/.test(strippedOfWomen)
+  );
+}
+
+/**
+ * The gender implied by an onboarding audience choice (a preset label or custom "Other" text).
+ * Returns "" when the text names no known audience, so a previous gender is never carried over.
+ */
+export function deriveGenderFromAudience(audienceText: string): string {
+  const text = (audienceText || "").toLowerCase();
+  if (/\bboys?\b/.test(text)) return "boy";
+  if (/\bgirls?\b/.test(text)) return "girl";
+  if (KIDS_WORDS.test(text)) return "unspecified";
+  if (womenFromPronouns(text)) return "women";
+  if (menFromPronouns(text)) return "men";
+  return "";
 }
 
 /**

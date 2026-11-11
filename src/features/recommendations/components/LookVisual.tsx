@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import type { LookRecommendation } from '@/types';
-import { Sparkles, RefreshCw, Clock3, Bell } from 'lucide-react';
+import { Sparkles, RefreshCw, Clock3, Bell, Check } from 'lucide-react';
+import {
+  summarizeGenerationProgress,
+  type GenerationProgress,
+} from '../services/generation-progress';
 import { warmAudioContext, requestNotificationPermission } from '@/lib/notification';
 import { getPushSupport } from '@/lib/client-push';
 
@@ -94,10 +98,13 @@ export function Generating({
   error,
   onRetry,
   onBack,
+  progress,
 }: {
   error?: string | null;
   onRetry?: () => void;
   onBack?: () => void;
+  /** Real job progress; when absent the screen falls back to its generic animation. */
+  progress?: GenerationProgress | null;
 } = {}) {
   const [active, setActive] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -112,18 +119,21 @@ export function Generating({
     return () => window.clearTimeout(timer);
   }, []);
 
+  const hasProgress = Boolean(progress);
   useEffect(() => {
     if (error) return;
-    const stageTimer = window.setInterval(
-      () => setActive((value) => (value + 1) % generatingStages.length),
-      2600,
-    );
+    // The rotating generic labels are only for flows without real progress.
+    const stageTimer = hasProgress
+      ? undefined
+      : window.setInterval(() => setActive((value) => (value + 1) % generatingStages.length), 2600);
     const clockTimer = window.setInterval(() => setElapsedSeconds((value) => value + 1), 1000);
     return () => {
-      window.clearInterval(stageTimer);
+      if (stageTimer !== undefined) window.clearInterval(stageTimer);
       window.clearInterval(clockTimer);
     };
-  }, [error]);
+  }, [error, hasProgress]);
+
+  const summary = progress ? summarizeGenerationProgress(progress) : null;
 
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
@@ -196,13 +206,55 @@ export function Generating({
               <RefreshCw size={16} className="animate-spin" />
             </span>
           </span>
-          <span key={active} className="animate-rise text-lg font-semibold">
-            {generatingStages[active]}…
-          </span>
+          {summary ? (
+            <span key={summary.label} className="animate-rise">
+              <span className="block text-lg font-semibold">{summary.label}</span>
+              <span className="block text-xs text-muted-foreground">{summary.detail}</span>
+            </span>
+          ) : (
+            <span key={active} className="animate-rise text-lg font-semibold">
+              {generatingStages[active]}…
+            </span>
+          )}
         </div>
-        <div className="mt-6 h-1.5 max-w-md overflow-hidden rounded-full bg-secondary">
-          <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-primary" />
+        <div
+          className="mt-6 h-1.5 max-w-md overflow-hidden rounded-full bg-secondary"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={summary?.total ?? 100}
+          aria-valuenow={summary && summary.fraction !== null ? summary.readyCount : undefined}
+          data-testid="generation-progress-bar"
+        >
+          {summary && summary.fraction !== null ? (
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-500"
+              style={{ width: `${Math.max(summary.fraction * 100, 4)}%` }}
+            />
+          ) : (
+            <div className="h-full w-1/3 animate-[indeterminate_1.6s_ease-in-out_infinite] rounded-full bg-primary" />
+          )}
         </div>
+        {progress && progress.looks.length > 0 && (
+          <ul className="mt-5 max-w-md space-y-1.5" data-testid="generation-look-progress">
+            {progress.looks.map((look) => (
+              <li key={look.id} className="flex items-center gap-2.5 text-sm">
+                {look.ready ? (
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
+                    <Check size={12} />
+                  </span>
+                ) : (
+                  <span className="grid size-5 shrink-0 place-items-center">
+                    <RefreshCw size={13} className="animate-spin text-primary" />
+                  </span>
+                )}
+                <span className={look.ready ? 'text-foreground' : 'text-muted-foreground'}>
+                  {look.title}
+                  <span className="ml-1.5 text-xs">{look.ready ? '· ready' : '· rendering'}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         <p className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
           <Clock3 size={14} />{' '}
           {elapsedSeconds < 5

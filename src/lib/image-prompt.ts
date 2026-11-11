@@ -52,13 +52,16 @@ export function buildLookEditPrompt(
   // superseded by the user's custom styling notes.
   const occText = `${look.note || ""} ${look.title || ""} ${look.outfit || ""}`.toLowerCase();
   const isGarba = occText.includes("garba") || occText.includes("navratri") || occText.includes("dandiya");
-  const isVacationOrResort =
-    occText.includes("vacation") ||
-    occText.includes("resort") ||
-    occText.includes("beach") ||
-    occText.includes("goa") ||
-    occText.includes("holiday") ||
-    occText.includes("summer");
+  // The reviewed brief's direction for this batch ("" for looks from older sessions)
+  const styleDirection = look.styleIntent?.styleDirection || "";
+  // A vacation setting is read from the look's occasion (the reviewed brief's effective occasion,
+  // else the look's own title and note) — never from seasonal words such as "summer" or
+  // "holiday", and never from a garment name like "resort shirt".
+  const occasionText = (look.styleIntent?.effectiveOccasion || `${look.title || ""} ${look.note || ""}`).toLowerCase();
+  const isVacationOrResort = /\b(vacation|resort|beach|goa)\b/.test(occasionText);
+  // Ethnic wear is only ruled out for an explicitly western look; a traditional, fusion or mixed
+  // direction keeps whatever garments the look names.
+  const excludesEthnicWear = styleDirection === "western";
   const garmentBreakdown = (look.pieces || []).filter((p) => !NON_GARMENT_PIECE_CATEGORY.test(p.category)).map((p) => p.name);
 
   const demographicInstruction = ctx.isBoy
@@ -79,27 +82,34 @@ export function buildLookEditPrompt(
         : `CULTURAL OCCASION AUTHENTICITY: This is a traditional Garba / Navratri festival celebration. The outfit MUST be an authentic Indian festive outfit (such as a flared mirror-work chaniya choli or lehenga) with traditional festive jewellery (such as oxidised silver jhumkas) and festive accessories (potli bag). Do NOT render western casual dresses, office blazers, modern western midi dresses, or corporate work totes.`
     : "";
 
-  const vacationInstruction = isVacationOrResort
-    ? ctx.isBoy
+  const vacationInstruction = !isVacationOrResort
+    ? ""
+    : !excludesEthnicWear
+      ? `OCCASION SETTING: This look is for a relaxed vacation / resort occasion. Render the outfit exactly as described — ${look.outfit} — keeping every garment as named (including any traditional or ethnic pieces) with light, breathable, comfortable styling, in a sunny, pleasant outdoor vacation environment.`
+      : ctx.isBoy
       ? `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting (e.g. Goa vacation) for a young boy. The outfit MUST be age-appropriate casual resort wear matching the recommended outfit: ${look.outfit} (such as a breathable linen or cotton shirt, relaxed shorts, casual resort co-ord, with casual sandals or sneakers). Strictly DO NOT render traditional Indian ethnic wear (NO kurta, NO pyjama, NO dhoti, NO sherwani) and NO formal suits. The setting MUST be a sunny, pleasant coastal resort / vacation outdoor environment.`
       : ctx.isKids
         ? `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting for a child. The outfit MUST be age-appropriate casual resort wear matching the recommended outfit: ${look.outfit} (breathable linen/cotton, shorts, tees, co-ord set, sandals). Strictly DO NOT render traditional ethnic wear (no kurta, pyjama, lehenga) or formal suits.`
         : ctx.isMan
           ? `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting. The outfit MUST be relaxed resort wear: ${look.outfit} (linen shirt, resort shorts/chinos, loafers/sandals). Strictly DO NOT render traditional ethnic kurta/sherwani or corporate suits.`
-          : `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting. The outfit MUST be relaxed resort wear: ${look.outfit} (breezy resort dress, linen co-ord, sandals). Strictly DO NOT render heavy traditional ethnic wear (no heavy sarees, no bridal lehengas) or corporate office suits.`
-    : "";
+          : `OCCASION & RESORT CASUAL AUTHENTICITY: This is a casual vacation / resort setting. The outfit MUST be relaxed resort wear: ${look.outfit} (breezy resort dress, linen co-ord, sandals). Strictly DO NOT render heavy traditional ethnic wear (no heavy sarees, no bridal lehengas) or corporate office suits.`;
 
-  const fullStyleText = `${look.note || ""} ${look.title || ""} ${look.outfit || ""} ${(profile.style || []).join(" ")} ${profile.customStyleNotes || ""} ${context.details || ""} ${context.occasion || ""}`.toLowerCase();
-  const isIndoWestern =
-    fullStyleText.includes("indo-western") ||
-    fullStyleText.includes("indo western") ||
-    fullStyleText.includes("fusion") ||
+  // Fusion is decided per look: by the brief's direction for the batch, or by this look's own
+  // title, note and outfit — never by "Indo-Western" appearing anywhere in the profile, which
+  // would push fusion tailoring onto the traditional looks of the same batch.
+  const namesFusion = /\bindo[- ]western\b|\bfusion\b/.test(occText);
+  const fusionGarmentCue =
     occText.includes("pant-saree") ||
     occText.includes("pre-draped") ||
     occText.includes("dhoti-pant") ||
     occText.includes("tuxedo bandhgala") ||
     occText.includes("asymmetric") ||
     occText.includes("cowl kurta");
+  const isIndoWestern =
+    styleDirection === "fusion" ||
+    namesFusion ||
+    // A traditional look may use these cuts too; only call it fusion when it says so
+    (styleDirection !== "traditional" && fusionGarmentCue);
 
   const indoWesternInstruction = isIndoWestern
     ? ctx.isBoy
