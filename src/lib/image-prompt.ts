@@ -120,7 +120,37 @@ export function buildLookEditPrompt(
           ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is an age-appropriate children's Indo-Western fusion set with clean lines, comfortable stretch bottoms, and modern tailored touches.`
           : ctx.isMan
             ? `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is contemporary menswear Indo-Western fusion (such as an asymmetric high-low kurta with diagonal placket paired with sharp tailored cigarette trousers, a tuxedo-style bandhgala with satin lapel detailing, or an open-front long achkan over a cowl-draped kurta). The bottoms MUST be crisp, tailored modern trousers (STRICTLY NO loose baggy traditional salwars or pyjamas). Footwear must be leather dress loafers or monk straps.`
-            : `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is high-fashion contemporary women's Indo-Western fusion (such as a pre-draped saree with a structured blazer or corset blouse and metallic belt, an embellished bustier with dhoti pants or sharara and a flowing floor-length sheer cape jacket, a belted saree jumpsuit, or a brocade skirt with a crisp white shirt). Visually render the exact fusion silhouette described in the outfit — sharp modern tailoring blended with rich Indian textures, with no messy loose wraps.`
+            : `INDO-WESTERN FUSION VISUAL FIDELITY: The outfit is cutting-edge, high-fashion contemporary women's Indo-Western fusion (such as a pre-draped saree with a structured blazer or sculpted corset blouse and metallic belt, an embellished bustier with draped dhoti pants or tiered ruffle shararas and a flowing floor-length sheer cape jacket, a belted saree jumpsuit, an asymmetric peplum top with cowl pants, or a brocade ball-skirt with a crisp tailored shirt). Visually render the exact latest fusion silhouette described in the outfit — sharp modern tailoring seamlessly blended with rich Indian textiles, perfectly fitted with clean structural lines and no messy loose wraps.`
+    : "";
+
+  // Contemporary saree detection (for women):
+  const isSareeLook =
+    /\b(saree|saris?)\b/i.test(look.outfit) ||
+    (look.pieces || []).some((p) => /\b(saree|saris?)\b/i.test(p.name));
+  const isContemporarySaree =
+    isSareeLook &&
+    !ctx.isBoy &&
+    !ctx.isMan &&
+    (look.styleIntent?.sareeAesthetic === "contemporary" ||
+      look.styleIntent?.sareeAesthetic === "traditional_with_modern_touch" ||
+      /\b(pre-draped|ready-to-wear|pre-stitched|pant-style|pant-saree|dhoti-style|dhoti-saree|cowl|ruffle|concept|belted|corset|bustier|cape|blazer|tissue|organza|metallic)\b/i.test(
+        occText,
+      ) ||
+      /\b(latest|new fashion|trendy|designer|modern)\b/i.test(
+        look.styleIntent?.mustInclude?.join(" ") || "",
+      ));
+
+  const contemporarySareeInstruction = isContemporarySaree
+    ? `CONTEMPORARY & LATEST SAREE VISUAL FIDELITY: This is a high-fashion, latest contemporary saree ensemble (${look.outfit}). Visually render modern designer construction: crisp, impeccably pre-draped or concept silhouette, sleek pleated lines, modern designer blouse (${look.pieces?.find((p) => p.category === "Top")?.name || "corset, sculpted bustier, or tailored cropped blazer blouse"}), modern styling (such as a sleek metallic belt or structured layer if specified), and luxurious contemporary fabric texture (such as liquid metallic sheen, fluid satin crepe, or translucent organza). The drape must look effortlessly chic, modern, and structured — NOT a bulky, messy, or plain traditional drape.`
+    : "";
+
+  // Cocktail / mocktail / party occasion detection:
+  const isCocktailOrParty =
+    /\b(cocktail|mocktail|party|soiree|soirée|night out|evening celebration|afterparty|club)\b/i.test(occText) ||
+    /\b(cocktail|mocktail|party|soiree|soirée)\b/i.test(occasionText);
+
+  const cocktailPartyInstruction = isCocktailOrParty && !ctx.isBoy && !ctx.isKids
+    ? `COCKTAIL & PARTY OCCASION ATMOSPHERE: This look is styled for a high-glam cocktail, mocktail, or evening party occasion. Visually render sophisticated evening glamour: the subject in a chic, confident, poised posture with polished high-fashion grooming (${look.hairstyle}, ${look.makeup}). The setting and ambient lighting MUST reflect an upscale evening party or cocktail lounge — such as an elegant rooftop terrace, chic moody cocktail bar with warm bokeh ambient lighting, or modern luxury evening venue. Strictly avoid daylight office, outdoor picnic, or casual domestic settings.`
     : "";
 
   const menEthnicIntegrity = (ctx.isMan || ctx.isBoy)
@@ -150,6 +180,8 @@ export function buildLookEditPrompt(
     garbaInstruction,
     vacationInstruction,
     indoWesternInstruction,
+    contemporarySareeInstruction,
+    cocktailPartyInstruction,
     menEthnicIntegrity,
     `New hairstyle: ${look.hairstyle}. This hairstyle MUST be visibly and clearly restyled to match this description — do not leave the hair looking like the input photo. A different look calls for a different hairstyle; rendering the same hair across every look is a failure. Changing hairstyle does NOT change who this person is, so restyle it with confidence.`,
     `Makeup: ${look.makeup}`,

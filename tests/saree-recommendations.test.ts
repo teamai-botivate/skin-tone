@@ -16,6 +16,8 @@ import {
   searchProductsForLook,
   stripHandDrapeTerms,
 } from "../src/lib/product-search";
+import { buildLookEditPrompt } from "../src/lib/image-prompt";
+import { generateFallbackLooks } from "../src/features/recommendations/services/recommendation-engine";
 import type { LookRecommendation, SkinTuneProfile } from "../src/lib/skintune-schemas";
 logger.level = "fatal";
 
@@ -289,6 +291,68 @@ async function main() {
   assert.match(sareeQuery, /Kanjeevaram silk saree/i);
   assert.ok(!/nivi/i.test(sareeQuery), `No drape in the live query (${sareeQuery})`);
   console.log("✓ Test 9 Passed");
+
+  // -------------------------------------------------------------------------
+  console.log("\n[Test 10] Latest / new fashion saree & contemporary variations prompt intelligence...");
+  assert.match(SYSTEM_PROMPT, /latest saree|new fashion saree|designer saree/i, "System prompt mentions latest/new fashion sarees");
+  assert.match(SYSTEM_PROMPT, /metallic tissue silk|liquid organza|crushed.*georgette|satin crepe/i, "Cutting-edge fabrics defined");
+  assert.match(SYSTEM_PROMPT, /structured corset blouses|sculpted boned bustiers|tailored cropped blazers/i, "Modern blouse and layer pairings defined");
+  assert.match(SYSTEM_PROMPT, /saree-jumpsuits|skirt-pleated sarees/i, "Modern saree variations defined");
+  assert.match(REVIEW_SYSTEM_PROMPT, /latest saree|new fashion saree/i, "Reviewer checks latest/new fashion saree requirements");
+  console.log("✓ Test 10 Passed");
+
+  // -------------------------------------------------------------------------
+  console.log("\n[Test 11] Indo-Western & Cocktail/Mocktail/Partywear prompt intelligence...");
+  assert.match(SYSTEM_PROMPT, /Cocktail, Mocktail, Soirée, or Evening Party/i, "Partywear prompt guidance present");
+  assert.match(SYSTEM_PROMPT, /pre-draped cocktail sarees with sculpted boned bustiers|fluid satin cowl slip gowns/i, "Chic party silhouettes defined");
+  assert.match(REVIEW_SYSTEM_PROMPT, /Indo-Western fusion, cocktail, mocktail, or parties/i, "Reviewer verifies party and fusion fashion fidelity");
+  console.log("✓ Test 11 Passed");
+
+  // -------------------------------------------------------------------------
+  console.log("\n[Test 12] Image prompt generation (buildLookEditPrompt) visual fidelity for contemporary saree, cocktail, and Indo-Western...");
+  const modernSareeLook = {
+    ...look(1, "Pre-draped liquid metallic tissue saree with a sculpted boned bustier and metallic belt", [
+      { category: "Outfit", name: "Pre-draped liquid metallic tissue saree", detail: "metallic tissue silk" },
+      { category: "Top", name: "Sculpted boned bustier", detail: "sweetheart neckline" },
+      { category: "Accessories", name: "Metallic waist-cincher belt", detail: "gold finish" },
+      { category: "Footwear", name: "Metallic stiletto heels", detail: "" },
+    ]),
+    styleIntent: {
+      effectiveOccasion: "Cocktail Party",
+      themeOrAesthetic: "Contemporary Glamour",
+      styleDirection: "fusion" as const,
+      mustInclude: ["latest saree"],
+      mustAvoid: [],
+    },
+  } as unknown as LookRecommendation;
+
+  const womanPartyProfile = profileOf({
+    name: "Kavya",
+    occasion: "Cocktail Party",
+    style: ["Chic Contemporary", "Indo-Western Fusion"],
+    customStyleNotes: "Latest new fashion saree for a cocktail evening",
+  });
+
+  const prompt = buildLookEditPrompt(modernSareeLook, womanPartyProfile, { occasion: "Cocktail Party", details: "Latest new fashion saree for a cocktail evening" }, null);
+  assert.match(prompt, /CONTEMPORARY & LATEST SAREE VISUAL FIDELITY/, "Visual fidelity for contemporary saree included");
+  assert.match(prompt, /COCKTAIL & PARTY OCCASION ATMOSPHERE/, "Atmosphere for cocktail party included");
+  assert.match(prompt, /INDO-WESTERN FUSION VISUAL FIDELITY/, "Indo-Western fusion visual fidelity included");
+  assert.match(prompt, /upscale evening party or cocktail lounge/i, "Party setting specified");
+  assert.match(prompt, /crisp, impeccably pre-draped or concept silhouette/i, "Modern drape specified");
+  console.log("✓ Test 12 Passed");
+
+  // -------------------------------------------------------------------------
+  console.log("\n[Test 13] Dynamic fallback suites for modern saree and cocktail partywear...");
+  const cocktailFallback = generateFallbackLooks(profileOf({ occasion: "Cocktail Party", style: ["Glamorous"] }));
+  assert.equal(cocktailFallback.length, 5, "Returns 5 cocktail party looks");
+  assert.ok(cocktailFallback.some((l) => /cocktail saree/i.test(l.outfit)), "Includes cocktail saree");
+  assert.ok(cocktailFallback.some((l) => /satin.*gown|tuxedo|corset/i.test(l.outfit)), "Includes gowns and tuxedo partywear");
+
+  const sareeFallback = generateFallbackLooks(profileOf({ style: ["Modern Saree"], occasion: "Reception" }));
+  assert.equal(sareeFallback.length, 5, "Returns 5 modern saree looks");
+  assert.ok(sareeFallback.every((l) => /saree/i.test(l.outfit)), "All 5 looks are sarees");
+  assert.ok(sareeFallback.some((l) => /pre-draped|pre-stitched|pant-style|ruffle/i.test(l.outfit)), "Includes modern pre-draped / pant / ruffle sarees");
+  console.log("✓ Test 13 Passed");
 
   console.log("\n======================================================================");
   console.log("ALL SAREE INTELLIGENCE TESTS PASSED");

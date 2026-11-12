@@ -46,6 +46,7 @@ export const StyleIntentSchema = z.object({
   effectiveOccasion: z.string().optional().default(''),
   themeOrAesthetic: z.string().optional().default(''),
   styleDirection: z.string().optional().default(''),
+  sareeAesthetic: z.string().optional(),
   mustInclude: z.array(z.string()).optional().default([]),
   mustAvoid: z.array(z.string()).optional().default([]),
 });

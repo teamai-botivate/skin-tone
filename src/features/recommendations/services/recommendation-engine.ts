@@ -181,7 +181,7 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
   const isWedding = allContext.includes('wedding') || allContext.includes('shaadi') || allContext.includes('sangeet');
   const isOffice = allContext.includes('office') || allContext.includes('formal') || allContext.includes('corporate') || allContext.includes('work');
   const isDateNight = allContext.includes('date') || allContext.includes('dinner');
-  const isParty = allContext.includes('party') || allContext.includes('cocktail');
+  const isParty = allContext.includes('party') || allContext.includes('cocktail') || allContext.includes('mocktail') || allContext.includes('soiree') || allContext.includes('soirée');
   const isVacation =
     occ.includes('vacation') ||
     occ.includes('beach') ||
@@ -189,6 +189,11 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
     occ.includes('goa') ||
     occ.includes('holiday') ||
     occ.includes('summer');
+  const isSaree =
+    !isVacation &&
+    !isOffice &&
+    !isGarba &&
+    (allContext.includes('saree') || allContext.includes('sari'));
 
   const ctx = getStylingContext(profile);
   const isBoy = ctx.isBoy;
@@ -1297,6 +1302,292 @@ export function generateFallbackLooks(profile: SkinTuneProfile): LookRecommendat
           { category: 'Bottom', name: `Matching ${primaryColor} High-Rise Trousers`, detail: 'Creased straight-leg suiting trousers.' },
           { category: 'Base', name: 'Ivory Silk Inner Camisole Top', detail: 'Breathable modal-silk blend with clean neckline.' },
           { category: 'Shoe', name: 'Pointed-Toe Block Heel Pumps', detail: 'Comfortable 2-inch block heel for corporate mobility.' },
+        ],
+      },
+    ];
+  }
+
+  // 3. Women's Cocktail / Mocktail / Partywear Look Suite
+  if (isParty && isWoman && !isFestive && !isVacation) {
+    return [
+      {
+        id: 'party-women-01',
+        title: 'Pre-Draped Liquid Metallic Cocktail Saree',
+        note: `Modern ready-to-wear liquid metallic ${primaryColor} saree with a structured boned bustier and sculpted belt.`,
+        vibe: 'Poised',
+        personaEnergy: 'High-glam red-carpet presence with captivating cocktail party allure and poise.',
+        palette: ['#ec4899', '#f59e0b', '#18181b'],
+        imageUrl: '/replace-with-generated/party-women-01.webp',
+        outfit: `Pre-draped liquid metallic ${primaryColor} cocktail saree with a sculpted boned bustier and metallic waist-cincher belt.`,
+        outfitColor: `Liquid shimmering ${primaryColor} with polished metallic accents.`,
+        jewellery: 'Architectural modern ear cuffs and delicate sparkling tennis bracelet.',
+        hairstyle: 'Sleek wet-look low bun with a sharp side part.',
+        makeup: 'Luminous dewy skin, sharp winged eyeliner, and glossy berry lip.',
+        footwear: 'Pointed metallic stiletto high-heel pumps.',
+        accessories: 'Structured acrylic box evening clutch with gold clasp.',
+        confidence: 97,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Pre-draped construction provides effortless cocktail glamour without loose drape hassle.',
+          'Sculpted boned bustier creates a sharp high-fashion silhouette.',
+          'Liquid metallic sheen reflects evening ambient lighting beautifully.',
+        ],
+        pieces: [
+          { category: 'Dress', name: `Pre-Draped Liquid Metallic ${primaryColor} Cocktail Saree`, detail: 'Pre-stitched pleated saree in fluid metallic tissue.' },
+          { category: 'Top', name: 'Sculpted Boned Sweetheart Bustier', detail: 'Structured inner boning with metallic thread accents.' },
+          { category: 'Finish', name: 'Sculpted Metallic Waist Belt', detail: 'Polished gold geometric waist cincher.' },
+          { category: 'Shoe', name: 'Pointed Metallic Stiletto High-Heel Pumps', detail: 'Sleek party stiletto with cushioned footbed.' },
+        ],
+      },
+      {
+        id: 'party-women-02',
+        title: 'Liquid Satin Cowl Slip Gown',
+        note: `Floor-sweeping liquid satin cowl neck slip gown in ${primaryColor} with high side slit.`,
+        vibe: 'Magnetic',
+        personaEnergy: 'Effortlessly alluring, fluid stride with sophisticated evening confidence.',
+        palette: ['#db2777', '#f43f5e', '#0f172a'],
+        imageUrl: '/replace-with-generated/party-women-02.webp',
+        outfit: `Floor-sweeping ${primaryColor} liquid satin slip gown with draped cowl neckline and dramatic thigh-high slit.`,
+        outfitColor: `Lustrous ${primaryColor} with deep jewel undertones.`,
+        jewellery: 'Dangling crystal drop earrings and layered delicate rings.',
+        hairstyle: 'Voluminous Hollywood waves swept over one shoulder.',
+        makeup: 'Soft smoky eye with champagne shimmer and rich velvet berry lip.',
+        footwear: 'Strappy metallic open-toe heeled sandals.',
+        accessories: 'Sleek metallic mesh evening pouch.',
+        confidence: 96,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Fluid satin drape cascades flatteringly along natural body curves.',
+          'Cowl neck and high slit deliver modern high-fashion party drama.',
+        ],
+        pieces: [
+          { category: 'Dress', name: `${primaryColor} Liquid Satin Cowl Slip Gown`, detail: 'Bias-cut satin with draped neckline and side slit.' },
+          { category: 'Shoe', name: 'Strappy Metallic Heeled Sandals', detail: 'Cushioned sole with slender ankle straps.' },
+        ],
+      },
+      {
+        id: 'party-women-03',
+        title: 'Sculpted Velvet Corset Midi Dress',
+        note: `Rich ${primaryColor} structured corset midi dress with off-shoulder neckline.`,
+        vibe: 'Daring',
+        personaEnergy: 'Bold, regal, and magnetic under evening party lights.',
+        palette: ['#881337', '#be123c', '#fef08a'],
+        imageUrl: '/replace-with-generated/party-women-03.webp',
+        outfit: `Structured ${primaryColor} velvet corset midi dress with boned bodice and off-shoulder sweetheart neckline.`,
+        outfitColor: `Deep plush ${primaryColor} with subtle golden undertones.`,
+        jewellery: 'Chic modern choker and matching crystal studs.',
+        hairstyle: 'High sleek snatched ponytail with wrapped base.',
+        makeup: 'Flawless velvet base with feline cat-eye and deep wine matte lip.',
+        footwear: 'Black suede pointed stiletto pumps.',
+        accessories: 'Structured minaudière clutch with metallic chain.',
+        confidence: 95,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Plush velvet offers rich tactile depth perfect for evening soirées.',
+          'Boned corset bodice provides structured support and timeless elegance.',
+        ],
+        pieces: [
+          { category: 'Dress', name: `${primaryColor} Sculpted Velvet Corset Midi Dress`, detail: 'Structured boned bodice with stretch velvet lining.' },
+          { category: 'Shoe', name: 'Black Suede Pointed Stiletto Pumps', detail: 'Clean lines with non-slip sole.' },
+        ],
+      },
+      {
+        id: 'party-women-04',
+        title: 'Tailored Tuxedo Pantsuit with Satin Lapels',
+        note: `Chic feminine ${primaryColor} tailored tuxedo suit with lustrous satin peak lapels.`,
+        vibe: 'Sharp',
+        personaEnergy: 'Modern boss glamour, effortlessly commanding attention in tailored perfection.',
+        palette: ['#0f172a', '#ec4899', '#ffffff'],
+        imageUrl: '/replace-with-generated/party-women-04.webp',
+        outfit: `Feminine tailored ${primaryColor} tuxedo jacket with contrasting satin peak lapels and slim cigarette trousers.`,
+        outfitColor: `${primaryColor} with midnight black satin accents.`,
+        jewellery: 'Bold sculptural gold hoop earrings.',
+        hairstyle: 'Modern slicked-back bob with tucked sides.',
+        makeup: 'Clean luminous skin with bold crimson red lip.',
+        footwear: 'Glossy pointed-toe patent leather pumps.',
+        accessories: 'Sleek leather envelope evening clutch.',
+        confidence: 94,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Sharp feminine tuxedo cuts an unforgettable modern figure at cocktail parties.',
+          'Satin lapels add luxurious sheen contrasting with matte suiting.',
+        ],
+        pieces: [
+          { category: 'Outer', name: `Tailored ${primaryColor} Tuxedo Jacket`, detail: 'Feminine cut with satin peak lapels and single-button closure.' },
+          { category: 'Bottom', name: 'Matching Slim Cigarette Trousers', detail: 'Clean front with ankle break.' },
+          { category: 'Shoe', name: 'Pointed Patent Leather Pumps', detail: 'Classic evening stiletto.' },
+        ],
+      },
+      {
+        id: 'party-women-05',
+        title: 'Contemporary Indo-Western Cape Jumpsuit',
+        note: `Sleek wide-leg ${primaryColor} jumpsuit with attached sheer embroidered floor-length cape.`,
+        vibe: 'Radiant',
+        personaEnergy: 'Graceful, high-fashion celebratory spirit with sweeping dramatic movement.',
+        palette: ['#701a75', '#d946ef', '#fef08a'],
+        imageUrl: '/replace-with-generated/party-women-05.webp',
+        outfit: `Tailored wide-leg ${primaryColor} crepe jumpsuit with metallic embroidered belt and flowing sheer floor-length cape.`,
+        outfitColor: `Rich jewel-tone ${primaryColor} with antique zari accents.`,
+        jewellery: 'Modern polki chandelier earrings and sleek gold bangle.',
+        hairstyle: 'Romantic textured low updo with soft tendrils.',
+        makeup: 'Warm champagne shimmer eye with glossy nude-pink lip.',
+        footwear: 'Open-toe platform block heels.',
+        accessories: 'Embellished micro potli clutch.',
+        confidence: 93,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Floor-length cape delivers breathtaking movement without dupatta handling.',
+          'Wide-leg silhouette elongates legs while ensuring total comfort for dancing.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `Tailored Wide-Leg ${primaryColor} Jumpsuit`, detail: 'Crepe jumpsuit with attached sheer organza cape.' },
+          { category: 'Finish', name: 'Embroidered Metallic Waist Belt', detail: 'Zari embroidered belt with clasp.' },
+          { category: 'Shoe', name: 'Open-Toe Platform Block Heels', detail: 'Cushioned footbed for party mobility.' },
+        ],
+      },
+    ];
+  }
+
+  // 4. Women's Modern / Latest Saree Suite
+  if (isSaree && isWoman && !isFestive && !isVacation) {
+    return [
+      {
+        id: 'saree-women-01',
+        title: 'Pre-Draped Liquid Metallic Tissue Saree',
+        note: `Modern ready-to-wear liquid metallic ${primaryColor} tissue saree with a structured boned bustier and sculpted waist belt.`,
+        vibe: 'Poised',
+        personaEnergy: 'High-fashion editorial elegance, head held high with effortless modern poise.',
+        palette: ['#ec4899', '#f59e0b', '#18181b'],
+        imageUrl: '/replace-with-generated/saree-women-01.webp',
+        outfit: `Pre-draped liquid metallic ${primaryColor} tissue saree with a sculpted sweetheart bustier blouse and metallic waist-cincher belt.`,
+        outfitColor: `Liquid metallic ${primaryColor} with polished gold highlights.`,
+        jewellery: 'Sculptural geometric ear cuffs and sleek metallic cuff bracelet.',
+        hairstyle: 'Sleek low bun with a clean center part.',
+        makeup: 'Luminous skin tint, sharp winged liner, and glossy berry lip.',
+        footwear: 'Pointed metallic stiletto high-heel pumps.',
+        accessories: 'Structured acrylic box clutch.',
+        confidence: 97,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Pre-draped construction delivers crisp, flawless pleats with zero draping difficulty.',
+          'Liquid metallic tissue catches light with luxurious modern brilliance.',
+          'Sculpted bustier and belt provide structured architectural support.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `Pre-Draped Liquid Metallic ${primaryColor} Tissue Saree`, detail: 'Pre-stitched pleated saree in fluid metallic tissue silk.' },
+          { category: 'Top', name: 'Sculpted Sweetheart Bustier Blouse', detail: 'Tailored boned bodice with metallic accents.' },
+          { category: 'Finish', name: 'Sculpted Metallic Waist Belt', detail: 'Polished gold geometric waist cincher.' },
+          { category: 'Shoe', name: 'Pointed Metallic Stiletto High-Heel Pumps', detail: 'Sleek silhouette with cushioned footbed.' },
+        ],
+      },
+      {
+        id: 'saree-women-02',
+        title: 'Pre-Stitched Ruffle Georgette Saree',
+        note: `Tiered ruffle ${primaryColor} georgette saree with an embroidered belt and sleeveless halter blouse.`,
+        vibe: 'Daring',
+        personaEnergy: 'Vibrant, twirling, full of youthful fashion flair and sweeping movement.',
+        palette: ['#f43f5e', '#a855f7', '#1e1b4b'],
+        imageUrl: '/replace-with-generated/saree-women-02.webp',
+        outfit: `Pre-stitched tiered ruffle ${primaryColor} georgette saree paired with an embroidered waist belt and halter-neck blouse.`,
+        outfitColor: `Saturated ${primaryColor} with shimmering violet undertones.`,
+        jewellery: 'Modern chandelier earrings and statement cocktail ring.',
+        hairstyle: 'Sleek high ponytail with wrapped base.',
+        makeup: 'Dewy skin with soft rose shimmer eye and glossy lip.',
+        footwear: 'Open-toe metallic strappy heels.',
+        accessories: 'Embroidered envelope clutch.',
+        confidence: 96,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Cascading ruffles add dynamic volume and playful couture energy.',
+          'Embroidered belt cinches the waist and keeps the palla secure.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `Tiered Ruffle ${primaryColor} Georgette Saree`, detail: 'Pre-stitched tiered ruffle borders for flowing movement.' },
+          { category: 'Top', name: 'Sleeveless Halter-Neck Blouse', detail: 'Fitted cutaway halter with back hook closure.' },
+          { category: 'Finish', name: 'Embroidered Zari Waist Belt', detail: 'Slim metallic belt with secure hook.' },
+          { category: 'Shoe', name: 'Open-Toe Metallic Strappy Heels', detail: '3-inch heel with padded sole.' },
+        ],
+      },
+      {
+        id: 'saree-women-03',
+        title: 'Contemporary Pant-Style Saree with Cropped Blazer',
+        note: `Edgy modern ${primaryColor} pant-saree ensemble paired with a tailored cropped tuxedo blazer.`,
+        vibe: 'Sharp',
+        personaEnergy: 'Confident runway presence, striding forward with power-glamour ease.',
+        palette: ['#0f172a', '#ec4899', '#fef08a'],
+        imageUrl: '/replace-with-generated/saree-women-03.webp',
+        outfit: `Contemporary ${primaryColor} pant-style saree with pre-pleated drape, tailored slim trousers, and a black cropped tuxedo blazer.`,
+        outfitColor: `${primaryColor} with sharp midnight black tailoring.`,
+        jewellery: 'Linear modern drop earrings and delicate knuckle ring.',
+        hairstyle: 'Side-swept Hollywood waves.',
+        makeup: 'Sharp feline cat-eye with classic velvet bold lip.',
+        footwear: 'Pointed patent leather pumps.',
+        accessories: 'Structured micro box bag with metallic top handle.',
+        confidence: 95,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Pant-saree hybrid merges the freedom of tailored trousers with the grace of a saree drape.',
+          'Cropped blazer brings crisp European tailoring over fluid Indian draping.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `Contemporary ${primaryColor} Pant-Style Saree`, detail: 'Pre-draped pleated pallu anchored into slim tailored cigarette pants.' },
+          { category: 'Layer', name: 'Tailored Cropped Tuxedo Blazer', detail: 'Satin peak lapels with single-button closure.' },
+          { category: 'Shoe', name: 'Pointed Patent Leather Pumps', detail: 'Classic evening stiletto.' },
+        ],
+      },
+      {
+        id: 'saree-women-04',
+        title: 'Cascading Cowl Drape Organza Saree',
+        note: `Fluid sheer ${primaryColor} liquid organza saree with cascading cowl pallu and boned corset blouse.`,
+        vibe: 'Radiant',
+        personaEnergy: 'Luminous, ethereal, and romantic with soft graceful gestures.',
+        palette: ['#db2777', '#fdf2f8', '#f59e0b'],
+        imageUrl: '/replace-with-generated/saree-women-04.webp',
+        outfit: `Translucent ${primaryColor} liquid organza saree with a cascading cowl pallu drape and structured corset blouse.`,
+        outfitColor: `Soft glowing ${primaryColor} with champagne zari micro-motifs.`,
+        jewellery: 'Polki stud earrings and delicate tennis bracelet.',
+        hairstyle: 'Textured romantic low updo with face-framing tendrils.',
+        makeup: 'Sunlit golden highlighter, warm rose cheeks, and tinted petal lip balm.',
+        footwear: 'Embellished block-heel sandals.',
+        accessories: 'Pearl-encrusted potli bag.',
+        confidence: 94,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Liquid organza offers weightless, shimmering translucence.',
+          'Cowl pallu drape creates sculptural folds that frame the shoulder elegantly.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `${primaryColor} Liquid Organza Saree`, detail: 'Sheer translucent organza with scalloped embroidered border and cowl drape.' },
+          { category: 'Top', name: 'Structured Corset Blouse', detail: 'Boned sweetheart bodice with delicate shoulder straps.' },
+          { category: 'Shoe', name: 'Embellished Block-Heel Sandals', detail: 'Cushioned sole for easy walking.' },
+        ],
+      },
+      {
+        id: 'saree-women-05',
+        title: 'Belted Concept Saree with Sheer Cape',
+        note: `Pre-draped pleated ${primaryColor} concept saree with floor-length sheer organza cape and metallic waist cincher.`,
+        vibe: 'Magnetic',
+        personaEnergy: 'Regal, cinematic presence with billowing cape movement and statuesque posture.',
+        palette: ['#be123c', '#ffffff', '#fef08a'],
+        imageUrl: '/replace-with-generated/saree-women-05.webp',
+        outfit: `Pre-draped ${primaryColor} concept saree with a metallic waist-cincher belt and a sheer embroidered floor-length cape jacket.`,
+        outfitColor: `Rich royal ${primaryColor} with delicate gold embroidery.`,
+        jewellery: 'Statement ear cuffs and layered delicate rings.',
+        hairstyle: 'Voluminous textured blowout.',
+        makeup: 'Smoky bronze eye with a velvety nude-pink lip.',
+        footwear: 'Metallic open-toe platform heels.',
+        accessories: 'Sleek minaudière clutch with chain strap.',
+        confidence: 93,
+        applicableCategories: ['outfit', 'jewellery', 'footwear', 'accessories', 'makeup'],
+        reasoning: [
+          'Floor-length cape jacket replaces standard blouse layers for dramatic runway flair.',
+          'Metallic belt anchors the pleats while cinching the natural waist.',
+        ],
+        pieces: [
+          { category: 'Outfit', name: `Pre-Draped ${primaryColor} Concept Saree`, detail: 'Structured stitched pleats with attached shoulder drape.' },
+          { category: 'Layer', name: 'Sheer Floor-Length Organza Cape Jacket', detail: 'Lightweight embroidered cape that billows dramatically.' },
+          { category: 'Finish', name: 'Metallic Waist-Cincher Belt', detail: 'Embroidered metallic belt with hook closure.' },
+          { category: 'Shoe', name: 'Metallic Open-Toe Platform Heels', detail: 'Cushioned footbed for extended wear.' },
         ],
       },
     ];
