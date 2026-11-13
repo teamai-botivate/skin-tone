@@ -40,7 +40,7 @@ SAREE EXPERTISE (applies whenever the brief's sareeAesthetic is not "not_request
   * Contemporary saree constructions: pre-draped / ready-to-wear, pre-stitched, ruffle, concept, pant-style, dhoti-style, cowl drape, cape-style, belted, jacket-style, and contemporary fusion sarees, saree-jumpsuits, skirt-pleated sarees.
   * Draping styles: Nivi, Bengali, Gujarati, Maharashtrian (Nauvari), dhoti drape, butterfly, seedha pallu, pant-style, contemporary cowl drape, pre-stitched drapes, cascading neck-wrap drape, cape-pallu drape, pleated mermaid drape, sculpted belted pleats.
   * Cutting-edge contemporary fabrics & textiles: metallic tissue silk, liquid organza, crushed / micro-pleated georgette, fluid satin crepe, metallic shimmer lamé, sequined tulle/mesh, foil-printed georgette, modal silk, shimmering lurex.
-  * Modern blouses & outerwear layers: structured corset blouses, sculpted boned bustiers, tailored cropped blazers, tuxedo jackets, sheer floor-length embroidered capes, halter cutaway necklines, peplum tops, metallic waist cinchers/belts.
+  * Modern blouses & outerwear layers: structured corset blouses, sculpted boned bustiers, tailored cropped blazers, tuxedo jackets, sheer floor-length embroidered capes, halter cutaway necklines, peplum short kurtis, metallic waist cinchers/belts.
 - Honour the requested aesthetic exactly:
   * traditional: authentic traditional sarees and regional weaves, traditionally draped, with classic blouses. A contemporary element is allowed only if the look still reads traditional. Never fill the looks with western or fusion outfits.
   * contemporary: lead with modern constructions — pre-draped, ruffle, pant-style, dhoti-style, belted, cape, jacket or cowl drapes and innovative drapes — with modern blouses (corset, structured, sheer, halter, cropped blazer, sculpted bustier) and cutting-edge fabrics (metallic tissue, liquid organza, crushed georgette, satin crepe). When the user asks for "latest saree", "latest sarees", "new fashion saree", "designer saree", or new variations, strictly propose latest runway-inspired variations: pre-draped pant-sarees, belted concept sarees with metallic cinchers, corset-blouse sarees, cape-jacket sarees, or liquid metallic tissue sarees.
@@ -81,7 +81,7 @@ AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
   * Children: age-appropriate kidswear only. Strictly NO adult or mature styling (no deep necks, adult formal tailoring, high heels, lingerie-style pieces), and NO cosmetics: makeup must be "None (child-friendly natural skin)".
     - OCCASION-DRIVEN KIDSWEAR & ACCESSORY COHESION (dynamically adapt to candidate's inputs, style direction, and occasion):
       * Traditional / Ethnic / Festive: Propose authentic Indian traditional ethnic wear (strictly NO western wear like jeans, t-shirts, denim, casual shorts, or western blazers; use comfortable breathable fabrics like cotton-silk, mulmul, chanderi, linen-cotton, soft organza accents, rich joyful festive colors):
-        - For Girls: traditional ethnic kurti with dhoti/pyjama pants, beautiful lehenga-choli sets with attached sheer flutter capes (strictly NO loose tripping dupattas), ruffled sharara/palazzo sets, or peplum tops with dhoti pants. Accessories: stylish festive potli bags with tassel drawstrings, or festive floral / pearl hair clips, hair bands, headbands, or embroidered hair bows. Footwear: cushioned flat juttis, embellished bellies, or soft ethnic sandals.
+        - For Girls: traditional ethnic kurti with dhoti/pyjama pants, beautiful lehenga-choli sets with attached sheer flutter capes (strictly NO loose tripping dupattas), ruffled sharara/palazzo sets, or flared peplum kurtis with dhoti pants. Accessories: stylish festive potli bags with tassel drawstrings, or festive floral / pearl hair clips, hair bands, headbands, or embroidered hair bows. Footwear: cushioned flat juttis, embellished bellies, or soft ethnic sandals.
         - For Boys: traditional ethnic kurtas (angrakha, straight, or asymmetric placket) with pyjama or dhoti pants, lightweight printed bundi / Nehru waistcoats with pocket squares, festive silk stoles / dupattas, or festive sherwani sets with pyjamas (strictly NEVER recommend churidars for boys: boys wear comfortable pyjama or dhoti pants, never tight churidars; kids ethnic wear is bought as complete kurta/pyjama/dhoti sets). Any layer, drape or jacket MUST be an authentic Indian ethnic piece (Nehru jacket, Bundi waistcoat, Modi jacket, Koti, or traditional festive silk stole/dupatta; NEVER western bomber, puffer, denim, fleece, or tailored spread-collar jackets). Accessories: festive brooches or pocket squares when wearing formal bundi/sherwani, or ethnic caps; otherwise "None". Footwear: cushioned ethnic mojris, juttis, or traditional ethnic sandals (NEVER western sneakers or loafers).
       * Everyday / Casual: Focus on all-day comfort, breathability, and playful ease:
         - For Girls: cute tiered cotton dresses, soft tunics paired with leggings, pinafore sets, graphic tee & culotte coords. Accessories: cute hair accessories (floral clips, bow clips, hair bands, headbands, soft scrunchies) or cute mini everyday pouches / small crossbody bags. Footwear: comfortable velcro sneakers, cute ballerina flats, slide sandals.
@@ -106,7 +106,7 @@ AUDIENCE & DEMOGRAPHIC INTEGRITY (always applies):
     - Men's jewellery stays minimal and masculine (watch, kada/bracelet, signet ring, brooch); NEVER women's jewellery (no temple necklaces, dangling pendants, chokers, jhumkas, earrings, maang tikkas, anklets).
     - When fusion / Indo-Western style direction is requested: propose cutting-edge masculine Indo-Western cuts (asymmetric high-low kurtas with diagonal plackets, tuxedo bandhgalas with satin shawl lapels, open-front achkans over cowl-draped kurtas, short crossover angrakha jackets; bottoms MUST be tailored modern cigarette trousers or stretch chinos, NEVER loose traditional salwars or pyjamas; footwear: leather monk straps or dress loafers).
   * Women: complete head-to-toe curation; when jewellery is included, specify both ear and wrist jewellery that harmonise with the outfit's formality (minimal and sleek for formal looks).
-    - When fusion / Indo-Western style direction is requested: propose cutting-edge contemporary silhouettes (pre-draped ready-to-wear sarees paired with structured cropped blazers or corsets and belts, cape-style bustier tops with high-waist dhoti pants or tiered shararas and sheer floor-length capes, belted saree jumpsuits, peplum tops with cowl/tulip pants, or rich brocade skirts with crisp white poplin shirts). Style with a modern designer aesthetic, structured tailoring, and sleek modern accessories.
+    - When fusion / Indo-Western style direction is requested: propose cutting-edge contemporary silhouettes (pre-draped ready-to-wear sarees paired with structured cropped blazers or corsets and belts, cape-style bustier tops with high-waist dhoti pants or tiered shararas and sheer floor-length capes, belted saree jumpsuits, peplum short kurtis with cowl/tulip pants, or rich brocade skirts with crisp white poplin shirts). Style with a modern designer aesthetic, structured tailoring, and sleek modern accessories.
     - When occasion is Cocktail, Mocktail, Soirée, or Evening Party (or when party styling is requested): propose latest high-fashion evening party outfits: liquid metallic or tissue pre-draped cocktail sarees with sculpted boned bustiers, fluid satin cowl slip gowns or column dresses with high slits, sculpted corset midi dresses, tailored feminine tuxedo suits in velvet or crepe with satin lapels, or chic Indo-Western party cape sets. Footwear: sleek stiletto heels or elegant metallic strappy sandals; Jewellery: statement modern earrings (ear cuffs, architectural drops) and delicate bracelets; Hair & Makeup: sleek high-fashion hairstyles (Hollywood waves, sleek bun, slicked ponytail) and luminous night-out glam.
 
 FIELD RULES:
@@ -375,6 +375,39 @@ export function toStyleIntent(brief: StyleBrief): StyleIntent {
 export function attachStyleIntent<T extends object>(looks: T[], brief: StyleBrief): Array<T & { styleIntent: StyleIntent }> {
   const styleIntent = toStyleIntent(brief);
   return looks.map((look) => ({ ...look, styleIntent }));
+}
+
+/**
+ * Creates a valid StyleBrief from profile attributes when live AI calls are unavailable.
+ * Ensures image rendering and product search have structured styleIntent even on fallback.
+ */
+export function createFallbackStyleBrief(profile: SkinTuneProfile): StyleBrief {
+  const occasion = profile.occasion || "Curated styling occasion";
+  const stylesStr = (profile.style || []).join(" ").toLowerCase();
+  const allContext = `${occasion} ${stylesStr} ${(profile.customStyleNotes || "")}`.toLowerCase();
+
+  let direction: "traditional" | "western" | "fusion" | "mixed" | "other" = "western";
+  if (allContext.includes("indo-western") || allContext.includes("indo western") || allContext.includes("fusion")) {
+    direction = "fusion";
+  } else if (allContext.includes("traditional") || allContext.includes("ethnic") || allContext.includes("saree") || allContext.includes("desi")) {
+    direction = "traditional";
+  } else if (allContext.includes("cocktail") || allContext.includes("party")) {
+    direction = "mixed";
+  }
+
+  const isSaree = allContext.includes("saree") || allContext.includes("sari");
+
+  return {
+    effectiveOccasion: occasion,
+    occasionReasoning: "Curated styling profile attributes",
+    themeOrAesthetic: (profile.style || []).join(", ") || "Contemporary personal style",
+    styleDirection: direction,
+    styleDirectionReasoning: "Derived from user selected style direction",
+    sareeAesthetic: isSaree ? "contemporary" : "not_requested",
+    mustInclude: profile.colorsLove || [],
+    mustAvoid: profile.colorsAvoid || [],
+    resolvedConflicts: [],
+  };
 }
 
 export type GeneratedLook = Omit<LookRecommendation, "imageUrl">;

@@ -4,7 +4,8 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { logger } from "./logger";
 import { getOpenAIClient } from "./openai-client";
-import { attachStyleIntent, generateLookRecommendations } from "./recommendation-prompt";
+import { attachStyleIntent, createFallbackStyleBrief, generateLookRecommendations } from "./recommendation-prompt";
+import { generateFallbackLooks } from "@/features/recommendations/services/recommendation-engine";
 import {
   buildLookImagePrompt,
   getPrimaryRenderError,
@@ -670,14 +671,31 @@ export async function runGenerationJob(
         }
       }
       if (!looks) {
-        logger.error({ err: lastErr, jobId }, "Background recommendations failed");
-        return await failJob("The styling service could not create your looks right now. Please try again.");
+        const isStubTest = process.env.OPENAI_API_KEY?.startsWith("sk-test-stub");
+        if (!isStubTest) {
+          logger.warn({ err: lastErr, jobId }, "Background recommendations live AI calls failed; falling back to dynamic curated looks");
+          const fallback = generateFallbackLooks(profile);
+          const fallbackBrief = createFallbackStyleBrief(profile);
+          looks = attachStyleIntent(fallback, fallbackBrief).map((look) => ({
+            ...look,
+            category: look.category || "",
+            vibe: look.vibe || "Curated",
+            personaEnergy: look.personaEnergy || "Sophisticated and polished",
+            applicableCategories: look.applicableCategories || ["outfit", "footwear", "accessories"],
+            imageUrl: PENDING_IMAGE_URL,
+          }));
+        } else {
+          logger.error({ err: lastErr, jobId }, "Background recommendations failed");
+          return await failJob("The styling service could not create your looks right now. Please try again.");
+        }
       }
+      if (!looks) return { outcome: "failed" };
       await updateOwnedJob(jobId, owner, { stage: "rendering", looks_json: JSON.stringify(looks) });
     } else if (job.stage !== "rendering") {
       await updateOwnedJob(jobId, owner, { stage: "rendering" });
     }
 
+    if (!looks) return { outcome: "failed" };
     const allLooks = looks;
     const ready = new Set(await getReadyLookIds(jobId));
     const pending = allLooks.filter((look) => !ready.has(look.id));

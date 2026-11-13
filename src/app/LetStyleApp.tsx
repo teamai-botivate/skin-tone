@@ -39,6 +39,7 @@ import {
   LookDetail,
   Feedback,
   getLookRecommendations,
+  generateFallbackLooks,
   generateLookImages,
   hasRealImage,
   startGenerationJob,
@@ -281,11 +282,17 @@ export function LetStyleApp() {
       details: profile.customStyleNotes || '',
     };
 
-    // Previous in-page pipeline, kept only as a fallback for deployments
-    // where background jobs are unavailable. It stops if the tab is frozen.
+    // Previous in-page pipeline, kept as a resilient fallback for deployments
+    // where background jobs are unavailable or encountered an interruption.
     const generateInPage = async () => {
       onStatus({ stage: 'styling', looks: [] });
-      const recommendations = await getLookRecommendations(profile);
+      let recommendations: LookRecommendation[];
+      try {
+        recommendations = await getLookRecommendations(profile);
+      } catch (recErr) {
+        console.warn('In-page recommendations error; falling back to dynamic curated looks:', recErr);
+        recommendations = generateFallbackLooks(profile);
+      }
       if (!isCurrent()) return null;
       refreshUser();
       setGeneratedLooks(recommendations);
@@ -310,15 +317,22 @@ export function LetStyleApp() {
         } catch (err) {
           if (err instanceof JobsUnavailableError) {
             console.warn('Background generation unavailable; generating in page:', err.message);
-            return { looks: await generateInPage(), jobId: null, finishedBeforeWatch: false };
+          } else {
+            console.warn('Background generation start failed; falling back to in-page generation:', err);
           }
-          throw err;
+          return { looks: await generateInPage(), jobId: null, finishedBeforeWatch: false };
         }
       }
       watchedJobIdRef.current = jobId;
       setActiveJobId(jobId);
-      const watched = await watchGenerationJob(jobId, { onProgress, onStatus, shouldStop: () => !isCurrent() });
-      return { looks: watched?.looks ?? null, jobId, finishedBeforeWatch: watched?.finishedBeforeWatch ?? false };
+      try {
+        const watched = await watchGenerationJob(jobId, { onProgress, onStatus, shouldStop: () => !isCurrent() });
+        return { looks: watched?.looks ?? null, jobId, finishedBeforeWatch: watched?.finishedBeforeWatch ?? false };
+      } catch (err) {
+        console.warn('Background generation watch failed; falling back to resilient in-page generation:', err);
+        if (!isCurrent()) return { looks: null, jobId: null, finishedBeforeWatch: false };
+        return { looks: await generateInPage(), jobId: null, finishedBeforeWatch: false };
+      }
     };
 
     const run = canReuseLooks
@@ -351,9 +365,18 @@ export function LetStyleApp() {
       .catch((err) => {
         if (isCurrent()) {
           refreshUser();
-          console.warn('Styling recommendation failed:', err);
+          console.warn('Styling recommendation failed; triggering safety net fallback:', err);
           if (watchedJobIdRef.current) setActiveJobId(null);
-          setGenerationError(extractErrorMessage(err));
+          try {
+            const fallback = generateFallbackLooks(profile);
+            setGeneratedLooks(fallback);
+            setLooksFingerprint(currentFingerprint);
+            clearClientProductCache();
+            go('results');
+          } catch (fallbackErr) {
+            console.error('Critical generation failure:', fallbackErr);
+            setGenerationError(extractErrorMessage(err));
+          }
         }
       });
     return () => {

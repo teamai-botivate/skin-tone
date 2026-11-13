@@ -4,7 +4,9 @@ import {
   type LookRecommendation,
 } from "@/lib/skintune-schemas";
 import { getOpenAIClient } from "@/lib/openai-client";
-import { attachStyleIntent, generateLookRecommendations } from "@/lib/recommendation-prompt";
+import { attachStyleIntent, createFallbackStyleBrief, generateLookRecommendations } from "@/lib/recommendation-prompt";
+import { generateFallbackLooks } from "@/features/recommendations/services/recommendation-engine";
+import { logger } from "@/lib/logger";
 
 import { executePaidOperation, CREDIT_COSTS } from "@/lib/credits";
 
@@ -20,13 +22,27 @@ export async function POST(req: Request) {
       description: "5 complete-look styling recommendations",
     },
     async (data) => {
-      const { looks: generated, styleBrief } = await generateLookRecommendations(getOpenAIClient(), data.profile);
-      // The reviewed brief rides along on each look as context for image generation
-      const looks = attachStyleIntent(generated, styleBrief);
-      const recommendations: LookRecommendation[] = looks.map((look) => ({
-        ...look,
-        imageUrl: "/replace-with-generated/pending.webp",
-      }));
+      let recommendations: LookRecommendation[];
+      try {
+        const { looks: generated, styleBrief } = await generateLookRecommendations(getOpenAIClient(), data.profile);
+        const looks = attachStyleIntent(generated, styleBrief);
+        recommendations = looks.map((look) => ({
+          ...look,
+          imageUrl: "/replace-with-generated/pending.webp",
+        }));
+      } catch (err) {
+        logger.warn({ err }, "Direct AI recommendations call failed; falling back to curated dynamic looks");
+        const fallback = generateFallbackLooks(data.profile);
+        const brief = createFallbackStyleBrief(data.profile);
+        recommendations = attachStyleIntent(fallback, brief).map((look) => ({
+          ...look,
+          category: look.category || "",
+          vibe: look.vibe || "Curated",
+          personaEnergy: look.personaEnergy || "Sophisticated and polished",
+          applicableCategories: look.applicableCategories || ["outfit", "footwear", "accessories"],
+          imageUrl: "/replace-with-generated/pending.webp",
+        }));
+      }
 
       return RecommendationsResponseSchema.parse({ recommendations });
     },

@@ -55,8 +55,8 @@ function describeFailure(kind: 'network' | 'timeout' | 'unauthorized' | 'http' |
         diagnostic: {
           provider: 'auth',
           status: 'unauthorized',
-          message: `Your session is not signed in or has expired (HTTP 401)${ref}.`,
-          suggestedFix: 'Sign in again, then retry.',
+          message: `Your LetStyle account is signed out or your session has expired (HTTP 401)${ref}. This is user account login, not an OpenAI or Tavily API key issue.`,
+          suggestedFix: 'Click "Sign in to LetStyle" below to log in or restore your session, then retry discovery.',
         },
       };
     case 'invalid':
@@ -141,6 +141,7 @@ export async function getProductRecommendations(
       res = await fetch('/api/product-recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body,
         signal: AbortSignal.timeout(PRODUCT_REQUEST_TIMEOUT_MS),
       });
