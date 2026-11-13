@@ -31,7 +31,7 @@ import {
 } from "../src/lib/generation-jobs";
 import { savePushSubscription, sendPushToUser } from "../src/lib/push-notifications";
 import { generateLookImage } from "../src/lib/server-image-generation";
-import { IMAGE_MODEL, RECOMMENDATION_MODEL } from "../src/lib/openai-client";
+import { IMAGE_MODEL, IMAGE_QUALITY, RECOMMENDATION_MODEL } from "../src/lib/openai-client";
 import type { SkinTuneProfile } from "../src/lib/skintune-schemas";
 logger.level = "fatal";
 
@@ -763,7 +763,7 @@ async function main() {
   const tool = jobLook1.tools[0];
   assert.deepEqual(
     { model: tool.model, quality: tool.quality, size: tool.size, output_format: tool.output_format, output_compression: tool.output_compression, moderation: tool.moderation },
-    { model: IMAGE_MODEL, quality: "high", size: "1024x1536", output_format: "jpeg", output_compression: 90, moderation: "low" },
+    { model: IMAGE_MODEL, quality: IMAGE_QUALITY, size: "1024x1536", output_format: "jpeg", output_compression: 90, moderation: "low" },
   );
   assert.equal(jobLook1.model, RECOMMENDATION_MODEL);
   assert.equal(jobLook1.input[0].content[1].image_url, input.photoUrl, "User's reference photo is sent");

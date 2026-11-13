@@ -3,6 +3,7 @@ import type { LookRecommendation, SkinTuneProfile } from "@/lib/skintune-schemas
 import {
   getOpenAIClient,
   IMAGE_MODEL,
+  IMAGE_QUALITY,
   RECOMMENDATION_MODEL,
   type OpenAIRequestOptions,
 } from "@/lib/openai-client";
@@ -199,8 +200,8 @@ async function writeStylingAddendum(
  * image_generation tool. Verified (against a real selfie) to preserve
  * identity — face, hairline, facial hair pattern, even a facial mole — far
  * better than the classic images.edit endpoint below. detail: 'original' on
- * the input image skips any downscaling before the model sees the photo;
- * quality: 'high' on the output tool improves fidelity further.
+ * the input image skips any downscaling before the model sees the photo.
+ * Output quality comes from IMAGE_QUALITY (medium by default, for speed).
  *
  * Some mainline models require the OpenAI organization to be "Verified"
  * (platform.openai.com -> Settings -> Organization) to be used via the
@@ -234,13 +235,16 @@ async function editViaResponsesApi(
       {
         type: "image_generation",
         model: IMAGE_MODEL,
-        quality: "high",
+        quality: IMAGE_QUALITY,
         moderation: "low",
         size: "1024x1536",
         output_format: "jpeg",
         output_compression: 90,
       },
     ],
+    // Go straight to the render: without this the model first decides whether to call
+    // the tool at all, which adds a turn (and occasionally answers in text instead).
+    tool_choice: { type: "image_generation" },
   }, requestOptions);
 
   const imageCall = response.output.find(
@@ -280,7 +284,7 @@ async function editViaImagesEdit(
     image: file,
     prompt,
     size: "1024x1536",
-    quality: "high",
+    quality: IMAGE_QUALITY,
     output_format: "jpeg",
     output_compression: 90,
     n: 1,
@@ -397,7 +401,7 @@ export async function renderLookImage({
       model: IMAGE_MODEL,
       prompt,
       size: "1024x1536",
-      quality: "high",
+      quality: IMAGE_QUALITY,
       moderation: "low",
       output_format: "jpeg",
       output_compression: 90,

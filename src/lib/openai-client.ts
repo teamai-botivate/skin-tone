@@ -83,3 +83,15 @@ function getValidImageModel(): string {
 }
 
 export const IMAGE_MODEL = getValidImageModel();
+
+/**
+ * Render quality for look images. "medium" renders several times faster than "high"
+ * (a 5-look batch finishes in well under half the time) at a small cost in fine detail;
+ * set OPENAI_IMAGE_QUALITY=high to trade speed back for detail.
+ */
+export type ImageQuality = "low" | "medium" | "high";
+function getImageQuality(): ImageQuality {
+  const value = cleanEnv(process.env["OPENAI_IMAGE_QUALITY"]).toLowerCase();
+  return value === "low" || value === "high" ? value : "medium";
+}
+export const IMAGE_QUALITY: ImageQuality = getImageQuality();

@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 process.env.OPENAI_API_KEY = "sk-test-offline-not-real";
 
 import { logger } from "../src/lib/logger";
+import { IMAGE_QUALITY } from "../src/lib/openai-client";
 import { renderLookImage, isModerationBlocked } from "../src/lib/server-image-generation";
 import { renderRetryDelayMs } from "../src/lib/generation-jobs";
 import {
@@ -45,8 +46,10 @@ async function main() {
       providerCalls.responses++;
       if (responsesError) return json(responsesError.body, responsesError.status);
       const body = JSON.parse(String(init?.body));
-      // Quality settings must be untouched
-      assert.equal(body.tools[0].quality, "high");
+      // Render quality is the configured one (medium by default, for speed); size and
+      // the original-detail reference that preserve identity are untouched
+      assert.equal(body.tools[0].quality, IMAGE_QUALITY);
+      assert.equal(body.tool_choice?.type, "image_generation", "render starts straight away");
       assert.equal(body.tools[0].size, "1024x1536");
       assert.equal(body.input[0].content[1].detail, "original");
       return json({ id: "r", object: "response", created_at: 0, status: "completed", model: "m", output: [{ type: "image_generation_call", id: "ig", status: "completed", result: "aW1n" }] });
@@ -61,7 +64,11 @@ async function main() {
 
   const photoUrl = "data:image/jpeg;base64," + Buffer.from("selfie").toString("base64");
 
-  await test("primary render keeps high quality, full size and original-detail reference", async () => {
+  await test("render quality defaults to medium unless OPENAI_IMAGE_QUALITY says otherwise", () => {
+    if (!process.env.OPENAI_IMAGE_QUALITY) assert.equal(IMAGE_QUALITY, "medium");
+  });
+
+  await test("primary render uses the configured quality, full size and original-detail reference", async () => {
     responsesError = null;
     const img = await renderLookImage({ lookId: "l1", prompt: "p", photoUrl });
     assert.equal(img, "data:image/jpeg;base64,aW1n");
