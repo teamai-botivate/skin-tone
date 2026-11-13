@@ -41,7 +41,7 @@ export type SearchLinkRequirement = {
 /** A listing/search page seen during discovery (rejected as a product, kept as a candidate link). */
 export type DiscoveredSearchPage = { url: string; title?: string };
 
-export const MAX_SEARCH_LINKS_PER_GROUP = 4;
+export const MAX_SEARCH_LINKS_PER_GROUP = 6;
 
 // ---------------------------------------------------------------------------
 // Category lexicon (whole words, singular/plural). Drapes and watches are shared between

@@ -91,6 +91,7 @@ import {
   normalizeRetailerName,
   getProductEffectivePrice,
   compareProductsByPriceAscending,
+  compareProductsByLookMatch,
   sortProductsByPriceAscending,
   buildFallbackSearchUrl,
 } from "./retailer-urls";
@@ -110,6 +111,7 @@ export {
   normalizeRetailerName,
   getProductEffectivePrice,
   compareProductsByPriceAscending,
+  compareProductsByLookMatch,
   sortProductsByPriceAscending,
   buildFallbackSearchUrl,
 };
@@ -290,6 +292,8 @@ const DISTINCT_TOP_STYLES: Array<{ name: string; pattern: RegExp }> = [
   { name: "henley", pattern: /\bhenley\b/i },
   // "U.S. Polo Assn" / "Polo Club" are brands, not the garment
   { name: "polo", pattern: /\bpolo\b(?![\s.-]*(?:assn|association|club))/i },
+  { name: "crop top", pattern: /\b(?:crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?)\b/i },
+  { name: "short kurti", pattern: /\b(?:short\s*kurt[ia]s?|peplum\s*(?:short\s*)?kurt[ia]s?)\b/i },
 ];
 
 function requiredTopStyles(requiredItemTitle?: string) {
@@ -621,10 +625,10 @@ export function checkProductConsistency(
       };
     }
   } else if (
-    (subcat === "shirt" || subcat === "top" || subcat === "inner_top") &&
+    (subcat === "shirt" || subcat === "top" || subcat === "inner_top" || subcat === "crop_top") &&
     requiredTopStyles(requiredItemTitle).length > 0
   ) {
-    // The requirement names a distinct garment style (e.g. a henley). That style is what
+    // The requirement names a distinct garment style (e.g. a henley, crop top, or short kurti). That style is what
     // must match; stores list the same garment as a shirt, t-shirt, tee or top.
     const missing = requiredTopStyles(requiredItemTitle).filter((s) => !s.pattern.test(fullCheckText));
     if (missing.length > 0) {
@@ -633,8 +637,9 @@ export function checkProductConsistency(
         reason: `Requirement is a ${missing.map((s) => s.name).join("/")}, but item is not: ${productName} (${urlStr})`,
       };
     }
-    const isUpperGarment = /\b(shirts?|t-?shirts?|tshirts?|tees?|tops?|henley|polo)\b/i.test(cleanName);
-    const isWrongType = /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt|dress|gown|saree|kurta|blazer|jacket|coat|shoe|bag)\b/i.test(cleanName);
+    const isUpperGarment = /\b(shirts?|t-?shirts?|tshirts?|tees?|tops?|henley|polo|crop\s*tops?|bustiers?|bralettes?|corsets?|kurt[ia]s?|choli|blouse)\b/i.test(cleanName);
+    const isKurtiReq = requiredItemTitle ? /\bkurt[ia]s?\b/i.test(requiredItemTitle) : false;
+    const isWrongType = /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt|dress|gown|saree|blazer|jacket|coat|shoe|bag)\b/i.test(cleanName) || (!isKurtiReq && /\bkurta\b/i.test(cleanName));
     if (!isUpperGarment || isWrongType) {
       return {
         isConsistent: false,
@@ -656,10 +661,22 @@ export function checkProductConsistency(
         reason: `Subcategory is Shirt, but item does not match shirt type: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat ? (subcat === "inner_top" || subcat === "top") : (cleanName.includes("camisole") || cleanName.includes("inner top"))) {
-    const isTop = /\b(top|tops|camisole|camisoles|blouse|blouses|shirt|shirts|tank|tee|t-shirt|corset|waistcoat|shell)\b/i.test(cleanName);
+  } else if (subcat ? (subcat === "inner_top" || subcat === "top" || subcat === "crop_top") : (cleanName.includes("camisole") || cleanName.includes("inner top"))) {
+    // If requirement specifies a crop top or bustier, strictly reject non-cropped tops
+    if (requiredItemTitle && /\b(crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?)\b/i.test(requiredItemTitle)) {
+      const isCropped = /\b(crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?|choli)\b/i.test(fullCheckText);
+      if (!isCropped) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is '${requiredItemTitle}', but item is a non-cropped generic top: ${productName} (${urlStr})`,
+        };
+      }
+    }
+    const isTop = /\b(top|tops|camisole|camisoles|blouse|blouses|shirt|shirts|tank|tee|t-shirt|corset|waistcoat|shell|bustier|crop\s*top)\b/i.test(cleanName);
     const isBottomGarment = /\b(trouser|pant|pants|slacks|chinos|jeans|shorts?|skirt)\b/i.test(cleanName);
-    const isWrongType = isBottomGarment || (/\b(blazer|jacket|dress|shoe|bag)\b/i.test(cleanName) && !isTop);
+    // A lehenga/anarkali/gown set that includes a blouse is not a blouse
+    const isFullEthnicSet = /\b(lehengas?|anarkalis?|gowns?|kurta\s*sets?)\b/i.test(cleanName);
+    const isWrongType = isBottomGarment || isFullEthnicSet || (/\b(blazer|jacket|dress|shoe|bag)\b/i.test(cleanName) && !isTop);
     if (!isTop || isWrongType) {
       return {
         isConsistent: false,
@@ -702,10 +719,27 @@ export function checkProductConsistency(
       ? subcat === "kurta" || subcat === "sherwani"
       : cleanName.includes("kurta") || cleanName.includes("kurti") || cleanName.includes("sherwani")
   ) {
+    if (/hm\.com|zara\.com/i.test(urlStr)) {
+      return {
+        isConsistent: false,
+        reason: `Retailer mismatch: H&M / Zara does not sell Indian ethnic wear/kurtis (${urlStr})`,
+      };
+    }
+    const isShortKurtiReq = requiredItemTitle ? /\b(?:short\s*kurt[ia]s?|peplum\s*(?:short\s*)?kurt[ia]s?)\b/i.test(requiredItemTitle) : false;
+    if (isShortKurtiReq) {
+      const isKurtiMatch = /\b(?:kurt[ia]s?|peplum\s*(?:short\s*)?kurt[ia]s?|short\s*kurt[ia]s?|tunic\s*kurti)\b/i.test(fullCheckText);
+      const isWesternTopOnly = /\b(?:tops?|t-?shirts?|tees?|shirts?|blouses?)\b/i.test(cleanName) && !isKurtiMatch;
+      if (!isKurtiMatch || isWesternTopOnly) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is '${requiredItemTitle}', but product is a generic western top: ${productName} (${urlStr})`,
+        };
+      }
+    }
     const isSherwaniReq = subcat === "sherwani" || (requiredItemTitle ? /\bsherwanis?\b/i.test(requiredItemTitle) : false);
     const isSherwani = /\b(sherwanis?|achkans?|bandhgala|jodhpuri|indo-western\s*sherwani|sherwani\s*set)\b/i.test(fullCheckText);
-    const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|sherwanis|kurta\s*set|anarkali|angrakha|bandhgala|achkan|jodhpuri|pathani)\b/i.test(fullCheckText);
-    const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag|kurti|saree|lehenga)\b/i.test(cleanName) && !isKurta;
+    const isKurta = /\b(kurta|kurtas|kurti|kurtis|sherwani|sherwanis|kurta\s*set|anarkali|angrakha|bandhgala|achkan|jodhpuri|pathani|peplum\s*kurti)\b/i.test(fullCheckText);
+    const isWrongType = /\b(blazer|western\s*suit|t-shirt|jeans|western\s*dress|shoe|bag|saree|lehenga)\b/i.test(cleanName) && !isKurta;
     if (isSherwaniReq && !isSherwani) {
       return {
         isConsistent: false,
@@ -755,8 +789,19 @@ export function checkProductConsistency(
         reason: `Subcategory is Ethnic Bundi / Nehru Jacket, but product is not an ethnic waistcoat: ${productName} (${urlStr})`,
       };
     }
-  } else if (subcat === "jacket") {
-    const isJacket = /\b(jackets?|coats?|overshirts?|shrugs?|cardigans?|bombers?|puffers?)\b/i.test(cleanName);
+  } else if (subcat === "jacket" || subcat === "shrug") {
+    const isShrugReq = requiredItemTitle ? /\b(shrugs?|capes?|cape\s*jackets?)\b/i.test(requiredItemTitle) : subcat === "shrug";
+    if (isShrugReq) {
+      const isShrugMatch = /\b(shrugs?|capes?|cape\s*jackets?|sheer\s*jacket|overlay|kimono)\b/i.test(fullCheckText);
+      const isHeavyJacket = /\b(puffer|quilted|down\s*jacket|windbreaker|fleece|bomber|leather\s*jacket|denim\s*jacket|formal\s*blazer|suit\s*jacket)\b/i.test(cleanName);
+      if (!isShrugMatch || isHeavyJacket) {
+        return {
+          isConsistent: false,
+          reason: `Requirement is '${requiredItemTitle}', but product is not a shrug/cape: ${productName} (${urlStr})`,
+        };
+      }
+    }
+    const isJacket = /\b(jackets?|coats?|overshirts?|shrugs?|capes?|cardigans?|bombers?|puffers?)\b/i.test(cleanName);
     const isWrongType = /\b(trousers?|pants?|jeans|shorts?|shoes?|dresses?|sarees?|kurtas?|books?)\b/i.test(cleanName) && !isJacket;
     const isFormalOccasion = expectedOccasion && /\b(formal|wedding|party|special\s*event|ceremony|reception|evening)\b/i.test(expectedOccasion);
     const isHeavyCasualOuterwear = /\b(puffer|quilted|hoodie|hooded|windbreaker|fleece|down\s*jacket)\b/i.test(cleanName);
@@ -816,6 +861,14 @@ export function checkProductConsistency(
   }
 
   // 4. COLOR CLASH CHECK (e.g. Pink trousers on Chocolate Brown suit, or Red on Emerald Green)
+  // Clothing must be the colour of the recommended garment: a product whose own name gives
+  // only other colours (a white or coral blouse for a charcoal saree) is a different item.
+  if (category === "outfit" && isOutfitColorMismatch(productName || "", expectedColor)) {
+    return {
+      isConsistent: false,
+      reason: `Color mismatch: Expected ${expectedColor}, but product is a different colour: ${productName} (${urlStr})`,
+    };
+  }
   if (expectedColor) {
     const exp = expectedColor.toLowerCase();
     if (exp.includes("emerald") || exp.includes("green") || exp.includes("sage") || exp.includes("forest")) {
@@ -2758,10 +2811,157 @@ const FASHION_COLOR_PATTERNS: Array<{ name: string; re: RegExp }> = [
  */
 export function extractColorFromText(text?: string): string | null {
   if (!text) return null;
+  const found = findColorMentions(text);
+  if (found.length === 0) return null;
+  // The garment's own colour is the one that names it ("Charcoal grey satin saree with gold
+  // embroidery" is a charcoal saree). A colour that only qualifies an embellishment ("gold
+  // zari", "silver embroidery") is used only when the text names no other colour.
+  const base = found.find((m) => !m.isEmbellishment);
+  return (base || found[0]).name;
+}
+
+// Words that, right after a colour, mean the colour belongs to decoration rather than the garment
+const EMBELLISHMENT_AFTER_COLOR_RE =
+  // Nouns only: "gold embroidery" decorates the garment, but "white embroidered blouse" is a white blouse
+  /^[\s-]*(?:zari|zardozi|embroidery|thread(?:\s*work)?|sequins|work|border|motifs?|accents?|buttis?|booti|trims?|piping|foil|print\b(?!ed)|gota|tilla|dori|embellishments?|highlights?|detailing|details?|lace|tassels?|beads|mirror\s*work)\b/i;
+
+type ColorMention = { name: string; index: number; length: number; isEmbellishment: boolean };
+
+/** Every fashion colour named in the text, in reading order (longest match first at a position). */
+function findColorMentions(text: string): ColorMention[] {
+  const mentions: ColorMention[] = [];
   for (const { name, re } of FASHION_COLOR_PATTERNS) {
-    if (re.test(text)) return name;
+    const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    for (const m of text.matchAll(global)) {
+      const index = m.index ?? 0;
+      const after = text.slice(index + m[0].length);
+      mentions.push({ name, index, length: m[0].length, isEmbellishment: EMBELLISHMENT_AFTER_COLOR_RE.test(after) });
+    }
   }
-  return null;
+  mentions.sort((a, b) => a.index - b.index || b.length - a.length);
+  // Drop matches nested inside a longer one ("Blue" inside "Royal Blue", "White" inside "Off-White")
+  const kept: ColorMention[] = [];
+  for (const m of mentions) {
+    const prev = kept[kept.length - 1];
+    if (prev && m.index < prev.index + prev.length) continue;
+    kept.push(m);
+  }
+  return kept;
+}
+
+/** The garment's own colour, ignoring colours that only describe decoration ("gold zari"). */
+export function extractBaseColorFromText(text?: string): string | null {
+  if (!text) return null;
+  return findColorMentions(text).find((m) => !m.isEmbellishment)?.name ?? null;
+}
+
+/** All distinct fashion colours named in the text, in reading order. */
+export function extractAllColorsFromText(text?: string): string[] {
+  if (!text) return [];
+  return [...new Set(findColorMentions(text).map((m) => m.name))];
+}
+
+/** Broad colour families, so "Charcoal" and "Grey" count as the same colour but "White" does not. */
+const COLOR_FAMILY: Record<string, string> = {
+  "Off-White": "white", White: "white", Cream: "white",
+  "Royal Blue": "blue", "Navy Blue": "blue", "Sky Blue": "blue", Blue: "blue",
+  Teal: "teal", Turquoise: "teal",
+  "Emerald Green": "green", "Forest Green": "green", "Sage Green": "green", "Olive Green": "green", "Mint Green": "green", Green: "green",
+  "Hot Pink": "pink", "Rani Pink": "pink", "Blush Pink": "pink", "Rose Pink": "pink", Magenta: "pink", Pink: "pink",
+  Maroon: "red", Red: "red", Rust: "rust",
+  Mustard: "gold", Yellow: "gold", Gold: "gold",
+  Silver: "grey", Charcoal: "grey", Slate: "grey", Grey: "grey",
+  Black: "black",
+  Beige: "brown", "Chocolate Brown": "brown", Brown: "brown",
+  Purple: "purple",
+};
+// Families close enough to be shown for each other
+const COMPATIBLE_FAMILIES: Record<string, string[]> = {
+  grey: ["black"],
+  black: ["grey"],
+  teal: ["blue", "green"],
+  blue: ["teal"],
+  green: ["teal"],
+  rust: ["red", "brown"],
+  red: ["rust"],
+  brown: ["rust"],
+};
+
+/**
+ * True when a product's own name names colours and none of them is the required colour (or a
+ * close shade of it). A product that names no colour is never treated as a clash.
+ */
+export function isOutfitColorMismatch(productText: string, expectedColor?: string): boolean {
+  if (!expectedColor) return false;
+  const expectedFamily = COLOR_FAMILY[extractColorFromText(expectedColor) || ""];
+  if (!expectedFamily) return false;
+  if (/\b(multi[\s-]*colou?r(?:ed)?|multicolou?r)\b/i.test(productText)) return false;
+  const productColors = findColorMentions(productText).filter((m) => !m.isEmbellishment);
+  if (productColors.length === 0) return false;
+  const allowed = new Set([expectedFamily, ...(COMPATIBLE_FAMILIES[expectedFamily] || [])]);
+  return !productColors.some((m) => allowed.has(COLOR_FAMILY[m.name]));
+}
+
+const DESIGN_TERMS: Array<{ re: RegExp; term: string }> = [
+  { re: /\bpre[\s-]*(?:draped|stitched)\b/i, term: "pre-draped" },
+  { re: /\bready[\s-]*to[\s-]*wear\b/i, term: "ready to wear" },
+  { re: /\bpant[\s-]*style\b/i, term: "pant style" },
+  { re: /\bdhoti[\s-]*style\b/i, term: "dhoti style" },
+  { re: /\bruffled?\b/i, term: "ruffle" },
+  { re: /\bbelted\b/i, term: "belted" },
+  { re: /\b(?:banarasi|benarasi)\b/i, term: "banarasi" },
+  { re: /\b(?:kanjeevaram|kanjivaram|kanchipuram)\b/i, term: "kanjeevaram" },
+  { re: /\bpaithani\b/i, term: "paithani" },
+  { re: /\bbandhani\b/i, term: "bandhani" },
+  { re: /\bchikankari\b/i, term: "chikankari" },
+  { re: /\bzardozi\b/i, term: "zardozi" },
+  { re: /\bzari\b/i, term: "zari" },
+  { re: /\bembroider(?:y|ed)\b/i, term: "embroidered" },
+  { re: /\bsequin(?:s|n?ed)?\b/i, term: "sequinned" },
+  { re: /\bmirror[\s-]*work\b/i, term: "mirror work" },
+  { re: /\bgota\b/i, term: "gota" },
+  { re: /\b(?:stone|bead|crystal)[\s-]*work\b|\bbeaded\b/i, term: "embellished" },
+  { re: /\bembellish(?:ed|ments?)\b/i, term: "embellished" },
+  { re: /\bwoven\b/i, term: "woven" },
+  { re: /\bfloral\b/i, term: "floral" },
+  { re: /\bprinted\b/i, term: "printed" },
+  { re: /\bombre\b/i, term: "ombre" },
+  { re: /\b(?:plain|solid)\b/i, term: "solid" },
+  { re: /\bcorset\b/i, term: "corset" },
+  { re: /\bhalter\b/i, term: "halter" },
+  { re: /\bsleeveless\b/i, term: "sleeveless" },
+  { re: /\b(?:strappy|spaghetti)\b/i, term: "strappy" },
+  { re: /\bsweetheart\b/i, term: "sweetheart neck" },
+  { re: /\bv[\s-]*neck\b/i, term: "v-neck" },
+];
+
+const FABRIC_TERMS: Array<{ re: RegExp; term: string }> = [
+  { re: /\btissue\b/i, term: "tissue" },
+  { re: /\borganza\b/i, term: "organza" },
+  { re: /\bsatin\b/i, term: "satin" },
+  { re: /\bchanderi\b/i, term: "chanderi" },
+  { re: /\bgeorgette\b/i, term: "georgette" },
+  { re: /\bchiffon\b/i, term: "chiffon" },
+  { re: /\bcrepe\b/i, term: "crepe" },
+  { re: /\bvelvet\b/i, term: "velvet" },
+  { re: /\bnet\b|\btulle\b/i, term: "net" },
+  { re: /\blinen\b/i, term: "linen" },
+  { re: /\bcotton\b/i, term: "cotton" },
+  { re: /\bbrocade\b/i, term: "brocade" },
+  { re: /\bsilk\b/i, term: "silk" },
+];
+
+/**
+ * The design, colour and fabric a garment is described with, in that order of importance:
+ * design (weave, embellishment, construction), then colour, then material.
+ */
+export function extractGarmentAttributes(text: string): { design: string[]; color: string | null; fabric: string | null } {
+  const design: string[] = [];
+  for (const { re, term } of DESIGN_TERMS) {
+    if (re.test(text) && !design.includes(term)) design.push(term);
+  }
+  const fabric = FABRIC_TERMS.find(({ re }) => re.test(text))?.term ?? null;
+  return { design: design.slice(0, 3), color: extractColorFromText(text), fabric };
 }
 
 /**
@@ -3129,6 +3329,115 @@ export function normalizeAudienceQuery(query: string, audience: "men"): string {
   return words.join(" ");
 }
 
+const WOMEN_AUDIENCE_WORDS_RE = /\b(?:for\s+)?(?:women['’]s|womenswear|womens|women|females?|ladies|lady)(?![\w'’])/gi;
+
+/**
+ * Formulates a natural retailer search query for women's garments, preserving
+ * the actual garment type (e.g. "embroidered crop top", "net shrug", "peplum short kurti",
+ * "tiered sharara", "banarasi saree") without collapsing everything to generic "top" or "dress".
+ */
+export function buildWomenGarmentQuery(
+  title: string,
+  subcat: string,
+  color?: string,
+  preferredRetailers?: string[],
+  /** Design and fabric of the garment as the look describes it (sarees and saree blouses). */
+  attrs?: { design: string[]; fabric: string | null },
+): string {
+  const base = (title || "")
+    .replace(WOMEN_AUDIENCE_WORDS_RE, " ")
+    .replace(QUERY_FILLER_RE, " ")
+    .replace(/[\/|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const lowerBase = base.toLowerCase();
+  const terms: string[] = ["women"];
+
+  const cleanColor = (color || "").replace(WOMEN_AUDIENCE_WORDS_RE, " ").trim();
+  const useColor = !!cleanColor && cleanColor.split(/\s+/).length <= 3;
+  // Placeholders ("Classic", "Neutral") are not colours a store can search for
+  const isRealColor = useColor && !!extractColorFromText(cleanColor);
+  const isSareeBlouse = subcat === "inner_top" && /\b(blouse|choli)\b/i.test(lowerBase);
+
+  if (attrs && (subcat === "saree" || isSareeBlouse)) {
+    // Priority order: design, then colour, then material — then the garment itself
+    if (subcat === "saree") {
+      // "Charcoal grey satin saree" already reads colour → fabric → garment; design words it
+      // lacks (e.g. from a "with gold embroidery" tail) lead the query
+      const core = base.split(/\b(?:with|in\s+an?|featuring)\b/i)[0].trim() || base;
+      const coreDesign = extractGarmentAttributes(core).design;
+      terms.push(...attrs.design.filter((d) => !coreDesign.includes(d)));
+      if (isRealColor && !extractColorFromText(core)) terms.push(cleanColor);
+      terms.push(core);
+      if (attrs.fabric && !extractGarmentAttributes(core).fabric) terms.push(attrs.fabric);
+      if (!/\b(saree|sari)\b/i.test(core)) terms.push("saree");
+    } else {
+      terms.push(...attrs.design);
+      if (isRealColor) terms.push(cleanColor);
+      if (attrs.fabric) terms.push(attrs.fabric);
+      terms.push(/\bcholi\b/i.test(lowerBase) ? "choli blouse" : "saree blouse");
+    }
+  } else if (useColor && !lowerBase.includes(cleanColor.toLowerCase())) {
+    terms.push(cleanColor);
+  }
+
+  if (attrs && (subcat === "saree" || isSareeBlouse)) {
+    // already built above
+  } else if (subcat === "crop_top" || /\b(?:crop\s*tops?|bustiers?|corsets?|bralettes?)\b/i.test(lowerBase)) {
+    if (/\bbustiers?\b/i.test(lowerBase)) {
+      terms.push("bustier crop top");
+    } else if (/\bcorsets?\b/i.test(lowerBase)) {
+      terms.push("corset top");
+    } else {
+      terms.push("crop top");
+    }
+    if (lowerBase.includes("embroidered") || lowerBase.includes("mirror")) {
+      terms.push("embroidered");
+    }
+  } else if (subcat === "shrug" || /\b(?:shrugs?|capes?|cape\s*jackets?)\b/i.test(lowerBase)) {
+    if (lowerBase.includes("net")) {
+      terms.push("net shrug cape jacket");
+    } else {
+      terms.push("sheer cape shrug jacket");
+    }
+  } else if (subcat === "kurta" || /\b(?:kurt[ia]s?|peplum)\b/i.test(lowerBase)) {
+    if (/\bpeplum\b/i.test(lowerBase)) {
+      terms.push("peplum short kurti");
+    } else if (/\bshort\s*kurt[ia]s?\b/i.test(lowerBase)) {
+      terms.push("short kurti");
+    } else {
+      terms.push(base);
+    }
+  } else if (subcat === "saree") {
+    terms.push(base);
+  } else if (subcat === "lehenga") {
+    terms.push(lowerBase.includes("lehenga") ? base : "lehenga choli set");
+  } else if (subcat === "palazzo" || subcat === "sharara" || /\b(?:shararas?|palazzos?|tulips?|cowls?)\b/i.test(lowerBase)) {
+    if (/\bshararas?\b/i.test(lowerBase)) terms.push("tiered flared sharara");
+    else if (/\btulip|cowl\b/i.test(lowerBase)) terms.push("tulip cowl trousers");
+    else terms.push("flared palazzo trousers");
+  } else if (subcat === "inner_top") {
+    terms.push(lowerBase.includes("choli") || lowerBase.includes("blouse") ? "embroidered choli blouse" : base || "inner top");
+  } else {
+    terms.push(base);
+  }
+
+  if (preferredRetailers && preferredRetailers.length > 0) {
+    terms.push(...preferredRetailers.slice(0, 3));
+  }
+
+  // De-duplicate terms while preserving order
+  const seen = new Set<string>();
+  const cleanTerms: string[] = [];
+  for (const t of terms.join(" ").split(/\s+/)) {
+    const k = t.toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    cleanTerms.push(t);
+  }
+  return cleanTerms.join(" ");
+}
+
 export function decomposeOutfitGarments(
   look: LookRecommendation,
   profile: SkinTuneProfile,
@@ -3153,13 +3462,36 @@ export function decomposeOutfitGarments(
     allOccContext.includes("puja") ||
     allOccContext.includes("pooja");
 
+  const isIndoWestern =
+    allOccContext.includes("indo") ||
+    allOccContext.includes("fusion") ||
+    lowerText.includes("indo") ||
+    lowerText.includes("fusion") ||
+    lowerText.includes("cape") ||
+    lowerText.includes("shrug") ||
+    lowerText.includes("crop top") ||
+    lowerText.includes("bustier") ||
+    lowerText.includes("sharara") ||
+    lowerText.includes("palazzo") ||
+    lowerText.includes("dhoti") ||
+    lowerText.includes("pre-draped") ||
+    lowerText.includes("tulip") ||
+    pieces.some((p) => /\b(shrug|cape|bustier|crop\s*top|sharara|palazzo|kurti|peplum|saree)\b/i.test(p?.name || ""));
+
+  const isEthnicOrIndoWestern = isTraditionalOrFestive || isIndoWestern;
+
   const preferredRetailers = ctx.isKids
-    ? isTraditionalOrFestive
+    ? isEthnicOrIndoWestern
       ? ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India"]
       : ["Myntra", "FirstCry", "AJIO", "Amazon India", "Nykaa Fashion"]
-    : targetGender === "women"
+    : isEthnicOrIndoWestern && targetGender === "women"
+      ? // Designer ethnic wear (sarees, lehengas, Indo-Western) lives on Aza and Pernia's
+        ["Myntra", "Aza Fashions", "Pernia's Pop-Up Shop", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
+      : isEthnicOrIndoWestern
       ? ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
-      : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
+      : targetGender === "women"
+        ? ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
+        : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
 
   // Filter out non-clothing pieces (footwear, jewellery, accessories, etc.)
   const apparelPieces = pieces.filter((p) => {
@@ -3189,21 +3521,39 @@ export function decomposeOutfitGarments(
     subcat: string;
     rawTitle: string;
     color?: string;
+    /** Everything the look says about this garment (name, detail, outfit wording): design and fabric come from here. */
+    attrText?: string;
   }
   const detectedGarments: RawGarment[] = [];
 
+  // The look's own words for one garment: the outfit segment naming it, cut where the next
+  // garment starts ("charcoal satin saree with gold embroidery, paired with a sleeveless blouse").
+  const SAREE_NOUN_RE = /\b(saree|sari)s?\b/i;
+  const BLOUSE_NOUN_RE = /\b(blouse|choli)s?\b/i;
+  const outfitSegments = (look.outfit || "")
+    .split(/[,;.]|\b(?:paired|styled|teamed|worn|layered|finished)\s+with\b|\band\s+(?:an?|the|matching)\b/i)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 2);
+  const segmentFor = (garmentRe: RegExp, otherRe?: RegExp) =>
+    outfitSegments.find((s) => garmentRe.test(s) && !(otherRe && otherRe.test(s))) ||
+    outfitSegments.find((s) => garmentRe.test(s));
+  // "Saree", "Silk Saree", "Blouse": a name that has lost the colour/design the image was rendered with
+  const isBareGarmentName = (name: string) =>
+    !extractColorFromText(name) && extractGarmentAttributes(name).design.length === 0 && name.trim().split(/\s+/).length <= 2;
+
   const isLayer = (t: string) =>
-    /\b(blazer|jacket|coat|shrug|cardigan|vest|waistcoat|nehru\s*jacket|overcoat|trench|bomber)\b/i.test(t);
+    /\b(blazer|jacket|coat|shrug|cardigan|vest|waistcoat|nehru\s*jacket|overcoat|trench|bomber|cape)\b/i.test(t);
   const getLayerSubcat = (t: string) => {
     const lower = t.toLowerCase();
+    if (/\b(shrugs?|capes?|cape\s*jackets?)\b/i.test(lower)) return "shrug";
     if (/\bblazer\b/i.test(lower)) return "blazer";
     if (/\b(waistcoats?|vests?|gilets?)\b/i.test(lower)) return "waistcoat";
     return "jacket";
   };
   const isBottom = (t: string) =>
-    /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|churidars?|joggers?|culottes?)\b/i.test(t);
+    /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|denim|skirt|lehenga|chaniya|ghagra|dhoti|pyjama|pajama|salwar|churidars?|joggers?|culottes?|palazzo|sharara)\b/i.test(t);
   const isTop = (t: string) =>
-    /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie|sherwanis?|achkans?|bandhgala|jodhpuri)\b/i.test(t);
+    /\b(shirt|shirts|button-down|camp-collar|resort\s*shirt|tee|t-shirt|tshirt|polo|blouse|camisole|cami|corset|top|tops|tunic|kurta|kurti|choli|sweater|hoodie|sherwanis?|achkans?|bandhgala|jodhpuri|bustier|peplum)\b/i.test(t);
   const isMen = targetGender === "men";
   const isBoy = ctx.isBoy || targetGender === "boys";
   // For men, "dress" only counts as the garment, never the "dress shirt / dress trousers" qualifier.
@@ -3232,6 +3582,18 @@ export function decomposeOutfitGarments(
       } else if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
         type = "top";
         subcat = "inner_top";
+      } else if (/\b(crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?)\b/i.test(n)) {
+        type = "top";
+        subcat = "crop_top";
+      } else if (/\b(shrugs?|capes?|cape\s*jackets?)\b/i.test(n)) {
+        type = "layer";
+        subcat = "shrug";
+      } else if (/\b(peplum\s*(?:short\s*)?kurt[ia]s?|peplum\s*tops?|peplum)\b/i.test(n) && !isMen) {
+        type = "top";
+        subcat = "kurta";
+      } else if (/\b(kurta|kurtis?|short\s*kurt[ia]s?)\b/i.test(n)) {
+        type = "top";
+        subcat = "kurta";
       } else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) {
         type = "bottom";
         subcat = "lehenga";
@@ -3254,6 +3616,7 @@ export function decomposeOutfitGarments(
         else if (/\bskirt\b/i.test(n)) subcat = "skirt";
         else if (/\b(lehenga|chaniya|ghagra)\b/i.test(n)) subcat = "lehenga";
         else if (/\b(churidars?|dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|salwars?|patiala|jodhpurs)\b/i.test(n)) subcat = "ethnic_bottom";
+        else if (/\b(palazzos?|shararas?|ghararas?|tulips?|cowls?)\b/i.test(n)) subcat = "palazzo";
         else subcat = "trousers";
       } else if (
         isMen
@@ -3267,10 +3630,12 @@ export function decomposeOutfitGarments(
         else subcat = isMen ? "men_outfit" : isBoy ? "boys_outfit" : "dress";
       } else {
         type = "top";
-        if (/\b(t-?shirts?|tees?)\b/i.test(n)) subcat = "top";
+        if (/\b(crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?)\b/i.test(n)) subcat = "crop_top";
+        else if (/\b(shrugs?|capes?|cape\s*jackets?)\b/i.test(n)) { type = "layer"; subcat = "shrug"; }
+        else if (/\b(peplum|kurta|kurtis?)\b/i.test(n)) subcat = "kurta";
+        else if (/\b(t-?shirts?|tees?)\b/i.test(n)) subcat = "top";
         else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(n)) subcat = "shirt";
         else if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i.test(n)) subcat = "sherwani";
-        else if (/\b(kurta|kurti)\b/i.test(n)) subcat = "kurta";
         else if (/\b(choli|blouse)\b/i.test(n)) subcat = "inner_top";
         else subcat = "top";
       }
@@ -3281,15 +3646,33 @@ export function decomposeOutfitGarments(
           ? extractColorFromText(rawPieceColor) || rawPieceColor
           : undefined;
 
+      let cleanPieceTitle = n;
+      if (/\bpeplum\s*top\b/i.test(cleanPieceTitle)) {
+        cleanPieceTitle = cleanPieceTitle.replace(/\bpeplum\s*top\b/gi, "Peplum Short Kurti");
+      }
+
+      const pieceDetail = (p as { detail?: string }).detail || "";
+      const segment =
+        subcat === "saree"
+          ? segmentFor(SAREE_NOUN_RE, BLOUSE_NOUN_RE)
+          : subcat === "inner_top"
+            ? segmentFor(BLOUSE_NOUN_RE, SAREE_NOUN_RE)
+            : undefined;
+      if (segment && isBareGarmentName(cleanPieceTitle)) {
+        cleanPieceTitle = stripHandDrapeTerms(segment.replace(/^(?:an?|the)\s+/i, ""));
+      }
+
       detectedGarments.push({
         type,
         subcat,
-        rawTitle: n,
+        rawTitle: cleanPieceTitle,
         color:
           cleanPieceColor ||
-          extractColorFromText((p as { detail?: string }).detail) ||
-          extractColorFromText(n) ||
+          extractColorFromText(cleanPieceTitle) ||
+          extractColorFromText(pieceDetail) ||
+          extractColorFromText(segment) ||
           undefined,
+        attrText: [cleanPieceTitle, pieceDetail, segment].filter(Boolean).join(" "),
       });
     }
   } else {
@@ -3332,10 +3715,15 @@ export function decomposeOutfitGarments(
       const topClause = clauses.find(
         (c) => !/\b(saree|sari)\b/i.test(c) && /\b(blouse|choli|corset|bustier|crop\s*top|bralette|jacket|cape)\b/i.test(c),
       );
+      // Keep the full saree wording ("…with gold embroidery") for design/fabric, which the
+      // clause split above drops
+      const sareeSegment = segmentFor(SAREE_NOUN_RE, BLOUSE_NOUN_RE);
+      const blouseSegment = segmentFor(BLOUSE_NOUN_RE, SAREE_NOUN_RE);
       detectedGarments.push({
         type: "one_piece",
         subcat: "saree",
         rawTitle: sareeClause ? stripHandDrapeTerms(sareeClause) : `${dominantHumanColor} Saree`,
+        attrText: [sareeClause, sareeSegment].filter(Boolean).join(" "),
       });
       if (topClause && /\b(jacket|cape)\b/i.test(topClause)) {
         detectedGarments.push({ type: "layer", subcat: "jacket", rawTitle: topClause });
@@ -3343,7 +3731,8 @@ export function decomposeOutfitGarments(
         detectedGarments.push({
           type: "top",
           subcat: "inner_top",
-          rawTitle: topClause || `Matching ${dominantHumanColor} Saree Blouse`,
+          rawTitle: topClause || `Matching Saree Blouse`,
+          attrText: [topClause, blouseSegment].filter(Boolean).join(" "),
         });
       }
     } else {
@@ -3408,6 +3797,7 @@ export function decomposeOutfitGarments(
           else if (/\bskirt\b/i.test(cleanClause)) subcat = "skirt";
           else if (/\b(lehenga|chaniya|ghagra)\b/i.test(cleanClause)) subcat = "lehenga";
           else if (/\b(churidars?|dhotis?|mundus?|veshtis?|lungis?|pyjamas?|pajamas?|salwars?|patiala|jodhpurs)\b/i.test(cleanClause)) subcat = "ethnic_bottom";
+          else if (/\b(palazzos?|shararas?|ghararas?|tulips?|cowls?)\b/i.test(cleanClause)) subcat = "palazzo";
           detectedGarments.push({
             type: "bottom",
             subcat,
@@ -3416,7 +3806,13 @@ export function decomposeOutfitGarments(
         } else if (isTop(cleanClause) && !foundTypes.has("top")) {
           foundTypes.add("top");
           let subcat = "top";
-          if (/\b(t-?shirts?|tees?)\b/i.test(cleanClause)) subcat = "top";
+          let cleanTopTitle = cleanClause;
+          if (/\b(crop\s*tops?|cropped\s*tops?|bustiers?|bralettes?|corsets?)\b/i.test(cleanClause)) subcat = "crop_top";
+          else if (/\b(peplum\s*kurt[ia]s?|peplum\s*tops?|peplum|short\s*kurt[ia]s?)\b/i.test(cleanClause) && !isMen) {
+            subcat = "kurta";
+            cleanTopTitle = cleanClause.replace(/\bpeplum\s*top\b/gi, "Peplum Short Kurti");
+          }
+          else if (/\b(t-?shirts?|tees?)\b/i.test(cleanClause)) subcat = "top";
           else if (/(?<![tT]-)\b(shirts?|button-down|polo)\b/i.test(cleanClause)) subcat = "shirt";
           else if (/\b(sherwanis?|achkans?|jodhpuri|bandhgala)\b/i.test(cleanClause)) subcat = "sherwani";
           else if (/\b(kurta|kurti)\b/i.test(cleanClause)) subcat = "kurta";
@@ -3424,7 +3820,7 @@ export function decomposeOutfitGarments(
           detectedGarments.push({
             type: "top",
             subcat,
-            rawTitle: cleanClause,
+            rawTitle: cleanTopTitle,
           });
         } else if (isOnePiece(cleanClause) && !foundTypes.has("one_piece")) {
           foundTypes.add("one_piece");
@@ -3545,6 +3941,15 @@ export function decomposeOutfitGarments(
     });
   }
 
+  // A saree blouse is bought to match its saree: unless the look names a blouse colour of its
+  // own, it is searched in the saree's colour (never a generic white/cream blouse).
+  const sareeGarment = finalGarments.find((x) => x.subcat === "saree");
+  const sareeColor = sareeGarment
+    ? sareeGarment.color && !GARMENT_NOUN_PATTERN.test(sareeGarment.color)
+      ? sareeGarment.color
+      : resolveHumanColor(sareeGarment.rawTitle, dominantHumanColor)
+    : undefined;
+
   // Convert each detected garment into a fully realized RequirementSpec
   for (const g of finalGarments) {
     const rawClean =
@@ -3569,7 +3974,13 @@ export function decomposeOutfitGarments(
     // For inner tops/shirts under a coordinated outfit/vest set/suit:
     // If candidate color is an unrequested contrasting shade that doesn't match loved colors or the look's palette,
     // harmonize it with an elegant neutral (Cream/White) or the look's dominant color.
-    if ((g.subcat === "shirt" || g.subcat === "inner_top") && color) {
+    const isSareeBlouse = g.subcat === "inner_top" && !!sareeColor && BLOUSE_NOUN_RE.test(`${g.rawTitle} ${g.attrText || ""}`);
+    if (isSareeBlouse) {
+      // Only a colour that names the blouse itself counts — not "silver embroidery" on it
+      const ownBlouseColor = extractBaseColorFromText(g.rawTitle) || extractBaseColorFromText(g.attrText);
+      const saysContrast = /\bcontrast(?:ing)?\b/i.test(`${g.rawTitle} ${g.attrText || ""}`);
+      color = ownBlouseColor && (saysContrast || !/\bmatching\b/i.test(g.rawTitle)) ? ownBlouseColor : sareeColor;
+    } else if ((g.subcat === "shirt" || g.subcat === "inner_top") && color) {
       const lovedList = (profile.colorsLove || []).map((c) => c.toLowerCase());
       const paletteList = (look.palette || []).map((c) => c.toLowerCase());
       const lowerColor = color.toLowerCase();
@@ -3585,8 +3996,25 @@ export function decomposeOutfitGarments(
       }
     }
 
+    // Sarees and blouses are matched on design first, then colour, then fabric
+    const garmentAttrs =
+      g.subcat === "saree" || isSareeBlouse ? extractGarmentAttributes(`${rawClean} ${g.attrText || ""}`) : undefined;
+
     // Format human-friendly title with proper demographic prefix
-    let title = rawClean;
+    let title = rawClean.replace(/^matching\s+/i, "");
+    if ((g.subcat === "saree" || isSareeBlouse) && color && extractColorFromText(color) && !extractColorFromText(title)) {
+      title = `${color} ${title}`;
+    }
+    // The item title also drives the store-search links, so it must carry the design
+    // (design words first, then colour/fabric/garment; "with gold embroidery" tails are folded into the design words)
+    if (garmentAttrs) {
+      const core = title.split(/\s+\b(?:with|featuring)\b/i)[0].trim() || title;
+      const leadDesigns = garmentAttrs.design
+        .filter((d) => !new RegExp(`\\b${d.split(/[\s-]/)[0].slice(0, 6)}`, "i").test(core))
+        .slice(0, 2)
+        .map((d) => d.replace(/\b\w/g, (ch) => ch.toUpperCase()));
+      title = [...leadDesigns, core].join(" ");
+    }
     if (ctx.isBoy && !/\bboys?\b/i.test(title)) {
       title = `Boys ${title}`;
     } else if (ctx.isGirl && !/\bgirls?\b/i.test(title)) {
@@ -3608,6 +4036,10 @@ export function decomposeOutfitGarments(
     if (g.subcat === "shorts") itemQueryKeyword = "shorts";
     else if (g.subcat === "shirt") itemQueryKeyword = "shirt";
     else if (g.subcat === "top") itemQueryKeyword = rawClean.toLowerCase().includes("tee") || rawClean.toLowerCase().includes("t-shirt") ? "t-shirt tee" : "top";
+    else if (g.subcat === "crop_top") itemQueryKeyword = "embroidered crop top bustier";
+    else if (g.subcat === "shrug") itemQueryKeyword = "sheer net shrug cape jacket";
+    else if (g.subcat === "palazzo") itemQueryKeyword = "flared palazzo pants";
+    else if (g.subcat === "sharara") itemQueryKeyword = "tiered flared sharara";
     else if (g.subcat === "trousers") itemQueryKeyword = "tailored trousers pants";
     else if (g.subcat === "blazer") itemQueryKeyword = "tailored formal blazer";
     else if (g.subcat === "waistcoat") itemQueryKeyword = "tailored waistcoat vest";
@@ -3616,7 +4048,7 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "saree") itemQueryKeyword = rawClean;
     else if (g.subcat === "lehenga") itemQueryKeyword = "chaniya choli lehenga set";
     else if (g.subcat === "inner_top") itemQueryKeyword = rawClean.toLowerCase().includes("choli") || rawClean.toLowerCase().includes("blouse") ? "embroidered choli blouse" : "formal inner top camisole";
-    else if (g.subcat === "kurta") itemQueryKeyword = "festive kurta set";
+    else if (g.subcat === "kurta") itemQueryKeyword = rawClean.toLowerCase().includes("peplum") ? "embroidered peplum short kurti" : rawClean.toLowerCase().includes("short") ? "short kurti" : "festive kurta set";
     else if (g.subcat === "dress") itemQueryKeyword = "dress";
     else if (g.subcat === "sherwani") itemQueryKeyword = "sherwani";
     else if (g.subcat === "ethnic_bottom") itemQueryKeyword = "ethnic pyjama";
@@ -3624,8 +4056,8 @@ export function decomposeOutfitGarments(
     else if (g.subcat === "dupatta" || g.subcat === "stole") itemQueryKeyword = /\bdupattas?\b/i.test(rawClean) ? "festive dupatta stole" : "festive stole angavastram";
     else if (g.subcat === "bundi" || g.subcat === "nehru_jacket") itemQueryKeyword = "festive nehru jacket bundi waistcoat";
 
-    // Men's and Boys' queries are built from the garment's own name (type, colour, fabric, fit, style)
-    // without appending conflicting generic women's-first keywords ("tailored trousers pants", "dress", etc.)
+    // Men's, Boys', and Women's queries are built from the garment's own name (type, colour, fabric, fit, style)
+    // without appending conflicting generic keywords ("tailored trousers pants", "dress", etc.)
     const searchTerms = isMen
       ? buildMenGarmentQuery(rawClean, g.subcat, g.color)
       : isBoy
@@ -3649,14 +4081,16 @@ export function decomposeOutfitGarments(
           ]
             .filter(Boolean)
             .join(" ")
-        : [
-            targetGender,
-            color,
-            itemQueryKeyword,
-            ...preferredRetailers.slice(0, 3),
-          ]
-            .filter(Boolean)
-            .join(" ");
+        : targetGender === "women"
+          ? buildWomenGarmentQuery(rawClean, g.subcat, color, preferredRetailers, garmentAttrs)
+          : [
+              targetGender,
+              color,
+              itemQueryKeyword,
+              ...preferredRetailers.slice(0, 3),
+            ]
+              .filter(Boolean)
+              .join(" ");
 
     specs.push({
       category: "outfit",
@@ -7504,45 +7938,31 @@ export function calculateOutfitSimilarity(
     score += 4;
   }
 
-  // 2. Colour & Tone Harmony (+4)
-  const colorTerms = [
-    "pink", "green", "emerald", "gold", "golden", "red", "maroon", "blue", "royal blue",
-    "navy", "black", "white", "ivory", "beige", "cream", "yellow", "mustard", "purple",
-    "lavender", "orange", "peach", "silver", "teal", "burgundy", "wine"
-  ];
-  let colorMatch = false;
-  const lookColor = (look.outfitColor || spec?.dominantColor || "").toLowerCase();
-  if (lookColor && prodText.includes(lookColor)) {
-    colorMatch = true;
-  } else {
-    for (const c of colorTerms) {
-      if (lookText.includes(c) && prodText.includes(c)) {
-        colorMatch = true;
-        break;
-      }
-    }
-  }
-  if (colorMatch) score += 4;
+  // Priority: design (+5), then colour (+4 / -4 when the product is another colour), then fabric (+2).
+  const targetText = spec
+    ? `${spec.itemTitle || ""} ${spec.searchQuery || ""} ${spec.dominantColor || ""}`
+    : `${look.outfit || ""} ${lookPiecesText}`;
+  const target = extractGarmentAttributes(targetText);
+  const productAttrs = extractGarmentAttributes(prodText);
 
-  // 3. Fabric Appearance, Texture & Embroidery / Pattern (+3)
-  const fabricAndPatterns = [
-    "velvet", "silk", "raw silk", "chanderi", "organza", "satin", "linen", "cotton",
-    "georgette", "chiffon", "crepe", "denim", "wool", "jacquard", "brocade",
-    "zari", "zardozi", "embroidery", "embroidered", "sequin", "sequins", "mirror",
-    "gota", "foil", "printed", "floral", "woven", "embellished"
-  ];
-  let fabricMatch = false;
-  for (const fp of fabricAndPatterns) {
-    if (lookText.includes(fp) && prodText.includes(fp)) {
-      fabricMatch = true;
-      break;
-    }
-  }
-  if (fabricMatch || (spec?.materialHint && prodText.includes(spec.materialHint.toLowerCase().split(" ")[0]))) {
-    score += 3;
+  // 2. Design: weave, embellishment and construction (+5)
+  if (target.design.length > 0 && target.design.some((d) => productAttrs.design.includes(d))) {
+    score += 5;
   }
 
-  // 4. Overall Style & Occasion Match (+2)
+  // 3. Colour of the garment itself (+4), penalised when the product names a different colour
+  const targetColor = spec?.dominantColor || extractBaseColorFromText(look.outfitColor) || target.color || "";
+  if (targetColor && extractBaseColorFromText(prodText)) {
+    score += isOutfitColorMismatch(prodText, targetColor) ? -4 : 4;
+  }
+
+  // 4. Fabric / material (+2)
+  const targetFabric = target.fabric || (spec?.materialHint ? extractGarmentAttributes(spec.materialHint).fabric : null);
+  if (targetFabric && productAttrs.fabric === targetFabric) {
+    score += 2;
+  }
+
+  // 5. Overall Style & Occasion Match (+2)
   const styleTerms = ["festive", "traditional", "wedding", "formal", "casual", "contemporary", "modern", "minimalist", "cocktail", "party"];
   let styleMatch = false;
   for (const st of styleTerms) {
@@ -7553,12 +7973,12 @@ export function calculateOutfitSimilarity(
   }
   if (styleMatch) score += 2;
 
-  // 5. Budget Adherence Bonus (+3)
+  // 6. Budget Adherence Bonus (+3)
   if (product.price && budgetLimit && product.price <= budgetLimit) {
     score += 3;
   }
 
-  // 6. Generated outfit image presence bonus (+1)
+  // 7. Generated outfit image presence bonus (+1)
   if (look.imageUrl) {
     score += 1;
   }
@@ -7889,6 +8309,26 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         occasionLower.includes("luxury");
       const isHighBudget = (budgetLimit ?? 0) >= 3500;
 
+      const isEthnicOrIndoWesternGarment =
+        spec.itemSubcategory === "kurta" ||
+        spec.itemSubcategory === "saree" ||
+        spec.itemSubcategory === "lehenga" ||
+        spec.itemSubcategory === "chaniya_choli" ||
+        spec.itemSubcategory === "crop_top" ||
+        spec.itemSubcategory === "shrug" ||
+        spec.itemSubcategory === "palazzo" ||
+        spec.itemSubcategory === "sharara" ||
+        spec.itemSubcategory === "ethnic_bottom" ||
+        spec.itemSubcategory === "sherwani" ||
+        spec.itemSubcategory === "bundi" ||
+        spec.itemSubcategory === "nehru_jacket" ||
+        spec.itemSubcategory === "dupatta" ||
+        spec.itemSubcategory === "stole" ||
+        spec.itemSubcategory === "shawl" ||
+        spec.itemSubcategory === "mojaris" ||
+        spec.itemSubcategory === "juttis" ||
+        /\b(kurti|kurta|saree|sari|lehenga|chaniya|choli|sharara|palazzo|shrug|cape|bustier|crop\s*top|dhoti|bundi|nehru|jutti|mojari|potli)\b/i.test(spec.itemTitle || "");
+
       const searchDomains = isKidDemographic
         ? [
             "myntra.com",
@@ -7898,15 +8338,24 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
             "mumkins.in",
             "tatacliq.com",
           ]
-        : [
-            "myntra.com",
-            "ajio.com",
-            "nykaa.com",
-            "amazon.in",
-            "tatacliq.com",
-            "hm.com",
-            "zara.com",
-          ];
+        : isEthnicOrIndoWesternGarment
+          ? [
+              "myntra.com",
+              "ajio.com",
+              "nykaa.com",
+              "nykaafashion.com",
+              "amazon.in",
+              "tatacliq.com",
+            ]
+          : [
+              "myntra.com",
+              "ajio.com",
+              "nykaa.com",
+              "amazon.in",
+              "tatacliq.com",
+              "hm.com",
+              "zara.com",
+            ];
       if (!isKidDemographic && (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery")) {
         searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
       }
@@ -8685,8 +9134,8 @@ Strictly adhere to:
   // products survive, the group stays short/empty and the UI shows its "no verified match"
   // state; curated benchmark candidates are never injected as live recommendations.
 
-  // Sort products strictly in ascending order of current price (low to high)
-  verifiedProducts.sort(compareProductsByPriceAscending);
+  // Closest match to the generated look first (design, then colour, then fabric); cheaper first among equals
+  verifiedProducts.sort(compareProductsByLookMatch);
 
   return verifiedProducts;
 }
@@ -8815,8 +9264,8 @@ export async function searchProductsForLook(
         return true;
       });
 
-      // Sort products within each group ascending by actual verified price (low to high)
-      const sortedGroupProducts = sortProductsByPriceAscending(distinctGroupProducts);
+      // Within each item, closest match to the look first (then cheaper first)
+      const sortedGroupProducts = [...distinctGroupProducts].sort(compareProductsByLookMatch);
 
       // Retain the planned group so the UI can either render products or clearly notify the user
       validGroups.push({ ...grp, products: sortedGroupProducts });

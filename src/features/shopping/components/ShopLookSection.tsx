@@ -17,6 +17,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { getProductRecommendations } from '../services/product-recommendations';
+import { useAuth } from '@/features/auth';
 import type {
   LookRecommendation,
   ProductCategory,
@@ -30,6 +31,7 @@ import {
   getSafeProductUrl,
   isValidProductUrl,
   compareProductsByPriceAscending,
+  compareProductsByLookMatch,
   buildFallbackSearchUrl,
 } from '@/lib/retailer-urls';
 import { getGroupDisplayState, shouldShowEmptyState } from '@/lib/retailer-search-links';
@@ -41,6 +43,7 @@ interface ShopLookSectionProps {
 }
 
 export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
+  const { user, openAuthModal, refreshUser } = useAuth();
   const [products, setProducts] = useState<ProductResult[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,6 +109,13 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
       setApplicableCategories(response.applicableCategories || ['outfit', 'footwear', 'accessories']);
       setDiagnostics(response.diagnostics || []);
       setErrorMessage(response.errorMessage || '');
+
+      const hasUnauthorized = (response.diagnostics || []).some(
+        (d) => d.status === 'unauthorized' || d.provider === 'auth',
+      );
+      if (hasUnauthorized) {
+        refreshUser();
+      }
     } catch (err) {
       console.warn('Failed to load products:', err);
       setStatus('unavailable');
@@ -131,7 +141,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
       })
   ).slice().sort(compareProductsByPriceAscending);
 
-  // Filter groups by selected tab, ensuring products in each group are sorted by price low to high
+  // Filter groups by selected tab; within an item, the closest match to the look comes first
   const filteredGroups = (
     activeCategory === 'all'
       ? groups
@@ -143,7 +153,7 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
       })
   ).map((group) => ({
     ...group,
-    products: group.products.slice().sort(compareProductsByPriceAscending),
+    products: group.products.slice().sort(compareProductsByLookMatch),
   }));
 
   // Page-level empty state only when no section has verified products or relevant store links
@@ -603,7 +613,11 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             <div className="mx-auto mt-6 max-w-2xl space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-left">
               <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
                 <AlertTriangle size={15} />
-                <span>API Key & Discovery Diagnostics:</span>
+                <span>
+                  {diagnostics.some((d) => d.status === 'unauthorized' || d.provider === 'auth')
+                    ? 'Account Login & Session Diagnostics:'
+                    : 'API Key & Discovery Diagnostics:'}
+                </span>
               </div>
 
               {diagnostics.map((diag, dIdx) => (
@@ -653,25 +667,40 @@ export function ShopLookSection({ look, profile }: ShopLookSectionProps) {
             </div>
           )}
 
-          {/* Live Key Health Inspection */}
+          {/* Live Key Health Inspection & Actions */}
           <div className="mx-auto mt-5 max-w-2xl text-center space-y-3">
             <div className="flex flex-wrap items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={checkLiveHealth}
-                disabled={checkingHealth}
-                className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold hover:border-primary/50 disabled:opacity-50"
-              >
-                <Key size={13} className={checkingHealth ? 'animate-spin' : ''} />
-                {checkingHealth ? 'Inspecting keys…' : 'Inspect API Keys (/api/healthz)'}
-              </button>
+              {diagnostics.some((d) => d.status === 'unauthorized' || d.provider === 'auth') && (
+                <button
+                  type="button"
+                  onClick={() => openAuthModal('login', () => fetchProducts(activeCategory as ProductCategory | 'all', true))}
+                  data-testid="button-sign-in-letstyle"
+                  className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm"
+                >
+                  <Key size={13} />
+                  Sign in to LetStyle
+                </button>
+              )}
+
+              {(!diagnostics.some((d) => d.status === 'unauthorized' || d.provider === 'auth') ||
+                diagnostics.some((d) => d.status === 'missing_key' || d.status === 'invalid_key')) && (
+                <button
+                  type="button"
+                  onClick={checkLiveHealth}
+                  disabled={checkingHealth}
+                  className="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-semibold hover:border-primary/50 disabled:opacity-50"
+                >
+                  <Key size={13} className={checkingHealth ? 'animate-spin' : ''} />
+                  {checkingHealth ? 'Inspecting keys…' : 'Inspect API Keys (/api/healthz)'}
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={() => fetchProducts('all')}
                 disabled={loading}
                 data-testid="button-retry-fetch-products"
-                className="focus-ring inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shadow-sm"
+                className={`focus-ring inline-flex items-center gap-2 rounded-full px-5 py-2 text-xs font-bold disabled:opacity-50 shadow-sm ${diagnostics.some((d) => d.status === 'unauthorized' || d.provider === 'auth') ? 'border border-border bg-card text-foreground hover:border-primary/50' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
               >
                 <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                 Retry discovery

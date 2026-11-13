@@ -345,7 +345,8 @@ export function buildRetailerSearchUrl(
     return `https://www.azafashions.com/search?q=${q}`;
   }
   if (r.includes("pernia")) {
-    return `https://www.perniaspopupshop.com/search?q=${q}`;
+    // Pernia's /search is not a search page (it redirects home); its store search is /catalogsearch/result/
+    return `https://www.perniaspopupshop.com/catalogsearch/result/?q=${q}`;
   }
   if (r.includes("elahe")) {
     return `https://www.elahe.in/search?q=${q}`;
@@ -591,10 +592,10 @@ export function getCanonicalProductUrl(rawUrl: string): string {
       if (u.pathname.includes("/products/") || /\.html$/i.test(u.pathname)) {
         return `https://www.perniaspopupshop.com${u.pathname.replace(/\/+$/, "")}`;
       }
-      if (u.pathname.includes("/search")) {
+      if (/search/i.test(u.pathname)) {
         const q = u.searchParams.get("q");
         if (q && q.trim().length > 0 && q !== "undefined") {
-          return `https://www.perniaspopupshop.com/search?q=${encodeURIComponent(q.trim())}`;
+          return `https://www.perniaspopupshop.com/catalogsearch/result/?q=${encodeURIComponent(q.trim())}`;
         }
       }
       return `${u.origin}${u.pathname}`;
@@ -1087,6 +1088,22 @@ export function compareProductsByPriceAscending<T extends {
 
   // 3. Higher match score
   return (b.matchScore || 0) - (a.matchScore || 0);
+}
+
+/**
+ * Orders alternatives for ONE recommended item by how closely they match the generated look
+ * (match score weighs design, then colour, then fabric), cheapest first among equal matches.
+ */
+export function compareProductsByLookMatch<T extends {
+  price?: number | null;
+  formattedPrice?: string | null;
+  priceVerified?: boolean;
+  availability?: string | null;
+  matchScore?: number | null;
+}>(a: T, b: T): number {
+  const byMatch = (b.matchScore || 0) - (a.matchScore || 0);
+  if (byMatch !== 0) return byMatch;
+  return compareProductsByPriceAscending(a, b);
 }
 
 /**

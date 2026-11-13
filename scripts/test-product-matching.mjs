@@ -1059,7 +1059,7 @@ const perniaSearchBuilt = buildRetailerSearchUrl("Pernia's Pop-Up Shop", {
   category: "outfit",
   color: "Gold",
 });
-assert.ok(perniaSearchBuilt.startsWith("https://www.perniaspopupshop.com/search?q="), "Must generate Pernia search URL");
+assert.ok(perniaSearchBuilt.startsWith("https://www.perniaspopupshop.com/catalogsearch/result/?q="), "Must generate Pernia search URL");
 
 const elaheSearchBuilt = buildRetailerSearchUrl("Elahé", {
   gender: "woman",
