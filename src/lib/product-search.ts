@@ -2933,6 +2933,40 @@ const DESIGN_TERMS: Array<{ re: RegExp; term: string }> = [
   { re: /\b(?:strappy|spaghetti)\b/i, term: "strappy" },
   { re: /\bsweetheart\b/i, term: "sweetheart neck" },
   { re: /\bv[\s-]*neck\b/i, term: "v-neck" },
+  // Western, menswear and kidswear cuts and patterns
+  { re: /\bangrakha\b/i, term: "angrakha" },
+  { re: /\basymmetric(?:al)?\b/i, term: "asymmetric" },
+  { re: /\bhigh[\s-]*low\b/i, term: "high-low" },
+  { re: /\bmandarin(?:[\s-]*collar)?\b/i, term: "mandarin collar" },
+  { re: /\bhenley\b/i, term: "henley" },
+  { re: /\bpolo\b(?![\s.-]*(?:assn|association|club))/i, term: "polo" },
+  { re: /\bdouble[\s-]*breasted\b/i, term: "double-breasted" },
+  { re: /\bpleated\b/i, term: "pleated" },
+  { re: /\btiered\b/i, term: "tiered" },
+  { re: /\bsmocked\b/i, term: "smocked" },
+  { re: /\bpuff(?:ed)?[\s-]*sleeves?\b/i, term: "puff sleeve" },
+  { re: /\boff[\s-]*(?:the[\s-]*)?shoulder\b/i, term: "off-shoulder" },
+  { re: /\bone[\s-]*shoulder\b/i, term: "one-shoulder" },
+  { re: /\bwrap\b/i, term: "wrap" },
+  { re: /\bbodycon\b/i, term: "bodycon" },
+  { re: /\ba[\s-]*line\b/i, term: "a-line" },
+  { re: /\bflared\b/i, term: "flared" },
+  { re: /\bwide[\s-]*leg\b/i, term: "wide-leg" },
+  { re: /\bhigh[\s-]*(?:waist|waisted|rise)\b/i, term: "high-waist" },
+  { re: /\bcropped\b/i, term: "cropped" },
+  { re: /\bslim[\s-]*fit\b/i, term: "slim fit" },
+  { re: /\b(?:relaxed|oversized|boxy)[\s-]*(?:fit)?\b/i, term: "relaxed fit" },
+  { re: /\bstraight[\s-]*(?:fit|cut)\b/i, term: "straight fit" },
+  { re: /\b(?:striped|stripes?)\b/i, term: "striped" },
+  { re: /\b(?:checked|checks?|plaid|gingham)\b/i, term: "checked" },
+  { re: /\bpolka[\s-]*dots?\b/i, term: "polka dot" },
+  { re: /\btie[\s-]*dye\b/i, term: "tie-dye" },
+  { re: /\bgraphic\b/i, term: "graphic" },
+  { re: /\bquilted\b/i, term: "quilted" },
+  { re: /\bribbed\b/i, term: "ribbed" },
+  { re: /\blace\b/i, term: "lace" },
+  { re: /\bmaxi\b/i, term: "maxi" },
+  { re: /\bmidi\b/i, term: "midi" },
 ];
 
 const FABRIC_TERMS: Array<{ re: RegExp; term: string }> = [
@@ -2949,6 +2983,19 @@ const FABRIC_TERMS: Array<{ re: RegExp; term: string }> = [
   { re: /\bcotton\b/i, term: "cotton" },
   { re: /\bbrocade\b/i, term: "brocade" },
   { re: /\bsilk\b/i, term: "silk" },
+  { re: /\bdenim\b/i, term: "denim" },
+  { re: /\bcorduroy\b/i, term: "corduroy" },
+  { re: /\bsuede\b/i, term: "suede" },
+  { re: /\bleather\b/i, term: "leather" },
+  { re: /\bwool(?:len)?\b|\btweed\b/i, term: "wool" },
+  { re: /\bknit(?:ted)?\b/i, term: "knit" },
+  { re: /\bjersey\b/i, term: "jersey" },
+  { re: /\bfleece\b/i, term: "fleece" },
+  { re: /\bpoplin\b/i, term: "poplin" },
+  { re: /\b(?:rayon|viscose|modal)\b/i, term: "rayon" },
+  { re: /\bkhadi\b/i, term: "khadi" },
+  { re: /\bmul(?:mul)?\b/i, term: "mulmul" },
+  { re: /\bpolyester\b/i, term: "polyester" },
 ];
 
 /**
@@ -2960,7 +3007,16 @@ export function extractGarmentAttributes(text: string): { design: string[]; colo
   for (const { re, term } of DESIGN_TERMS) {
     if (re.test(text) && !design.includes(term)) design.push(term);
   }
-  const fabric = FABRIC_TERMS.find(({ re }) => re.test(text))?.term ?? null;
+  // The first fabric named is the garment's own ("silk kurta with cotton lining" is silk)
+  let fabric: string | null = null;
+  let fabricAt = Infinity;
+  for (const { re, term } of FABRIC_TERMS) {
+    const at = text.search(re);
+    if (at >= 0 && at < fabricAt) {
+      fabric = term;
+      fabricAt = at;
+    }
+  }
   return { design: design.slice(0, 3), color: extractColorFromText(text), fabric };
 }
 
@@ -3438,6 +3494,46 @@ export function buildWomenGarmentQuery(
   return cleanTerms.join(" ");
 }
 
+/**
+ * Reorders a garment search so what matters most comes first: audience, then the garment's
+ * design (cut, weave, embellishment), then its colour, then its fabric, then the rest. Design,
+ * colour and fabric the query lacks are added; nothing already in it is dropped.
+ */
+export function prioritizeGarmentQuery(
+  query: string,
+  attrs: { design: string[]; fabric: string | null },
+  color?: string,
+): string {
+  let words = query.split(/\s+/).filter(Boolean);
+  const audience = words.length > 0 && /^(?:women|men|boys|girls|kids|child)$/i.test(words[0]) ? words.shift()! : "";
+  const lowerQuery = words.join(" ").toLowerCase();
+  const has = (term: string) => new RegExp(`\\b${term.split(/[\s-]/)[0].slice(0, 6)}`, "i").test(lowerQuery);
+  const design = attrs.design.filter((d) => !has(d)).slice(0, 2);
+  let colorTerm = "";
+  if (color && extractColorFromText(color)) {
+    colorTerm = color;
+    // Already in the query: move it into its slot (after design, before fabric)
+    const colorWords = color.toLowerCase().split(/\s+/);
+    const at = words.findIndex((_, i) => colorWords.every((cw, j) => words[i + j]?.toLowerCase() === cw));
+    if (at >= 0) {
+      colorTerm = words.slice(at, at + colorWords.length).join(" ");
+      words = [...words.slice(0, at), ...words.slice(at + colorWords.length)];
+    }
+  }
+  const fabric = attrs.fabric && !has(attrs.fabric) ? attrs.fabric : "";
+  const seen = new Set<string>();
+  return [audience, ...design, colorTerm, fabric, ...words]
+    .join(" ")
+    .split(/\s+/)
+    .filter((w) => {
+      const k = w.toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .join(" ");
+}
+
 export function decomposeOutfitGarments(
   look: LookRecommendation,
   profile: SkinTuneProfile,
@@ -3537,6 +3633,46 @@ export function decomposeOutfitGarments(
   const segmentFor = (garmentRe: RegExp, otherRe?: RegExp) =>
     outfitSegments.find((s) => garmentRe.test(s) && !(otherRe && otherRe.test(s))) ||
     outfitSegments.find((s) => garmentRe.test(s));
+  // Every garment noun, so one garment's words can be cut out of a sentence naming several
+  const GARMENT_WORD_SRC =
+    "(?:sarees?|saris?|blouses?|cholis?|kurtas?|kurtis?|churidars?|pyjamas?|pajamas?|dhotis?|trousers|pants|jeans|shorts|skirts?|lehengas?|dupattas?|stoles?|shawls?|jackets?|blazers?|waistcoats?|bundis?|t-?shirts?|shirts?|tees?|tops?|dress(?:es)?|gowns?|sherwanis?|palazzos?|shararas?|capes?|shrugs?|coats?|cardigans?|sweaters?|hoodies?|jumpsuits?|rompers?|anarkalis?|corsets?|bustiers?|chinos|joggers|polos?|henleys?|overshirts?|achkans?|bandhgalas?|kaftans?|tunics?|camisoles?|vests?|leggings|culottes|co-?ords?)";
+  /**
+   * The look's own words for one garment: the outfit segment naming it, cut to just this
+   * garment. `head` ends at the garment noun ("royal blue embroidered silk kurta"); `tail` is
+   * what follows up to the next garment ("with gold embroidery"), used only for design/fabric.
+   */
+  const phraseFor = (garmentRe: RegExp, otherRe?: RegExp): { head: string; tail: string } | undefined => {
+    const seg = segmentFor(garmentRe, otherRe);
+    if (!seg) return undefined;
+    const nounMatch = new RegExp(garmentRe.source, "i").exec(seg);
+    if (!nounMatch) return undefined;
+    const nounEnd = nounMatch.index + nounMatch[0].length;
+    let start = 0;
+    for (const m of seg.slice(0, nounMatch.index).matchAll(new RegExp(`\\b${GARMENT_WORD_SRC}\\b`, "gi"))) {
+      start = (m.index ?? 0) + m[0].length;
+    }
+    const head = seg
+      .slice(start, nounEnd)
+      .replace(/^[\s,&+-]*(?:(?:paired|styled|teamed|worn|layered)\s+)?(?:with|and|over|under)?\s*(?:an?|the)?\s+/i, "")
+      .trim();
+    // The tail describes this garment ("with gold embroidery") until the next garment or an
+    // "and" that starts a new item
+    const rest = seg.slice(nounEnd);
+    const stops = [rest.search(new RegExp(`\\b${GARMENT_WORD_SRC}\\b`, "i")), rest.search(/\band\b/i)].filter((i) => i >= 0);
+    const end = stops.length > 0 ? Math.min(...stops) : rest.length;
+    let tail = rest.slice(0, end);
+    // A colour right before the next garment belongs to that garment ("with maroon polo")
+    if (end < rest.length) tail = tail.replace(/\b(?:with|in)?\s*(?:an?\s+)?[\w-]+(?:\s+[\w-]+){0,2}\s*$/i, (m) => (extractColorFromText(m) ? "" : m));
+    return { head, tail: tail.trim() };
+  };
+  /** The garment noun a piece name ends on ("Boys Kurta" → kurta), as a pattern. */
+  const garmentNounRe = (name: string): RegExp | undefined => {
+    const words = name.match(new RegExp(`\\b${GARMENT_WORD_SRC}\\b`, "gi"));
+    if (!words) return undefined;
+    const noun = words[words.length - 1].toLowerCase().replace(/(?:es|s)$/, "").replace(/^t-?shirt$/, "t-?shirt");
+    return new RegExp(`\\b${noun}(?:e?s)?\\b`, "i");
+  };
+
   // "Saree", "Silk Saree", "Blouse": a name that has lost the colour/design the image was rendered with
   const isBareGarmentName = (name: string) =>
     !extractColorFromText(name) && extractGarmentAttributes(name).design.length === 0 && name.trim().split(/\s+/).length <= 2;
@@ -3652,15 +3788,20 @@ export function decomposeOutfitGarments(
       }
 
       const pieceDetail = (p as { detail?: string }).detail || "";
-      const segment =
-        subcat === "saree"
-          ? segmentFor(SAREE_NOUN_RE, BLOUSE_NOUN_RE)
-          : subcat === "inner_top"
-            ? segmentFor(BLOUSE_NOUN_RE, SAREE_NOUN_RE)
-            : undefined;
-      if (segment && isBareGarmentName(cleanPieceTitle)) {
-        cleanPieceTitle = stripHandDrapeTerms(segment.replace(/^(?:an?|the)\s+/i, ""));
+      const nounRe =
+        subcat === "saree" ? SAREE_NOUN_RE : subcat === "inner_top" && BLOUSE_NOUN_RE.test(n) ? BLOUSE_NOUN_RE : garmentNounRe(n);
+      const phrase = nounRe
+        ? phraseFor(nounRe, subcat === "saree" ? BLOUSE_NOUN_RE : subcat === "inner_top" ? SAREE_NOUN_RE : undefined)
+        : undefined;
+      if (phrase?.head && isBareGarmentName(cleanPieceTitle) && phrase.head.split(/\s+/).length > cleanPieceTitle.split(/\s+/).length) {
+        // Keep the piece's own audience word ("Boys Kurta" → "Boys royal blue silk kurta")
+        const audience = /^(boys?|girls?|men'?s?|women'?s?|kids?)\b/i.exec(cleanPieceTitle)?.[0];
+        // Keep the garment noun as the piece spells it ("Sherwani", not "sherwani")
+        const pieceNoun = new RegExp(nounRe!.source, "i").exec(cleanPieceTitle)?.[0];
+        const head = stripHandDrapeTerms(pieceNoun ? phrase.head.replace(new RegExp(nounRe!.source, "i"), pieceNoun) : phrase.head);
+        cleanPieceTitle = audience && !new RegExp(`\\b${audience}`, "i").test(head) ? `${audience} ${head}` : head;
       }
+      const segment = phrase ? `${phrase.head} ${phrase.tail}`.trim() : undefined;
 
       detectedGarments.push({
         type,
@@ -3996,24 +4137,33 @@ export function decomposeOutfitGarments(
       }
     }
 
-    // Sarees and blouses are matched on design first, then colour, then fabric
-    const garmentAttrs =
-      g.subcat === "saree" || isSareeBlouse ? extractGarmentAttributes(`${rawClean} ${g.attrText || ""}`) : undefined;
+    // Every garment is matched on design first, then colour, then fabric — taken from this
+    // garment's own words (name, detail, its phrase in the outfit), never another piece's
+    // (Garments parsed from the outfit sentence were split on "with", so look their phrase up)
+    if (!g.attrText) {
+      const nounRe = garmentNounRe(rawClean);
+      const phrase = nounRe ? phraseFor(nounRe) : undefined;
+      if (phrase) g.attrText = `${phrase.head} ${phrase.tail}`.trim();
+    }
+    const garmentAttrs = extractGarmentAttributes(`${rawClean} ${g.attrText || ""}`);
 
     // Format human-friendly title with proper demographic prefix
     let title = rawClean.replace(/^matching\s+/i, "");
-    if ((g.subcat === "saree" || isSareeBlouse) && color && extractColorFromText(color) && !extractColorFromText(title)) {
-      title = `${color} ${title}`;
+    if (color && extractColorFromText(color) && !extractColorFromText(title)) {
+      // Colour goes after any audience word: "Boys Royal Blue Kurta", not "Royal Blue Boys Kurta"
+      const audience = /^(?:boys?|girls?|men'?s?|women'?s?|kids?)\b\s*/i.exec(title)?.[0] ?? "";
+      title = `${audience}${color} ${title.slice(audience.length)}`;
     }
     // The item title also drives the store-search links, so it must carry the design
     // (design words first, then colour/fabric/garment; "with gold embroidery" tails are folded into the design words)
-    if (garmentAttrs) {
+    {
       const core = title.split(/\s+\b(?:with|featuring)\b/i)[0].trim() || title;
       const leadDesigns = garmentAttrs.design
         .filter((d) => !new RegExp(`\\b${d.split(/[\s-]/)[0].slice(0, 6)}`, "i").test(core))
         .slice(0, 2)
         .map((d) => d.replace(/\b\w/g, (ch) => ch.toUpperCase()));
-      title = [...leadDesigns, core].join(" ");
+      const audience = /^(?:boys?|girls?|men'?s?|women'?s?|kids?)\b\s*/i.exec(core)?.[0] ?? "";
+      title = [audience.trim(), ...leadDesigns, core.slice(audience.length)].filter(Boolean).join(" ");
     }
     if (ctx.isBoy && !/\bboys?\b/i.test(title)) {
       title = `Boys ${title}`;
@@ -4024,12 +4174,15 @@ export function decomposeOutfitGarments(
     }
 
     // Material hint extraction
+    // This garment's own fabric decides; the rest of the outfit is only a fallback (a cotton
+    // churidar must not make the silk kurta's hint "cotton")
+    const materialText = garmentAttrs.fabric ? `${rawClean} ${g.attrText || ""}` : `${rawClean} ${outfitText}`;
     let materialHint = "";
-    if (/linen/i.test(rawClean) || /linen/i.test(outfitText)) materialHint = "100% Breathable European Linen";
-    else if (/cotton/i.test(rawClean) || /cotton/i.test(outfitText)) materialHint = "100% Crisp Breathable Cotton";
-    else if (/silk|satin/i.test(rawClean) || /silk|satin/i.test(outfitText)) materialHint = "Lustrous Silk / Satin Finish";
-    else if (/denim/i.test(rawClean) || /denim/i.test(outfitText)) materialHint = "Comfort Stretch Premium Denim";
-    else if (/wool|crepe/i.test(rawClean) || /wool|crepe/i.test(outfitText)) materialHint = "Tailored Suiting Crepe / Wool Blend";
+    if (/linen/i.test(materialText)) materialHint = "100% Breathable European Linen";
+    else if (/cotton/i.test(materialText)) materialHint = "100% Crisp Breathable Cotton";
+    else if (/silk|satin/i.test(materialText)) materialHint = "Lustrous Silk / Satin Finish";
+    else if (/denim/i.test(materialText)) materialHint = "Comfort Stretch Premium Denim";
+    else if (/wool|crepe/i.test(materialText)) materialHint = "Tailored Suiting Crepe / Wool Blend";
 
     // Build dynamic search query
     let itemQueryKeyword = g.subcat;
@@ -4092,6 +4245,11 @@ export function decomposeOutfitGarments(
               .filter(Boolean)
               .join(" ");
 
+    // Sarees and saree blouses are ordered by their own builder; every other garment's query
+    // is reordered the same way: audience, design, colour, fabric, then the garment
+    const prioritizedQuery =
+      g.subcat === "saree" || isSareeBlouse ? searchTerms : prioritizeGarmentQuery(searchTerms, garmentAttrs, color);
+
     specs.push({
       category: "outfit",
       itemTitle: title,
@@ -4099,7 +4257,7 @@ export function decomposeOutfitGarments(
       targetGender,
       dominantColor: color,
       stylingRequirement: `${title} (${color}) suited for ${profile.occasion || "this look"}`,
-      searchQuery: searchTerms,
+      searchQuery: prioritizedQuery,
       preferredRetailers,
       materialHint: materialHint || undefined,
       matchContext: `Selected in ${color} to harmonize with your recommended look and occasion silhouette.`,
