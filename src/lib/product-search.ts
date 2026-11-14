@@ -630,7 +630,11 @@ export function checkProductConsistency(
   ) {
     // The requirement names a distinct garment style (e.g. a henley, crop top, or short kurti). That style is what
     // must match; stores list the same garment as a shirt, t-shirt, tee or top.
-    const missing = requiredTopStyles(requiredItemTitle).filter((s) => !s.pattern.test(fullCheckText));
+    // A "bustier/corset blouse" for a saree is sold as a saree blouse: any blouse satisfies it
+    const isBlouseForBlouse = /\b(blouse|choli)\b/i.test(requiredItemTitle || "") && /\b(blouse|choli)\b/i.test(fullCheckText);
+    const missing = requiredTopStyles(requiredItemTitle).filter(
+      (s) => !s.pattern.test(fullCheckText) && !(isBlouseForBlouse && s.name === "crop top"),
+    );
     if (missing.length > 0) {
       return {
         isConsistent: false,
@@ -639,7 +643,12 @@ export function checkProductConsistency(
     }
     const isUpperGarment = /\b(shirts?|t-?shirts?|tshirts?|tees?|tops?|henley|polo|crop\s*tops?|bustiers?|bralettes?|corsets?|kurt[ia]s?|choli|blouse)\b/i.test(cleanName);
     const isKurtiReq = requiredItemTitle ? /\bkurt[ia]s?\b/i.test(requiredItemTitle) : false;
-    const isWrongType = /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt|dress|gown|saree|blazer|jacket|coat|shoe|bag)\b/i.test(cleanName) || (!isKurtiReq && /\bkurta\b/i.test(cleanName));
+    // "Saree Blouse" is a blouse; a saree sold with a blouse ("Saree With Blouse") is not
+    const isSareeBlouseItem = /\bsaree\s+blouses?\b/i.test(cleanName) && !/\bsaree\s+(?:with|and|&)\b/i.test(cleanName);
+    const isWrongType =
+      /\b(shorts?|bermudas?|trousers?|pants?|slacks?|chinos?|jeans?|skirt|dress|gown|blazer|jacket|coat|shoe|bag)\b/i.test(cleanName) ||
+      (/\bsarees?\b/i.test(cleanName) && !isSareeBlouseItem) ||
+      (!isKurtiReq && /\bkurta\b/i.test(cleanName));
     if (!isUpperGarment || isWrongType) {
       return {
         isConsistent: false,
@@ -2220,8 +2229,35 @@ export function getVerifiedProductImage(
   return undefined;
 }
 
+/**
+ * Brand of a search result from its title. Designer stores title products "… for Women by
+ * <Designer>"; otherwise the first word is the brand unless it is a colour or a generic
+ * word ("Black Organza Saree" has no brand in its title), in which case the store is used.
+ */
+export function guessBrandFromTitle(title: string, fallback: string): string {
+  const byDesigner = /\bby\s+([A-Z][\w&.'’ -]{1,40}?)\s*(?:[-–|:,]|$)/.exec(title);
+  if (byDesigner) return byDesigner[1].trim();
+  const first = (title.trim().split(/\s+/)[0] || "").replace(/[^\w&'’.-]/g, "");
+  const generic = /^(women|womens|men|mens|girls?|boys?|kids?|new|latest|designer|embroidered|printed|pre-draped|ready|the|a|an|buy)$/i;
+  if (!first || first.length < 2 || extractColorFromText(first) || generic.test(first)) return fallback;
+  return first;
+}
+
+// Amounts in promo/shipping banners ("free shipping above ₹2,000", "flat ₹500 off") are not prices
+const PROMO_BEFORE_PRICE_RE = /(?:above|over|orders?|shipping|delivery|off|flat|save|upto|up\s+to|cashback|coupon|min(?:imum)?|worth|extra|first\s+order)\s*(?:of\s*)?$/i;
+const PROMO_AFTER_PRICE_RE = /^\s*(?:off|cashback|discount|and\s+above|\+)/i;
+
 export function extractPriceFromSnippet(text: string): number | undefined {
   if (!text) return undefined;
+  // Blank out promo amounts first so the patterns below only see real prices
+  text = text.replace(
+    new RegExp(String.raw`(?:₹|Rs\.?|INR)\s*\d[\d,]*(?:\.\d+)?`, "gi"),
+    (m, offset: number, whole: string) =>
+      PROMO_BEFORE_PRICE_RE.test(whole.slice(Math.max(0, offset - 30), offset)) ||
+      PROMO_AFTER_PRICE_RE.test(whole.slice(offset + m.length, offset + m.length + 20))
+        ? " "
+        : m,
+  );
   // Each pattern captures a complete amount (INR_AMOUNT), so "Rs. 1499" yields 1499, not 149
   const patterns = [
     new RegExp(String.raw`(?:₹|Rs\.?|INR)\s*${INR_AMOUNT}`, "i"),
@@ -2784,6 +2820,12 @@ const FASHION_COLOR_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: "Rose Pink", re: /\b(dusty[\s-]*rose|rose[\s-]*pink|rose)\b/i },
   { name: "Magenta", re: /\b(magenta|fuchsia)\b/i },
   { name: "Pink", re: /\bpink\b/i },
+  { name: "Coral", re: /\bcoral\b/i },
+  { name: "Peach", re: /\b(peach|apricot|salmon)\b/i },
+  { name: "Orange", re: /\b(orange|tangerine)\b/i },
+  { name: "Champagne", re: /\bchampagne\b/i },
+  { name: "Nude", re: /\b(nude|taupe)\b/i },
+  { name: "Mauve", re: /\b(mauve|lilac|onion\s*pink)\b/i },
   { name: "Maroon", re: /\b(maroon|burgundy|wine|crimson)\b/i },
   { name: "Rust", re: /\b(rust|terracotta|brick[\s-]*red)\b/i },
   { name: "Red", re: /\bred\b/i },
@@ -2869,7 +2911,9 @@ const COLOR_FAMILY: Record<string, string> = {
   "Emerald Green": "green", "Forest Green": "green", "Sage Green": "green", "Olive Green": "green", "Mint Green": "green", Green: "green",
   "Hot Pink": "pink", "Rani Pink": "pink", "Blush Pink": "pink", "Rose Pink": "pink", Magenta: "pink", Pink: "pink",
   Maroon: "red", Red: "red", Rust: "rust",
-  Mustard: "gold", Yellow: "gold", Gold: "gold",
+  Coral: "coral", Peach: "coral", Orange: "orange",
+  Mustard: "gold", Yellow: "gold", Gold: "gold", Champagne: "gold",
+  Nude: "brown", Mauve: "purple",
   Silver: "grey", Charcoal: "grey", Slate: "grey", Grey: "grey",
   Black: "black",
   Beige: "brown", "Chocolate Brown": "brown", Brown: "brown",
@@ -2882,9 +2926,12 @@ const COMPATIBLE_FAMILIES: Record<string, string[]> = {
   teal: ["blue", "green"],
   blue: ["teal"],
   green: ["teal"],
-  rust: ["red", "brown"],
+  rust: ["red", "brown", "orange"],
   red: ["rust"],
   brown: ["rust"],
+  coral: ["pink", "orange"],
+  orange: ["coral", "rust"],
+  pink: ["coral"],
 };
 
 /**
@@ -3579,7 +3626,7 @@ export function decomposeOutfitGarments(
   const preferredRetailers = ctx.isKids
     ? isEthnicOrIndoWestern
       ? ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India"]
-      : ["Myntra", "FirstCry", "AJIO", "Amazon India", "Nykaa Fashion"]
+      : ["Myntra", "FirstCry", "Mumkins", "AJIO", "Amazon India", "Nykaa Fashion"]
     : isEthnicOrIndoWestern && targetGender === "women"
       ? // Designer ethnic wear (sarees, lehengas, Indo-Western) lives on Aza and Pernia's
         ["Myntra", "Aza Fashions", "Pernia's Pop-Up Shop", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
@@ -3588,6 +3635,9 @@ export function decomposeOutfitGarments(
       : targetGender === "women"
         ? ["Myntra", "AJIO", "Nykaa Fashion", "Tata CLiQ", "Amazon India"]
         : ["Myntra", "AJIO", "Tata CLiQ", "Amazon India"];
+  // Stores named inside the product search text. Aza and Pernia's stay out: their product
+  // pages can't be confirmed, so searching them only crowds out stores that can be shown.
+  const queryRetailers = preferredRetailers.filter((r) => !/\b(aza|pernia)/i.test(r));
 
   // Filter out non-clothing pieces (footwear, jewellery, accessories, etc.)
   const apparelPieces = pieces.filter((p) => {
@@ -3715,6 +3765,10 @@ export function decomposeOutfitGarments(
       if (masculineGarment) {
         type = masculineGarment.type;
         subcat = masculineGarment.subcat;
+      } else if (/\b(saree|sari)s?\b/i.test(n) && !/\bblouse\b/i.test(n)) {
+        // A cape-saree, jacket saree or belted saree is a saree: its cape/jacket is part of it
+        type = "one_piece";
+        subcat = "saree";
       } else if (/\b(blouse|inner\s*top|camisole)\b/i.test(n) || (/\bcholi\b/i.test(n) && !/\b(lehenga|chaniya|skirt)\b/i.test(n))) {
         type = "top";
         subcat = "inner_top";
@@ -4230,17 +4284,17 @@ export function decomposeOutfitGarments(
                       : g.subcat === "waistcoat"
                         ? "waistcoat vest"
                         : itemQueryKeyword,
-            ...preferredRetailers.slice(0, 3),
+            ...queryRetailers.slice(0, 3),
           ]
             .filter(Boolean)
             .join(" ")
         : targetGender === "women"
-          ? buildWomenGarmentQuery(rawClean, g.subcat, color, preferredRetailers, garmentAttrs)
+          ? buildWomenGarmentQuery(rawClean, g.subcat, color, queryRetailers, garmentAttrs)
           : [
               targetGender,
               color,
               itemQueryKeyword,
-              ...preferredRetailers.slice(0, 3),
+              ...queryRetailers.slice(0, 3),
             ]
               .filter(Boolean)
               .join(" ");
@@ -8515,7 +8569,9 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
               "zara.com",
             ];
       if (!isKidDemographic && (isBoutiqueOccasion || isHighBudget || spec.category === "outfit" || spec.category === "jewellery")) {
-        searchDomains.push("azafashions.com", "perniaspopupshop.com", "elahe.in", "ogaan.com", "kalkifashion.com");
+        // Aza and Pernia's are left out: their product pages block every check, so their results
+        // can never be shown (they are offered as store-search links instead)
+        searchDomains.push("elahe.in", "ogaan.com", "kalkifashion.com");
       }
       if (isKidDemographic) {
         if (spec.category === "footwear") searchDomains.push("bata.in", "bata.com");
@@ -8567,7 +8623,7 @@ MATERIAL: <material description, e.g. Art Silk, Gold-Plated Brass, Faux Leather,
         if (res.url && acceptedUrl) {
           const canonicalUrl = acceptedUrl;
           const rawTitle = res.title.replace(/\|.*$/, "").replace(/^Buy\s+/i, "").trim() || spec.itemTitle;
-          const guessedBrand = rawTitle.split(" ")[0] || "Curated";
+          const guessedBrand = guessBrandFromTitle(rawTitle, getRetailerFromUrl(res.url) || "Curated");
           const identityKey = getProductIdentityKey(rawTitle, guessedBrand);
 
           // Deduplicate: Never include the same product URL or same product identity multiple times
@@ -9100,12 +9156,26 @@ Strictly adhere to:
 
     // Fast page verification on destination product page
     const pageData = await verifyProductPage(cand.url);
-    if (!pageData.success && !(pageData.retailerRestricted && cand.fromSearchIndex)) {
+    // Designer boutiques (Aza, Pernia's) block every automated page check, so a product URL
+    // from them can never be confirmed, and stale or mis-indexed ones open error pages. They
+    // are offered through their store-search links instead, which always work.
+    const isUnconfirmableBoutique = /(?:^|\.)(?:azafashions|perniaspopupshop)\.com$/i.test(
+      (() => {
+        try {
+          return new URL(cand.url).hostname;
+        } catch {
+          return "";
+        }
+      })(),
+    );
+    if (!pageData.success && (isUnconfirmableBoutique || !(pageData.retailerRestricted && cand.fromSearchIndex))) {
       // Rejected: the page is gone/invalid, or it could not be checked and the URL is known
       // only from the model's own text. A URL the model wrote out is trusted only once its
       // page has actually been read; a bot-blocked page cannot confirm the product exists.
       rejectCandidate({
-        reason: pageData.retailerRestricted
+        reason: isUnconfirmableBoutique
+          ? `${pageData.reason} — designer boutique pages cannot be confirmed; offered via store search instead`
+          : pageData.retailerRestricted
           ? `${pageData.reason} — URL not confirmed by a search index, so it cannot be shown unverified`
           : pageData.reason || "Product page could not be verified",
         httpStatus: pageData.httpStatus,
@@ -9335,7 +9405,18 @@ export function buildProductGroup(
   products: ProductResult[],
   discoveredSearchPages: DiscoveredSearchPage[] = [],
 ): ProductGroup {
-  const retailerSearchLinks = buildRelevantSearchLinks(spec, discoveredSearchPages);
+  // A store listing page for another colour ("/color/cream-pre-draped-sarees") is not a match
+  const sameColourPages =
+    spec.category === "outfit"
+      ? discoveredSearchPages.filter((page) => {
+          let urlText = page.url;
+          try {
+            urlText = decodeURIComponent(new URL(page.url).pathname + " " + new URL(page.url).search).replace(/[-_/+=?&]/g, " ");
+          } catch {}
+          return !isOutfitColorMismatch(`${urlText} ${page.title || ""}`, spec.dominantColor);
+        })
+      : discoveredSearchPages;
+  const retailerSearchLinks = buildRelevantSearchLinks(spec, sameColourPages);
   return {
     category: spec.category,
     recommendedItemTitle: spec.itemTitle,

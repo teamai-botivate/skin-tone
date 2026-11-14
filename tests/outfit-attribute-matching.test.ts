@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { logger } from "../src/lib/logger";
-import { planRequirementSpecs, prioritizeGarmentQuery } from "../src/lib/product-search";
+import {
+  extractPriceFromSnippet,
+  guessBrandFromTitle,
+  isOutfitColorMismatch,
+  planRequirementSpecs,
+  prioritizeGarmentQuery,
+} from "../src/lib/product-search";
 logger.level = "fatal";
 
 // Regression: every garment (not just sarees) is searched by its own design, then colour,
@@ -92,5 +98,49 @@ assert.equal(
   prioritizeGarmentQuery("boys Royal Blue festive kurta set Myntra", { design: ["embroidered"], fabric: "silk" }, "Royal Blue"),
   "boys embroidered Royal Blue silk festive kurta set Myntra",
 );
+
+// Coral is a real colour: black / silver sarees are not shown for a coral look
+assert.equal(isOutfitColorMismatch("Black Organza, Jersey Crystals Luna Pre-draped Saree Set", "Coral"), true);
+assert.equal(isOutfitColorMismatch("Silver Net Crystals Square Neck Pre-draped Saree", "Coral"), true);
+assert.equal(isOutfitColorMismatch("Coral Pink Hand Embroidered Pre-Draped Saree", "Coral"), false);
+assert.equal(isOutfitColorMismatch("Peach Embellished Cape Saree", "Coral"), false);
+assert.equal(isOutfitColorMismatch("Mauve Pre Draped Saree Set With Embellished High Neck Blouse", "Coral"), true);
+assert.equal(guessBrandFromTitle("Mauve Pre Draped Saree Set", "Kalki Fashion"), "Kalki Fashion");
+
+// A cape-saree is a saree (not a cape/shrug), searched without "shrug"
+{
+  const specs = plan(
+    profileOf("female", "25–34", "she/her/women", ["Indo-Western Fusion"], "Cocktail"), "woman",
+    "Embellished coral draped cape-saree with a sequinned coral bustier blouse",
+    [
+      { category: "Outfit", name: "Embellished Coral draped cape-saree", detail: "Pre-draped with attached sheer cape" },
+      { category: "Top", name: "Coral sequinned bustier blouse", detail: "Sweetheart neckline" },
+    ],
+  );
+  const saree = specs.find((s) => /cape-saree/i.test(s.itemTitle))!;
+  assert.equal(saree.itemSubcategory, "saree");
+  assert.doesNotMatch(saree.searchQuery, /shrug|aza|pernia/i, `saree query: "${saree.searchQuery}"`);
+  assert.ok(saree.preferredRetailers.includes("Aza Fashions"), "Aza still offered as a store-search link");
+}
+
+// Search-result titles: a colour is never the brand; a designer after "by" is
+assert.equal(guessBrandFromTitle("Black Organza Pre-draped Saree Set", "Aza Fashions"), "Aza Fashions");
+assert.equal(guessBrandFromTitle("Coral Pre-Draped Saree For Women by Garima Karwariya Designs", "Aza Fashions"), "Garima Karwariya Designs");
+assert.equal(guessBrandFromTitle("Biba Women Pink Anarkali", "Myntra"), "Biba");
+
+// Promo banners are not prices
+assert.equal(extractPriceFromSnippet("Free shipping on orders above ₹2,000. Coral saree ₹29,680"), 29680);
+assert.equal(extractPriceFromSnippet("Flat ₹500 off on first order"), undefined);
+assert.equal(extractPriceFromSnippet("Kasee silk saree Rs. 1,293"), 1293);
+
+// Mumkins is offered for every kids outfit, not only ethnic ones
+{
+  const [dress] = plan(
+    profileOf("girl", "6–10", "Kids / Girls styling", ["Party"], "Birthday"), "child",
+    "Blush pink tiered tulle party dress with puff sleeves",
+    [{ category: "Outfit", name: "Dress", detail: "" }],
+  );
+  assert.ok(dress.preferredRetailers.includes("Mumkins"), `Mumkins in ${dress.preferredRetailers}`);
+}
 
 console.log("outfit attribute matching (all audiences): all assertions passed");
